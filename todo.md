@@ -12,10 +12,6 @@ Zasady pracy i wiedza projektowa są w `CLAUDE.md` — tu tylko zadania.
   każdym wydaniu (ad-hoc zmienia sygnaturę).
 
 ### Rekomendowane rozszerzenia
-
-- [ ] Weryfikacja kodów QR (KOD I/II) na żywym środowisku testowym po
-  udostępnieniu bramki `qr-test.ksef.mf.gov.pl` (linki zbudowane wg
-  kody-qr.md, podpisy zweryfikowane lokalnie — brak potwierdzenia e2e).
 - [ ] Rozbudowana ewidencja płatności: płatności częściowe, historia wpłat,
   saldo pozostałe do zapłaty, import wyciągów bankowych i automatyczne
   dopasowanie przelewów do faktur.
@@ -114,3 +110,7 @@ Zasady pracy i wiedza projektowa są w `CLAUDE.md` — tu tylko zadania.
   wszystkich PDF-ach faktur z numerem KSeF; na dokumentach offline KOD I
   z etykietą „OFFLINE” + KOD II „CERTYFIKAT” (RSASSA-PSS / ECDSA P1363
   certyfikatem typu 2); zgodność z przykładem z oficjalnej dokumentacji.
+- [x] Weryfikacja kodów QR e2e na bramce `qr-test.ksef.mf.gov.pl`
+  (LiveQRVerificationTests, 11.07.2026): KOD I → „Faktura znajduje się
+  w KSeF”, tryb Offline, zgodność skrótu z dosłanym XML potwierdzona;
+  KOD II → „Weryfikacja prawidłowa” (certyfikat, podpis, uprawnienia).
