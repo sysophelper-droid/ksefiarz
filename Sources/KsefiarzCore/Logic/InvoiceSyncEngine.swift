@@ -9,7 +9,8 @@ public enum InvoiceSyncEngine {
     /// Pobiera faktury wskazanego rodzaju z KSeF i scala je z bazą.
     /// Zakres dat pochodzi z ustawień importu; faktury z kompletem danych
     /// lokalnie nie są pobierane ponownie (oszczędność limitu 16 pobrań/min).
-    /// Zwraca liczbę NOWO wstawionych faktur (np. do powiadomień).
+    /// Każdy przebieg (również nieudany) trafia do historii Centrum
+    /// synchronizacji. Zwraca liczbę NOWO wstawionych faktur (np. do powiadomień).
     @discardableResult
     public static func sync(
         kind: Invoice.Kind,
@@ -17,25 +18,50 @@ public enum InvoiceSyncEngine {
         from: Date,
         to: Date,
         prepaidForms: Set<String>,
-        context: ModelContext
+        context: ModelContext,
+        trigger: SyncRun.Trigger = .manual,
+        environmentRaw: String = ""
     ) async throws -> Int {
-        let allInvoices = try context.fetch(FetchDescriptor<Invoice>())
-        let complete = Set(allInvoices.compactMap { invoice in
-            (invoice.rawXmlContent ?? "").isEmpty ? nil : invoice.ksefId
-        })
-        let fetched = try await service.fetchInvoices(
-            role: kind == .purchase ? .buyer : .seller,
-            from: from,
-            to: to,
-            skipDocumentsFor: complete
-        )
-        let inserted = try merge(fetched, kind: kind, prepaidForms: prepaidForms, context: context)
-        // Znacznik dla etykiety „Ostatnia synchronizacja” w pasku bocznym —
-        // ustawiany po udanym przebiegu (ręcznym i automatycznym).
-        UserDefaults.standard.set(
-            Date.now.timeIntervalSince1970, forKey: AppSettingsKeys.lastSyncAt
-        )
-        return inserted
+        let operation: SyncRun.Operation = kind == .purchase ? .purchases : .sales
+        let startedAt = Date.now
+        do {
+            let allInvoices = try context.fetch(FetchDescriptor<Invoice>())
+            let complete = Set(allInvoices.compactMap { invoice in
+                (invoice.rawXmlContent ?? "").isEmpty ? nil : invoice.ksefId
+            })
+            let fetched = try await service.fetchInvoices(
+                role: kind == .purchase ? .buyer : .seller,
+                from: from,
+                to: to,
+                skipDocumentsFor: complete
+            )
+            let inserted = try merge(fetched, kind: kind, prepaidForms: prepaidForms, context: context)
+            try? SyncCenter.record(
+                operation: operation,
+                trigger: trigger,
+                environmentRaw: environmentRaw,
+                startedAt: startedAt,
+                fetched: fetched.count,
+                inserted: inserted,
+                context: context
+            )
+            // Znacznik dla etykiety „Ostatnia synchronizacja” w pasku bocznym —
+            // ustawiany po udanym przebiegu (ręcznym i automatycznym).
+            UserDefaults.standard.set(
+                Date.now.timeIntervalSince1970, forKey: AppSettingsKeys.lastSyncAt
+            )
+            return inserted
+        } catch {
+            try? SyncCenter.record(
+                operation: operation,
+                trigger: trigger,
+                environmentRaw: environmentRaw,
+                startedAt: startedAt,
+                error: error.localizedDescription,
+                context: context
+            )
+            throw error
+        }
     }
 
     /// Wstawia nowe faktury i uzupełnia szczegóły już istniejących

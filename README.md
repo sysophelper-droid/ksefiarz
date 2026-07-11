@@ -101,6 +101,11 @@ Tests/KsefiarzCoreTests/          # 278 testów (Swift Testing) — model, parse
   Oba tryby używają zakresu importu z Ustawień i działają **wyłącznie na
   środowisku produkcyjnym** (na testowym synchronizuj ręcznie z listy).
   Czas ostatniej udanej synchronizacji widać na dole paska bocznego.
+- **Centrum synchronizacji** (sekcja „Synchronizacja” w pasku bocznym) —
+  osobne stany zakupów, sprzedaży i wysyłek (kolejka offline24, statusy
+  przesyłek, UPO), historia przebiegów (ostatnie 200) z liczbą pobranych
+  dokumentów, wyzwalaczem (ręczna/przy starcie/automatyczna/ponowienie)
+  i komunikatami błędów oraz przycisk „Ponów” dla nieudanej operacji.
 - **Automatyczna kopia zapasowa** — raz dziennie przy starcie pełna kopia
   (faktury + słowniki + ustawienia) zapisuje się do
   `~/Library/Application Support/Ksefiarz/Backups/` z konfigurowalną

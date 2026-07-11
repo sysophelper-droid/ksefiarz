@@ -12,9 +12,6 @@ Zasady pracy i wiedza projektowa są w `CLAUDE.md` — tu tylko zadania.
   każdym wydaniu (ad-hoc zmienia sygnaturę).
 
 ### Rekomendowane rozszerzenia
-- [ ] Centrum synchronizacji: historia przebiegów, osobne stany zakupów,
-  sprzedaży i wysyłek, liczba pobranych dokumentów, ostatnie błędy oraz
-  możliwość ponowienia nieudanej operacji.
 - [ ] Wysyłanie faktur e-mailem: wykorzystanie adresu fakturowego ze słownika
   kontrahentów, wiadomość z PDF/XML, edytowalny temat i treść oraz zapis
   informacji o wysłaniu.
@@ -113,6 +110,10 @@ Zasady pracy i wiedza projektowa są w `CLAUDE.md` — tu tylko zadania.
   (własny ZipWriter bez zależności) — CSV per rodzaj, oryginalne XML,
   PDF-y i raport.txt z sumami per waluta oraz listą braków (niewysłane,
   odrzucone, bez UPO/XML, offline w kolejce, brak NIP nabywcy).
+- [x] Centrum synchronizacji (11.07.2026): sekcja „Synchronizacja” z osobnymi
+  stanami zakupów, sprzedaży i wysyłek, historią przebiegów (model SyncRun,
+  ostatnie 200 wpisów) — liczba pobranych/nowych dokumentów, wyzwalacz,
+  środowisko i błędy — oraz ponowieniem nieudanej operacji.
 - [x] Rozbudowana ewidencja płatności (11.07.2026): historia wpłat
   (PaymentRecord) z płatnościami częściowymi i saldem, automatyczne
   oznaczenie opłacenia przy pełnym pokryciu (ręczne decyzje nadrzędne),
