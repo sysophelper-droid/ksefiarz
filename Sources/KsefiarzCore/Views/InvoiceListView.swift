@@ -22,6 +22,9 @@ public struct InvoiceListView: View {
     @State private var errorMessage: String?
     @State private var selection = Set<UUID>()
     @State private var navigationPath: [Invoice] = []
+    /// Operacje wczytane z wyciągu bankowego — do arkusza dopasowań.
+    @State private var statementTransactions: [BankTransaction] = []
+    @State private var showingStatementImport = false
 
     @AppStorage(AppSettingsKeys.prepaidForms) private var prepaidFormsRaw = PaymentFormPolicy.encode(PaymentFormPolicy.defaultPrepaidForms)
 
@@ -179,6 +182,14 @@ public struct InvoiceListView: View {
                 }
                 ToolbarItem {
                     Button {
+                        importBankStatement()
+                    } label: {
+                        Label("Importuj wyciąg", systemImage: "building.columns")
+                    }
+                    .help("Wczytaj wyciąg bankowy (MT940) i dopasuj przelewy do nieopłaconych faktur")
+                }
+                ToolbarItem {
+                    Button {
                         Task { await syncFromKSeF() }
                     } label: {
                         if isSyncing {
@@ -226,6 +237,9 @@ public struct InvoiceListView: View {
             }
             .sheet(item: $correctedInvoice) { invoice in
                 NewInvoiceView(correcting: invoice)
+            }
+            .sheet(isPresented: $showingStatementImport) {
+                BankStatementImportView(transactions: statementTransactions)
             }
             .sheet(item: $duplicatedInvoice) { invoice in
                 NewInvoiceView(
@@ -314,6 +328,24 @@ public struct InvoiceListView: View {
     private var csvFileName: String {
         let kindName = kind == .purchase ? "zakupy" : "sprzedaz"
         return "faktury_\(kindName)_\(FA2Format.dateFormatter.string(from: .now)).csv"
+    }
+
+    // MARK: Import wyciągu bankowego
+
+    /// Wczytuje plik wyciągu (MT940), parsuje operacje i otwiera arkusz
+    /// dopasowań. Banki zapisują wyciągi w różnych kodowaniach i pod
+    /// różnymi rozszerzeniami (.sta/.mt940/.txt) — plik może być dowolny.
+    private func importBankStatement() {
+        guard let data = FileExportService.importAnyData(
+            message: "Wybierz plik wyciągu bankowego (MT940)"
+        ) else { return }
+        let transactions = MT940Parser.parse(MT940Parser.decode(data))
+        guard !transactions.isEmpty else {
+            errorMessage = "Nie znaleziono operacji w pliku — czy to wyciąg w formacie MT940?"
+            return
+        }
+        statementTransactions = transactions
+        showingStatementImport = true
     }
 
     // MARK: Synchronizacja z KSeF
@@ -461,12 +493,14 @@ struct PaymentBadge: View {
 
     private var label: String {
         if invoice.isPaid { return "Opłacona" }
-        return invoice.isOverdue ? "Zaległa" : "Do opłacenia"
+        if invoice.isOverdue { return "Zaległa" }
+        return invoice.isPartiallyPaid ? "Częściowo" : "Do opłacenia"
     }
 
     private var color: Color {
         if invoice.isPaid { return .green }
-        return invoice.isOverdue ? .red : .orange
+        if invoice.isOverdue { return .red }
+        return invoice.isPartiallyPaid ? .teal : .orange
     }
 
     var body: some View {

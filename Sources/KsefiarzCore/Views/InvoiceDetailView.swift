@@ -26,6 +26,10 @@ public struct InvoiceDetailView: View {
     @State private var isXMLExpanded = false
     @State private var isVerifyingAccount = false
     @State private var accountVerification: (isValid: Bool, message: String)?
+    /// Formularz nowej wpłaty (historia wpłat).
+    @State private var newPaymentAmount: Double?
+    @State private var newPaymentDate = Date.now
+    @State private var newPaymentNote = ""
 
     public init(invoice: Invoice) {
         self.invoice = invoice
@@ -312,6 +316,8 @@ public struct InvoiceDetailView: View {
                 }
             }
 
+            paymentsSection
+
             Section("Akcje") {
                 HStack(spacing: 12) {
                     Button {
@@ -518,6 +524,104 @@ public struct InvoiceDetailView: View {
         } catch {
             errorMessage = error.localizedDescription
         }
+    }
+
+    // MARK: Historia wpłat
+
+    /// Ewidencja wpłat: saldo, lista wpłat (ręcznych i z wyciągów)
+    /// oraz formularz księgowania kolejnej wpłaty.
+    @ViewBuilder
+    private var paymentsSection: some View {
+        Section {
+            LabeledContent("Wpłacono") {
+                Text(invoice.paidAmount, format: .currency(code: invoice.currency))
+                    .monospacedDigit()
+            }
+            LabeledContent("Pozostaje do zapłaty") {
+                Text(invoice.outstandingAmount, format: .currency(code: invoice.currency))
+                    .monospacedDigit()
+                    .fontWeight(.semibold)
+                    .foregroundStyle(invoice.outstandingAmount > 0.005 ? .orange : .green)
+            }
+            ForEach(invoice.sortedPayments, id: \.id) { payment in
+                HStack(spacing: 8) {
+                    Image(systemName: payment.source == .bankImport
+                        ? "building.columns" : "person")
+                        .foregroundStyle(.secondary)
+                        .help("Źródło: \(payment.source.displayName)")
+                    Text(payment.date, style: .date)
+                    if !payment.note.isEmpty {
+                        Text(payment.note)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                            .help(payment.note)
+                    }
+                    Spacer()
+                    Text(payment.amount, format: .currency(code: invoice.currency))
+                        .monospacedDigit()
+                    Button(role: .destructive) {
+                        PaymentLedger.remove(payment, from: invoice)
+                        try? modelContext.save()
+                    } label: {
+                        Image(systemName: "trash")
+                    }
+                    .buttonStyle(.borderless)
+                    .help("Usuń wpłatę (usunięcie wpłaty domykającej saldo cofa znacznik „opłacona”)")
+                }
+            }
+            // Formularz nowej wpłaty — kwota domyślnie równa saldu.
+            HStack(spacing: 8) {
+                TextField(
+                    "Kwota",
+                    value: $newPaymentAmount,
+                    format: .number.precision(.fractionLength(2)),
+                    prompt: Text(invoice.outstandingAmount, format: .number.precision(.fractionLength(2)))
+                )
+                .frame(width: 90)
+                DatePicker("", selection: $newPaymentDate, displayedComponents: .date)
+                    .labelsHidden()
+                TextField("Opis (np. tytuł przelewu)", text: $newPaymentNote)
+                Button {
+                    registerPayment()
+                } label: {
+                    Label("Zaksięguj wpłatę", systemImage: "plus.circle")
+                }
+                .disabled((newPaymentAmount ?? invoice.outstandingAmount) <= 0)
+            }
+        } header: {
+            HStack {
+                Text("Historia wpłat")
+                if invoice.isPartiallyPaid {
+                    Text("częściowo opłacona")
+                        .font(.caption2.weight(.bold))
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 1)
+                        .background(Color.teal.opacity(0.18), in: Capsule())
+                        .foregroundStyle(.teal)
+                }
+            }
+        } footer: {
+            Text("Wpłaty częściowe zmniejszają saldo; pełne pokrycie kwoty brutto oznacza fakturę jako opłaconą automatycznie. Wpłaty można też księgować hurtowo importem wyciągu bankowego (MT940) z listy faktur.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    /// Księguje wpłatę z formularza; pusta kwota = całe saldo.
+    private func registerPayment() {
+        let amount = newPaymentAmount ?? invoice.outstandingAmount
+        guard amount > 0 else { return }
+        PaymentLedger.register(
+            amount: amount,
+            date: newPaymentDate,
+            note: newPaymentNote.trimmingCharacters(in: .whitespaces),
+            on: invoice
+        )
+        try? modelContext.save()
+        newPaymentAmount = nil
+        newPaymentNote = ""
+        newPaymentDate = .now
     }
 
     /// Ręczne dosłanie dokumentu offline24 — wysyła zapisany XML bajt w bajt

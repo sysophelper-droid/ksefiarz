@@ -12,9 +12,6 @@ Zasady pracy i wiedza projektowa są w `CLAUDE.md` — tu tylko zadania.
   każdym wydaniu (ad-hoc zmienia sygnaturę).
 
 ### Rekomendowane rozszerzenia
-- [ ] Rozbudowana ewidencja płatności: płatności częściowe, historia wpłat,
-  saldo pozostałe do zapłaty, import wyciągów bankowych i automatyczne
-  dopasowanie przelewów do faktur.
 - [ ] Paczka dla księgowości: eksport wybranego okresu do ZIP zawierającego
   zestawienie CSV, oryginalne XML, PDF i raport brakujących dokumentów/danych.
 - [ ] Centrum synchronizacji: historia przebiegów, osobne stany zakupów,
@@ -114,3 +111,9 @@ Zasady pracy i wiedza projektowa są w `CLAUDE.md` — tu tylko zadania.
   (LiveQRVerificationTests, 11.07.2026): KOD I → „Faktura znajduje się
   w KSeF”, tryb Offline, zgodność skrótu z dosłanym XML potwierdzona;
   KOD II → „Weryfikacja prawidłowa” (certyfikat, podpis, uprawnienia).
+- [x] Rozbudowana ewidencja płatności (11.07.2026): historia wpłat
+  (PaymentRecord) z płatnościami częściowymi i saldem, automatyczne
+  oznaczenie opłacenia przy pełnym pokryciu (ręczne decyzje nadrzędne),
+  import wyciągów MT940 (kodowania PL) i propozycje dopasowań przelewów
+  (numer faktury w tytule / zgodna kwota salda) zatwierdzane przez
+  użytkownika; wpłaty w kopii zapasowej.
