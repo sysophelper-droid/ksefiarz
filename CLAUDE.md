@@ -94,7 +94,9 @@ Sources/KsefiarzCore/
                OfflineQueueEngine (kolejka dosłań offline24),
                PaymentLedger (wpłaty częściowe/saldo — jedyne miejsce zmian
                historii wpłat), MT940Parser (wyciągi bankowe),
-               PaymentMatcher (propozycje dopasowań przelewów)
+               PaymentMatcher (propozycje dopasowań przelewów),
+               ZipWriter (archiwum ZIP bez zależności; AccountingPackageBuilder
+               w Services — paczka dla księgowości)
   Views/       MainContentView (NavigationSplitView), InvoiceListView, InvoiceDetailView,
                NewInvoiceView (nowa/edycja/korekta), DashboardView, SettingsView, HiddenInvoicesView,
                DictionariesView (+ ContractorsView/ProductsView/BankAccountsView)

@@ -25,6 +25,7 @@ public struct InvoiceListView: View {
     /// Operacje wczytane z wyciągu bankowego — do arkusza dopasowań.
     @State private var statementTransactions: [BankTransaction] = []
     @State private var showingStatementImport = false
+    @State private var showingAccountingPackage = false
 
     @AppStorage(AppSettingsKeys.prepaidForms) private var prepaidFormsRaw = PaymentFormPolicy.encode(PaymentFormPolicy.defaultPrepaidForms)
 
@@ -190,6 +191,14 @@ public struct InvoiceListView: View {
                 }
                 ToolbarItem {
                     Button {
+                        showingAccountingPackage = true
+                    } label: {
+                        Label("Paczka dla księgowości", systemImage: "archivebox")
+                    }
+                    .help("Eksportuj wybrany okres do ZIP: zestawienia CSV, XML, PDF i raport braków")
+                }
+                ToolbarItem {
+                    Button {
                         Task { await syncFromKSeF() }
                     } label: {
                         if isSyncing {
@@ -240,6 +249,9 @@ public struct InvoiceListView: View {
             }
             .sheet(isPresented: $showingStatementImport) {
                 BankStatementImportView(transactions: statementTransactions)
+            }
+            .sheet(isPresented: $showingAccountingPackage) {
+                AccountingPackageView()
             }
             .sheet(item: $duplicatedInvoice) { invoice in
                 NewInvoiceView(
