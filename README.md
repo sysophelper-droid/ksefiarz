@@ -48,7 +48,7 @@ Sources/
         ├── InvoiceAutomationView.swift # szablony, cykle i kolejka zatwierdzeń
         ├── HiddenInvoicesView.swift # archiwum „Nieuprawnione / Ukryte”
         └── SettingsView.swift    # NIP, token KSeF, środowisko
-Tests/KsefiarzCoreTests/          # 269 testów (Swift Testing) — model, parser, usługa, kryptografia, logika
+Tests/KsefiarzCoreTests/          # 278 testów (Swift Testing) — model, parser, usługa, kryptografia, logika
 ```
 
 ## Funkcje
@@ -162,6 +162,13 @@ Tests/KsefiarzCoreTests/          # 269 testów (Swift Testing) — model, parse
 - **UPO** — automatyczne pobieranie i lokalne przechowywanie Urzędowego
   Poświadczenia Odbioru (XML) po przyjęciu faktury; w szczegółach można
   ponowić pobranie lub wyeksportować zapisany dokument także bez sieci.
+- **Paczka dla księgowości** — eksport wybranego okresu (miesiąc albo
+  własny zakres dat) do jednego pliku ZIP: zestawienia CSV osobno dla
+  sprzedaży i zakupu, oryginalne dokumenty XML, wydruki PDF oraz
+  `raport.txt` z sumami per waluta i listą braków (dokumenty niewysłane
+  do KSeF, odrzucone, bez UPO, bez XML, offline w kolejce, brak NIP
+  nabywcy). Faktury ukryte nie wchodzą do paczki. Archiwum ZIP powstaje
+  w całości w aplikacji (bez zależności zewnętrznych).
 - **Ewidencja płatności** — historia wpłat na każdej fakturze: płatności
   częściowe, saldo pozostałe do zapłaty, znacznik „Częściowo” na listach.
   Pełne pokrycie kwoty brutto oznacza fakturę jako opłaconą automatycznie;

@@ -12,8 +12,6 @@ Zasady pracy i wiedza projektowa są w `CLAUDE.md` — tu tylko zadania.
   każdym wydaniu (ad-hoc zmienia sygnaturę).
 
 ### Rekomendowane rozszerzenia
-- [ ] Paczka dla księgowości: eksport wybranego okresu do ZIP zawierającego
-  zestawienie CSV, oryginalne XML, PDF i raport brakujących dokumentów/danych.
 - [ ] Centrum synchronizacji: historia przebiegów, osobne stany zakupów,
   sprzedaży i wysyłek, liczba pobranych dokumentów, ostatnie błędy oraz
   możliwość ponowienia nieudanej operacji.
@@ -111,6 +109,10 @@ Zasady pracy i wiedza projektowa są w `CLAUDE.md` — tu tylko zadania.
   (LiveQRVerificationTests, 11.07.2026): KOD I → „Faktura znajduje się
   w KSeF”, tryb Offline, zgodność skrótu z dosłanym XML potwierdzona;
   KOD II → „Weryfikacja prawidłowa” (certyfikat, podpis, uprawnienia).
+- [x] Paczka dla księgowości (11.07.2026): eksport miesiąca/zakresu do ZIP
+  (własny ZipWriter bez zależności) — CSV per rodzaj, oryginalne XML,
+  PDF-y i raport.txt z sumami per waluta oraz listą braków (niewysłane,
+  odrzucone, bez UPO/XML, offline w kolejce, brak NIP nabywcy).
 - [x] Rozbudowana ewidencja płatności (11.07.2026): historia wpłat
   (PaymentRecord) z płatnościami częściowymi i saldem, automatyczne
   oznaczenie opłacenia przy pełnym pokryciu (ręczne decyzje nadrzędne),
