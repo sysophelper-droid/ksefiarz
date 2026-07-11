@@ -1,6 +1,7 @@
 import Foundation
 import Security
 import CryptoKit
+import PDFKit
 import Testing
 @testable import KsefiarzCore
 
@@ -209,5 +210,42 @@ struct InvoicePDFQRTests {
         let pdf = InvoicePDFGenerator.pdfData(for: invoice)
         #expect(pdf != nil)
         #expect((pdf?.count ?? 0) > 1000)
+    }
+}
+
+// MARK: - Pełne nazwy pozycji na wydruku
+
+@Suite("InvoicePDFGenerator — długie nazwy pozycji")
+@MainActor
+struct InvoicePDFLongNamesTests {
+
+    @Test("Długa nazwa pozycji NIE jest przycinana — zawija się na wydruku")
+    func longNameWrapsInsteadOfTruncating() throws {
+        let longName = "Ochrona Internetu dla 25 systemów za okres od 2026-07-01 do 2026-07-31 "
+            + "zgodnie z Umową o świadczenie usług informatycznych z dnia 4.01.2021"
+        let invoice = Invoice(
+            invoiceNumber: "FV/DLUGA/1",
+            issueDate: .now,
+            sellerName: "Sprzedawca", sellerNIP: "1111111111",
+            buyerName: "Nabywca", buyerNIP: "2222222222",
+            netAmount: 5, vatAmount: 1.15, grossAmount: 6.15,
+            kind: .purchase
+        )
+        invoice.lines = [
+            InvoiceLine(index: 1, name: longName, unit: "szt.", quantity: 1,
+                        unitNetPrice: 5, netAmount: 5, vatRate: "23", vatAmount: 1.15),
+            InvoiceLine(index: 2, name: "Krótka pozycja", unit: "szt.", quantity: 1,
+                        unitNetPrice: 1, netAmount: 1, vatRate: "23", vatAmount: 0.23),
+        ]
+
+        let pdf = try #require(InvoicePDFGenerator.pdfData(for: invoice))
+        let text = try #require(PDFDocument(data: pdf)?.string)
+        // Ekstrakcja tekstu z PDF przeplata zawinięte linie nazwy z innymi
+        // kolumnami tabeli — sprawdzamy więc obecność KAŻDEGO słowa nazwy
+        // (przycięcie gubi końcowe słowa i zostawia wielokropek).
+        for word in longName.split(separator: " ") {
+            #expect(text.contains(word), "Brak słowa „\(word)” — nazwa przycięta")
+        }
+        #expect(!text.contains("…"), "Na wydruku pozostało przycięcie z wielokropkiem")
     }
 }

@@ -370,7 +370,12 @@ struct InvoicePrintPageView: View {
                 ForEach(lines, id: \.persistentModelID) { line in
                     GridRow {
                         Text("\(line.index)")
-                        Text(line.name).gridColumnAlignment(.leading)
+                        // Nazwa zajmuje całą wolną szerokość i ZAWIJA się —
+                        // bez fixedSize renderer PDF przycinał ją z „…”.
+                        Text(line.name)
+                            .gridColumnAlignment(.leading)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .frame(maxWidth: .infinity, alignment: .leading)
                         Text(FA2Format.quantity(line.quantity))
                         Text(line.unit)
                         Text(FA2Format.amount(line.unitNetPrice))
