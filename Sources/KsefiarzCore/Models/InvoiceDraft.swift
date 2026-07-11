@@ -38,6 +38,8 @@ public struct InvoiceDraft: Equatable, Sendable {
     /// Procedura marży (Adnotacje/PMarzy): "" = brak, "2" = biura podróży,
     /// "3_1" = towary używane, "3_2" = dzieła sztuki, "3_3" = antyki.
     public var marginProcedure: String = ""
+    /// Załącznik do faktury (element Zalacznik FA(3)) — bloki danych.
+    public var attachments: [FA3AttachmentBlock] = []
 
     /// Rodzaj dokumentu po uwzględnieniu korekty — korekta zaliczkowej
     /// to KOR_ZAL, rozliczeniowej KOR_ROZ.
@@ -77,6 +79,7 @@ public struct InvoiceDraft: Equatable, Sendable {
         saleDate: Date? = nil,
         advanceInvoiceRefs: [String] = [],
         marginProcedure: String = "",
+        attachments: [FA3AttachmentBlock] = [],
         correction: InvoiceCorrectionInfo? = nil
     ) {
         self.invoiceNumber = invoiceNumber
@@ -114,6 +117,7 @@ public struct InvoiceDraft: Equatable, Sendable {
         self.saleDate = saleDate
         self.advanceInvoiceRefs = advanceInvoiceRefs
         self.marginProcedure = marginProcedure
+        self.attachments = attachments
         self.correction = correction
     }
 }
@@ -140,7 +144,8 @@ public extension InvoiceDraft {
                 vatRate: VATRate(rawValue: line.vatRate) ?? .standard,
                 cnPkwiu: line.cnPkwiu,
                 gtu: line.gtu,
-                procedure: line.procedure
+                procedure: line.procedure,
+                ossRate: line.ossRate
             )
         }
 
@@ -168,6 +173,7 @@ public extension InvoiceDraft {
             saleDate: invoice.saleDate,
             advanceInvoiceRefs: invoice.advanceInvoiceRefs,
             marginProcedure: invoice.marginProcedureRaw,
+            attachments: .decoded(from: invoice.attachmentJSON),
             correction: correction
         )
     }
@@ -196,6 +202,9 @@ public struct InvoicePreset: Codable, Equatable, Sendable {
         public var cnPkwiu: String
         public var gtu: String
         public var procedure: String
+        /// Stawka OSS (P_12_XII) — opcjonalna, aby szablony zapisane przed
+        /// jej wprowadzeniem dekodowały się bez zmian.
+        public var ossRate: Double?
     }
 
     public var sellerName: String
@@ -215,6 +224,8 @@ public struct InvoicePreset: Codable, Equatable, Sendable {
     public var hasSaleDate: Bool
     public var advanceInvoiceRefs: [String]
     public var marginProcedure: String
+    /// Załącznik FA(3) — opcjonalny (szablony sprzed wprowadzenia pola).
+    public var attachments: [FA3AttachmentBlock]?
 
     public init(draft: InvoiceDraft) {
         sellerName = draft.sellerName
@@ -226,7 +237,8 @@ public struct InvoicePreset: Codable, Equatable, Sendable {
         lines = draft.lines.map {
             Line(name: $0.name, unit: $0.unit, quantity: $0.quantity,
                  unitNetPrice: $0.unitNetPrice, vatRate: $0.vatRate.rawValue,
-                 cnPkwiu: $0.cnPkwiu, gtu: $0.gtu, procedure: $0.procedure)
+                 cnPkwiu: $0.cnPkwiu, gtu: $0.gtu, procedure: $0.procedure,
+                 ossRate: $0.ossRate)
         }
         paymentFormRaw = draft.paymentForm?.rawValue
         paymentBankAccount = draft.paymentBankAccount
@@ -238,6 +250,7 @@ public struct InvoicePreset: Codable, Equatable, Sendable {
         hasSaleDate = draft.saleDate != nil
         advanceInvoiceRefs = draft.advanceInvoiceRefs
         marginProcedure = draft.marginProcedure
+        attachments = draft.attachments.isEmpty ? nil : draft.attachments
     }
 
     public func draft(
@@ -258,7 +271,8 @@ public struct InvoicePreset: Codable, Equatable, Sendable {
                 InvoiceLineDraft(name: $0.name, unit: $0.unit, quantity: $0.quantity,
                     unitNetPrice: $0.unitNetPrice,
                     vatRate: VATRate(rawValue: $0.vatRate) ?? .standard,
-                    cnPkwiu: $0.cnPkwiu, gtu: $0.gtu, procedure: $0.procedure)
+                    cnPkwiu: $0.cnPkwiu, gtu: $0.gtu, procedure: $0.procedure,
+                    ossRate: $0.ossRate)
             },
             paymentDueDate: Calendar.current.date(byAdding: .day, value: dueDays, to: issueDate),
             paymentForm: paymentFormRaw.flatMap(PaymentForm.init(rawValue:)),
@@ -270,7 +284,8 @@ public struct InvoicePreset: Codable, Equatable, Sendable {
             splitPayment: splitPayment,
             saleDate: hasSaleDate ? issueDate : nil,
             advanceInvoiceRefs: advanceInvoiceRefs,
-            marginProcedure: marginProcedure
+            marginProcedure: marginProcedure,
+            attachments: attachments ?? []
         )
     }
 }

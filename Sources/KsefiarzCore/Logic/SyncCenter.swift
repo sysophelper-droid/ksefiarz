@@ -119,7 +119,7 @@ public enum SyncCenter {
         outcome.rejected = sendSummary.rejected + refreshSummary.rejected
         outcome.failures = sendSummary.failures + refreshSummary.failures
 
-        try? record(
+        _ = try? record(
             operation: .submissions,
             trigger: trigger,
             environmentRaw: environmentRaw,

@@ -20,6 +20,10 @@ public struct FA2InvoiceLine: Equatable, Sendable {
     public var gtu: String
     /// Oznaczenie procedury pozycji (element Procedura, np. "WSTO_EE").
     public var procedure: String
+    /// Stawka podatku od wartości dodanej dla procedury OSS (dział XII
+    /// rozdz. 6a ustawy) — element P_12_XII. Gdy ustawiona, pozycja nie ma
+    /// polskiej stawki (P_12), a jej VAT trafia do sum P_13_5/P_14_5.
+    public var ossRate: Double?
 
     public init(
         index: Int,
@@ -32,7 +36,8 @@ public struct FA2InvoiceLine: Equatable, Sendable {
         vatAmount: Double = 0,
         cnPkwiu: String = "",
         gtu: String = "",
-        procedure: String = ""
+        procedure: String = "",
+        ossRate: Double? = nil
     ) {
         self.index = index
         self.name = name
@@ -45,6 +50,7 @@ public struct FA2InvoiceLine: Equatable, Sendable {
         self.cnPkwiu = cnPkwiu
         self.gtu = gtu
         self.procedure = procedure
+        self.ossRate = ossRate
     }
 }
 
@@ -112,6 +118,8 @@ public struct FA2InvoiceData: Equatable, Sendable {
     public var splitPayment: Bool
     /// Data dokonania dostawy / otrzymania zapłaty (P_6).
     public var saleDate: Date?
+    /// Załącznik do faktury (element Zalacznik FA(3)) — bloki danych.
+    public var attachments: [FA3AttachmentBlock]
     /// Oryginalna treść dokumentu XML.
     public var rawXML: String
 
@@ -140,6 +148,7 @@ public struct FA2InvoiceData: Equatable, Sendable {
         currency: String = "PLN",
         splitPayment: Bool = false,
         saleDate: Date? = nil,
+        attachments: [FA3AttachmentBlock] = [],
         rawXML: String = ""
     ) {
         self.ksefId = ksefId
@@ -166,6 +175,7 @@ public struct FA2InvoiceData: Equatable, Sendable {
         self.currency = currency
         self.splitPayment = splitPayment
         self.saleDate = saleDate
+        self.attachments = attachments
         self.rawXML = rawXML
     }
 }
@@ -191,6 +201,15 @@ public enum FA2Format {
     /// Formatowanie ilości — do 4 miejsc po przecinku, bez zbędnych zer.
     public static func quantity(_ value: Double) -> String {
         var text = String(format: "%.4f", value)
+        while text.hasSuffix("0") { text.removeLast() }
+        if text.hasSuffix(".") { text.removeLast() }
+        return text
+    }
+
+    /// Formatowanie wartości procentowej (TProcentowy — do 6 miejsc po
+    /// przecinku), bez zbędnych zer. Używane dla stawki OSS (P_12_XII).
+    public static func percent(_ value: Double) -> String {
+        var text = String(format: "%.6f", value)
         while text.hasSuffix("0") { text.removeLast() }
         if text.hasSuffix(".") { text.removeLast() }
         return text
@@ -263,7 +282,7 @@ public enum FA2XMLGenerator {
         \(marginBlock(draft))    </Adnotacje>
             <RodzajFaktury>\(escape(draft.documentType))</RodzajFaktury>
         \(correctionBlock(draft))\(advanceInvoicesBlock(draft))\(linesBlock(draft))\(paymentBlock(draft))  </Fa>
-        \(stopkaBlock(draft))</Faktura>
+        \(stopkaBlock(draft))\(attachmentBlock(draft))</Faktura>
         """
     }
 
@@ -323,6 +342,76 @@ public enum FA2XMLGenerator {
           </Stopka>
 
         """
+    }
+
+    /// Załącznik do faktury (element Zalacznik) — ostatni element dokumentu,
+    /// po Stopce. Struktura wg XSD FA(3): BlokDanych → ZNaglowek?,
+    /// MetaDane+ (ZKlucz/ZWartosc), Tekst? (Akapit×10), Tabela*
+    /// (Opis?, TNaglowek/Kol/NKom, Wiersz/WKom, Suma?/SKom).
+    private static func attachmentBlock(_ draft: InvoiceDraft) -> String {
+        guard !draft.attachments.isEmpty else { return "" }
+        var xml = "  <Zalacznik>\n"
+        for block in draft.attachments {
+            xml += "    <BlokDanych>\n"
+            let header = block.header.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !header.isEmpty {
+                xml += "      <ZNaglowek>\(escape(header))</ZNaglowek>\n"
+            }
+            // Puste pary (np. niewypełnione wiersze formularza) pomijamy —
+            // XSD wymaga niepustych ZKlucz/ZWartosc.
+            let metadata = block.metadata.filter {
+                !$0.key.trimmingCharacters(in: .whitespaces).isEmpty
+                    && !$0.value.trimmingCharacters(in: .whitespaces).isEmpty
+            }
+            for meta in metadata {
+                xml += "      <MetaDane>\n"
+                xml += "        <ZKlucz>\(escape(meta.key))</ZKlucz>\n"
+                xml += "        <ZWartosc>\(escape(meta.value))</ZWartosc>\n"
+                xml += "      </MetaDane>\n"
+            }
+            let paragraphs = block.paragraphs
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+            if !paragraphs.isEmpty {
+                xml += "      <Tekst>\n"
+                for paragraph in paragraphs {
+                    xml += "        <Akapit>\(escape(paragraph))</Akapit>\n"
+                }
+                xml += "      </Tekst>\n"
+            }
+            for table in block.tables where !table.columns.isEmpty && !table.rows.isEmpty {
+                xml += "      <Tabela>\n"
+                let description = table.description.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !description.isEmpty {
+                    xml += "        <Opis>\(escape(description))</Opis>\n"
+                }
+                xml += "        <TNaglowek>\n"
+                for column in table.columns {
+                    xml += "          <Kol Typ=\"txt\">\n"
+                    xml += "            <NKom>\(escape(column))</NKom>\n"
+                    xml += "          </Kol>\n"
+                }
+                xml += "        </TNaglowek>\n"
+                for row in table.rows {
+                    xml += "        <Wiersz>\n"
+                    for cell in row.prefix(table.columns.count) {
+                        xml += "          <WKom>\(escape(cell))</WKom>\n"
+                    }
+                    xml += "        </Wiersz>\n"
+                }
+                if !table.summary.isEmpty {
+                    xml += "        <Suma>\n"
+                    for cell in table.summary.prefix(table.columns.count) {
+                        xml += "          <SKom>\(escape(cell))</SKom>\n"
+                    }
+                    xml += "        </Suma>\n"
+                }
+                xml += "      </Tabela>\n"
+            }
+            xml += "    </BlokDanych>\n"
+        }
+        xml += "  </Zalacznik>\n"
+        return xml
     }
 
     /// Blok danych faktury korygowanej (dokumenty KOR).
@@ -397,8 +486,10 @@ public enum FA2XMLGenerator {
             """
         }
 
+        // Pozycje OSS (P_12_XII) mają własne sumy P_13_5/P_14_5 —
+        // nie wchodzą do sum polskich stawek.
         func sums(for rate: VATRate) -> (net: Double, vat: Double)? {
-            let matching = draft.lines.filter { $0.vatRate == rate }
+            let matching = draft.lines.filter { $0.ossRate == nil && $0.vatRate == rate }
             guard !matching.isEmpty else { return nil }
             let net = matching.reduce(0) { $0 + $1.netAmount }
             let vat = matching.reduce(0) { $0 + $1.vatAmount }
@@ -421,6 +512,15 @@ public enum FA2XMLGenerator {
             xml += "    <P_14_3>\(FA2Format.amount(s.vat))</P_14_3>\n"
             xml += vatInPLN(s.vat, field: "P_14_3W")
         }
+        // Procedura OSS (dział XII rozdz. 6a): suma netto i podatek od
+        // wartości dodanej — sekwencja przed P_13_6_1 zgodnie z XSD.
+        let ossLines = draft.lines.filter { $0.ossRate != nil }
+        if !ossLines.isEmpty {
+            let net = ossLines.reduce(0) { $0 + $1.netAmount }
+            let vat = ossLines.reduce(0) { $0 + $1.vatAmount }
+            xml += "    <P_13_5>\(FA2Format.amount(net))</P_13_5>\n"
+            xml += "    <P_14_5>\(FA2Format.amount(vat))</P_14_5>\n"
+        }
         if let s = sums(for: .zero) {
             xml += "    <P_13_6_1>\(FA2Format.amount(s.net))</P_13_6_1>\n"
         }
@@ -431,11 +531,17 @@ public enum FA2XMLGenerator {
     }
 
     /// Pozycje faktury (FaWiersz). Kolejność elementów wg XSD:
-    /// NrWierszaFa, P_7, [PKWiU|CN], P_8A, P_8B, P_9A, P_11, P_12, [GTU].
+    /// NrWierszaFa, P_7, [PKWiU|CN], P_8A, P_8B, P_9A, P_11,
+    /// P_12 albo P_12_XII (OSS), [GTU], [Procedura].
     private static func linesBlock(_ draft: InvoiceDraft) -> String {
         guard !draft.lines.isEmpty else { return "" }
         var xml = ""
         for (offset, line) in draft.lines.enumerated() {
+            // Pozycja OSS ma stawkę podatku od wartości dodanej państwa
+            // konsumpcji (P_12_XII) zamiast polskiej stawki (P_12).
+            let rateElement = line.ossRate.map {
+                "<P_12_XII>\(FA2Format.percent($0))</P_12_XII>"
+            } ?? "<P_12>\(line.vatRate.rawValue)</P_12>"
             xml += """
                 <FaWiersz>
                   <NrWierszaFa>\(offset + 1)</NrWierszaFa>
@@ -444,7 +550,7 @@ public enum FA2XMLGenerator {
                   <P_8B>\(FA2Format.quantity(line.quantity))</P_8B>
                   <P_9A>\(FA2Format.amount(line.unitNetPrice))</P_9A>
                   <P_11>\(FA2Format.amount(line.netAmount))</P_11>
-                  <P_12>\(line.vatRate.rawValue)</P_12>
+                  \(rateElement)
             \(gtuElement(line.gtu))\(procedureElement(line.procedure))    </FaWiersz>
 
             """
@@ -604,6 +710,9 @@ public enum FA2XMLParser {
         let saleDate = text(of: "P_6", in: fa)
             .flatMap { FA2Format.dateFormatter.date(from: $0) }
 
+        // Załącznik (element równorzędny do Fa — szukamy od korzenia).
+        let attachments = parseAttachments(in: root)
+
         return FA2InvoiceData(
             invoiceNumber: invoiceNumber,
             issueDate: issueDate,
@@ -628,6 +737,7 @@ public enum FA2XMLParser {
             currency: currency,
             splitPayment: splitPayment,
             saleDate: saleDate,
+            attachments: attachments,
             rawXML: String(data: data, encoding: .utf8) ?? ""
         )
     }
@@ -658,7 +768,10 @@ public enum FA2XMLParser {
             let netAmount = text(of: "P_11", in: wiersz).flatMap(Double.init)
                 ?? ((quantity * unitPrice * 100).rounded() / 100)
             let rate = text(of: "P_12", in: wiersz) ?? ""
-            let multiplier = VATRate(rawValue: rate)?.multiplier ?? 0
+            // Pozycja OSS: stawka podatku od wartości dodanej w P_12_XII.
+            let ossRate = text(of: "P_12_XII", in: wiersz).flatMap(Double.init)
+            let multiplier = ossRate.map { $0 / 100 }
+                ?? VATRate(rawValue: rate)?.multiplier ?? 0
             let vatAmount = ((netAmount * multiplier) * 100).rounded() / 100
 
             return FA2InvoiceLine(
@@ -672,7 +785,46 @@ public enum FA2XMLParser {
                 vatAmount: vatAmount,
                 cnPkwiu: text(of: "PKWiU", in: wiersz) ?? text(of: "CN", in: wiersz) ?? "",
                 gtu: text(of: "GTU", in: wiersz) ?? "",
-                procedure: text(of: "Procedura", in: wiersz) ?? ""
+                procedure: text(of: "Procedura", in: wiersz) ?? "",
+                ossRate: ossRate
+            )
+        }
+    }
+
+    /// Załącznik FA(3): bloki danych z metadanymi, akapitami i tabelami.
+    private static func parseAttachments(in root: XMLElement) -> [FA3AttachmentBlock] {
+        guard let zalacznik = firstDescendant(named: "Zalacznik", in: root) else { return [] }
+        return descendants(named: "BlokDanych", in: zalacznik).map { blok in
+            let metadata = descendants(named: "MetaDane", in: blok).map { meta in
+                FA3AttachmentBlock.Meta(
+                    key: text(of: "ZKlucz", in: meta) ?? "",
+                    value: text(of: "ZWartosc", in: meta) ?? ""
+                )
+            }
+            let paragraphs = firstDescendant(named: "Tekst", in: blok).map { tekst in
+                descendants(named: "Akapit", in: tekst).compactMap {
+                    $0.stringValue?.trimmingCharacters(in: .whitespacesAndNewlines)
+                }
+            } ?? []
+            let tables = descendants(named: "Tabela", in: blok).map { tabela in
+                FA3AttachmentBlock.Table(
+                    description: text(of: "Opis", in: tabela) ?? "",
+                    columns: firstDescendant(named: "TNaglowek", in: tabela).map {
+                        descendants(named: "NKom", in: $0).compactMap { $0.stringValue }
+                    } ?? [],
+                    rows: descendants(named: "Wiersz", in: tabela).map { wiersz in
+                        descendants(named: "WKom", in: wiersz).compactMap { $0.stringValue }
+                    },
+                    summary: firstDescendant(named: "Suma", in: tabela).map {
+                        descendants(named: "SKom", in: $0).compactMap { $0.stringValue }
+                    } ?? []
+                )
+            }
+            return FA3AttachmentBlock(
+                header: text(of: "ZNaglowek", in: blok) ?? "",
+                metadata: metadata,
+                paragraphs: paragraphs,
+                tables: tables
             )
         }
     }

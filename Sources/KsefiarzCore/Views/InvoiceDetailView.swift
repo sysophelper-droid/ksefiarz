@@ -18,6 +18,7 @@ public struct InvoiceDetailView: View {
     @State private var showingCorrectionForm = false
     @State private var showingEditForm = false
     @State private var showingDeleteConfirmation = false
+    @State private var showingEmailSheet = false
     @State private var isDownloadingUPO = false
     @State private var isSendingToKSeF = false
     @State private var isCheckingKSeFStatus = false
@@ -154,6 +155,12 @@ public struct InvoiceDetailView: View {
                 LabeledContent("Status") {
                     PaymentBadge(invoice: invoice)
                 }
+                if let sentAt = invoice.emailSentAt {
+                    LabeledContent("Wysłano e-mailem") {
+                        Text(sentAt, style: .date)
+                            + Text(invoice.emailSentTo.isEmpty ? "" : " → \(invoice.emailSentTo)")
+                    }
+                }
             }
 
             if invoice.isCorrection {
@@ -224,7 +231,10 @@ public struct InvoiceDetailView: View {
                                 Text("\(FA2Format.quantity(line.quantity)) \(line.unit)")
                                 Text(line.unitNetPrice, format: .currency(code: invoice.currency)).monospacedDigit()
                                 Text(line.netAmount, format: .currency(code: invoice.currency)).monospacedDigit()
-                                Text(VATRate(rawValue: line.vatRate)?.displayName ?? line.vatRate)
+                                // Pozycja OSS pokazuje stawkę państwa konsumpcji.
+                                Text(line.ossRate.map { "OSS \(FA2Format.percent($0))%" }
+                                    ?? VATRate(rawValue: line.vatRate)?.displayName
+                                    ?? line.vatRate)
                             }
                             .font(.callout)
                         }
@@ -239,6 +249,8 @@ public struct InvoiceDetailView: View {
                         .textSelection(.enabled)
                 }
             }
+
+            attachmentSection
 
             Section("Kwoty") {
                 LabeledContent("Netto") {
@@ -338,6 +350,15 @@ public struct InvoiceDetailView: View {
                         } label: {
                             Label("Wystaw korektę", systemImage: "arrow.uturn.backward.circle")
                         }
+                    }
+
+                    if invoice.kind == .sales {
+                        Button {
+                            showingEmailSheet = true
+                        } label: {
+                            Label("Wyślij e-mailem", systemImage: "envelope")
+                        }
+                        .help("Otwórz wiadomość z fakturą (PDF/XML) w aplikacji Mail — adresat ze słownika kontrahentów")
                     }
 
                     if invoice.kind == .sales, invoice.ksefInvoiceReference != nil {
@@ -461,6 +482,9 @@ public struct InvoiceDetailView: View {
                 }
             }
         }
+        .sheet(isPresented: $showingEmailSheet) {
+            InvoiceEmailView(invoice: invoice)
+        }
         .sheet(isPresented: $showingCorrectionForm) {
             NewInvoiceView(correcting: invoice)
         }
@@ -529,11 +553,81 @@ public struct InvoiceDetailView: View {
         }
     }
 
+    // MARK: Załącznik FA(3)
+
+    /// Załącznik FA(3) — bloki danych z metadanymi, tekstem i tabelami.
+    @ViewBuilder
+    private var attachmentSection: some View {
+        let blocks = [FA3AttachmentBlock].decoded(from: invoice.attachmentJSON)
+        if !blocks.isEmpty {
+            Section("Załącznik do faktury") {
+                ForEach(blocks) { block in
+                    VStack(alignment: .leading, spacing: 6) {
+                        if !block.header.isEmpty {
+                            Text(block.header)
+                                .font(.callout.weight(.semibold))
+                        }
+                        ForEach(block.metadata) { meta in
+                            LabeledContent(meta.key, value: meta.value)
+                                .font(.callout)
+                        }
+                        ForEach(block.paragraphs, id: \.self) { paragraph in
+                            Text(paragraph)
+                                .font(.callout)
+                                .textSelection(.enabled)
+                        }
+                        ForEach(Array(block.tables.enumerated()), id: \.offset) { _, table in
+                            attachmentTableView(table)
+                        }
+                    }
+                    .padding(.vertical, 2)
+                }
+            }
+        }
+    }
+
+    /// Tabela załącznika w układzie siatki (nagłówek + wiersze + suma).
+    private func attachmentTableView(_ table: FA3AttachmentBlock.Table) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            if !table.description.isEmpty {
+                Text(table.description)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Grid(alignment: .leading, horizontalSpacing: 14, verticalSpacing: 4) {
+                GridRow {
+                    ForEach(table.columns, id: \.self) { column in
+                        Text(column)
+                    }
+                }
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+                Divider()
+                ForEach(Array(table.rows.enumerated()), id: \.offset) { _, row in
+                    GridRow {
+                        ForEach(Array(row.enumerated()), id: \.offset) { _, cell in
+                            Text(cell)
+                        }
+                    }
+                    .font(.callout)
+                }
+                if !table.summary.isEmpty {
+                    Divider()
+                    GridRow {
+                        ForEach(Array(table.summary.enumerated()), id: \.offset) { _, cell in
+                            Text(cell).fontWeight(.semibold)
+                        }
+                    }
+                    .font(.callout)
+                }
+            }
+        }
+    }
+
     // MARK: Historia wpłat
 
     /// Ewidencja wpłat: saldo, lista wpłat (ręcznych i z wyciągów)
     /// oraz formularz księgowania kolejnej wpłaty.
-    @ViewBuilder
     private var paymentsSection: some View {
         Section {
             LabeledContent("Wpłacono") {

@@ -17,6 +17,7 @@ public struct InvoiceListView: View {
     @State private var editedInvoice: Invoice?
     @State private var correctedInvoice: Invoice?
     @State private var duplicatedInvoice: Invoice?
+    @State private var emailedInvoice: Invoice?
     @State private var documentTypeFilter: DocumentTypeFilter = .all
     @State private var isSyncing = false
     @State private var errorMessage: String?
@@ -259,6 +260,9 @@ public struct InvoiceListView: View {
                     sourceTitle: "Duplikat faktury"
                 )
             }
+            .sheet(item: $emailedInvoice) { invoice in
+                InvoiceEmailView(invoice: invoice)
+            }
             .alert(
                 "Błąd synchronizacji z KSeF",
                 isPresented: Binding(
@@ -293,6 +297,11 @@ public struct InvoiceListView: View {
             Divider()
             Button(invoice.isPaid ? "Oznacz jako nieopłaconą" : "Oznacz jako opłaconą") {
                 invoice.isPaid.toggle()
+            }
+            if kind == .sales {
+                Button("Wyślij e-mailem…") {
+                    emailedInvoice = invoice
+                }
             }
             // Korekta dostępna dla każdej faktury sprzedażowej niebędącej korektą.
             if kind == .sales, !invoice.isCorrection {

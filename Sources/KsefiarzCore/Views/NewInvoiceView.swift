@@ -55,6 +55,8 @@ public struct NewInvoiceView: View {
     @State private var advanceRefsText = ""
 
     @State private var marginProcedure = ""
+    /// Bloki załącznika FA(3) (element Zalacznik).
+    @State private var attachments: [FA3AttachmentBlock] = []
     @State private var isFetchingRate = false
     @State private var nbpRateInfo: String?
     /// Ostatni numer zaproponowany automatycznie — przy zmianie rodzaju
@@ -186,6 +188,7 @@ public struct NewInvoiceView: View {
                 .map { $0.trimmingCharacters(in: .whitespaces) }
                 .filter { !$0.isEmpty },
             marginProcedure: marginProcedure,
+            attachments: attachments,
             correction: correctionInfo
         )
     }
@@ -357,6 +360,24 @@ public struct NewInvoiceView: View {
                     Text("Dopisek drukowany na fakturze (w XML: stopka faktury) — np. podstawa zwolnienia z VAT, informacja o mechanizmie podzielonej płatności.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                }
+
+                Section("Załącznik do faktury (FA(3))") {
+                    ForEach($attachments) { $block in
+                        AttachmentBlockEditor(block: $block) {
+                            attachments.removeAll { $0.id == block.id }
+                        }
+                    }
+                    Button {
+                        attachments.append(FA3AttachmentBlock())
+                    } label: {
+                        Label("Dodaj blok załącznika", systemImage: "paperclip")
+                    }
+                    if !attachments.isEmpty {
+                        Text("⚠️ Wystawianie faktur z załącznikiem wymaga wcześniejszego zgłoszenia w e-Urzędzie Skarbowym (wymóg KSeF 2.0). Każdy blok musi mieć co najmniej jedną parę metadanych.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                 }
 
                 Section("Podsumowanie") {
@@ -549,6 +570,7 @@ public struct NewInvoiceView: View {
         if let sale = initial.saleDate { hasSaleDate = true; saleDate = sale } else { hasSaleDate = false }
         advanceRefsText = initial.advanceInvoiceRefs.joined(separator: "\n")
         marginProcedure = initial.marginProcedure
+        attachments = initial.attachments
     }
 
     private func saveTemplate() {
@@ -586,6 +608,7 @@ public struct NewInvoiceView: View {
             saleDate = sale
         }
         advanceRefsText = editing.advanceInvoiceRefs.joined(separator: "\n")
+        attachments = .decoded(from: editing.attachmentJSON)
         let storedLines = editing.sortedLines.map { line in
             InvoiceLineDraft(
                 name: line.name,
@@ -595,7 +618,8 @@ public struct NewInvoiceView: View {
                 vatRate: VATRate(rawValue: line.vatRate) ?? .standard,
                 cnPkwiu: line.cnPkwiu,
                 gtu: line.gtu,
-                procedure: line.procedure
+                procedure: line.procedure,
+                ossRate: line.ossRate
             )
         }
         if !storedLines.isEmpty {
@@ -627,7 +651,8 @@ public struct NewInvoiceView: View {
                 vatRate: VATRate(rawValue: line.vatRate) ?? .standard,
                 cnPkwiu: line.cnPkwiu,
                 gtu: line.gtu,
-                procedure: line.procedure
+                procedure: line.procedure,
+                ossRate: line.ossRate
             )
         }
         if !originalLines.isEmpty {
@@ -888,6 +913,7 @@ public struct NewInvoiceView: View {
         invoice.saleDate = draft.saleDate
         invoice.advanceInvoiceRefs = draft.advanceInvoiceRefs
         invoice.marginProcedureRaw = draft.marginProcedure
+        invoice.attachmentJSON = draft.attachments.encodedJSON()
         invoice.rawXmlContent = xml
         if let ksefId { invoice.ksefId = ksefId }
         if let sessionReference { invoice.ksefSessionReference = sessionReference }
@@ -906,7 +932,8 @@ public struct NewInvoiceView: View {
                 vatAmount: line.vatAmount,
                 cnPkwiu: line.cnPkwiu,
                 gtu: line.gtu,
-                procedure: line.procedure
+                procedure: line.procedure,
+                ossRate: line.ossRate
             )
         }
         PaymentFormPolicy.apply(to: invoice, prepaidForms: PaymentFormPolicy.decode(prepaidFormsRaw))
@@ -956,6 +983,7 @@ public struct NewInvoiceView: View {
             marginProcedure: draft.marginProcedure,
             kind: .sales
         )
+        invoice.attachmentJSON = draft.attachments.encodedJSON()
         modelContext.insert(invoice)
         // Pozycje przypisywane po wstawieniu do kontekstu (relacja SwiftData).
         invoice.lines = draft.lines.enumerated().map { offset, line in
@@ -970,7 +998,8 @@ public struct NewInvoiceView: View {
                 vatAmount: line.vatAmount,
                 cnPkwiu: line.cnPkwiu,
                 gtu: line.gtu,
-                procedure: line.procedure
+                procedure: line.procedure,
+                ossRate: line.ossRate
             )
         }
         // Forma płatności „z góry” (np. gotówka) → faktura od razu opłacona.
@@ -1035,6 +1064,11 @@ struct InvoiceLineEditor: View {
                     }
                 }
                 .frame(width: 110)
+                .disabled(line.ossRate != nil)
+                TextField("OSS %", value: $line.ossRate, format: .number)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(width: 70)
+                    .help("Procedura OSS (dział XII rozdz. 6a): stawka VAT państwa konsumpcji (P_12_XII). Wypełnienie zastępuje polską stawkę VAT; puste pole = zwykła pozycja.")
                 Spacer()
                 Text(line.grossAmount, format: .currency(code: currencyCode))
                     .monospacedDigit()
@@ -1062,5 +1096,112 @@ struct InvoiceLineEditor: View {
             }
         }
         .padding(.vertical, 4)
+    }
+}
+
+// MARK: - Edytor bloku załącznika FA(3)
+
+/// Edycja jednego bloku danych załącznika (element BlokDanych):
+/// nagłówek, pary metadanych (wymagana co najmniej jedna — XSD),
+/// akapity tekstu oraz prosta tabela wpisywana tekstowo.
+struct AttachmentBlockEditor: View {
+    @Binding var block: FA3AttachmentBlock
+    let onDelete: () -> Void
+
+    /// Tekstowa reprezentacja akapitów — jedna linia = jeden akapit.
+    @State private var paragraphsText: String
+    /// Tekstowa reprezentacja tabeli: pierwsza linia to nagłówki kolumn
+    /// rozdzielone znakiem |, kolejne linie to wiersze.
+    @State private var tableText: String
+
+    init(block: Binding<FA3AttachmentBlock>, onDelete: @escaping () -> Void) {
+        _block = block
+        self.onDelete = onDelete
+        _paragraphsText = State(initialValue: block.wrappedValue.paragraphs.joined(separator: "\n"))
+        _tableText = State(initialValue: Self.serializeTable(block.wrappedValue.tables.first))
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                TextField("Nagłówek bloku", text: $block.header, prompt: Text("Nagłówek bloku (opcjonalny)"))
+                    .textFieldStyle(.roundedBorder)
+                Button(role: .destructive, action: onDelete) {
+                    Image(systemName: "trash")
+                }
+                .buttonStyle(.borderless)
+                .help("Usuń blok załącznika")
+            }
+
+            ForEach($block.metadata) { $meta in
+                HStack(spacing: 8) {
+                    TextField("Klucz", text: $meta.key, prompt: Text("Klucz"))
+                        .textFieldStyle(.roundedBorder)
+                        .frame(width: 180)
+                    TextField("Wartość", text: $meta.value, prompt: Text("Wartość"))
+                        .textFieldStyle(.roundedBorder)
+                    Button(role: .destructive) {
+                        block.metadata.removeAll { $0.id == meta.id }
+                    } label: {
+                        Image(systemName: "minus.circle")
+                    }
+                    .buttonStyle(.borderless)
+                    .disabled(block.metadata.count <= 1)
+                    .help("Usuń parę metadanych")
+                }
+            }
+            Button {
+                block.metadata.append(FA3AttachmentBlock.Meta())
+            } label: {
+                Label("Dodaj metadane", systemImage: "plus.circle")
+            }
+            .buttonStyle(.borderless)
+            .font(.caption)
+
+            TextEditor(text: $paragraphsText)
+                .frame(minHeight: 44)
+                .font(.body)
+                .onChange(of: paragraphsText) { _, newValue in
+                    block.paragraphs = newValue
+                        .split(separator: "\n")
+                        .map { $0.trimmingCharacters(in: .whitespaces) }
+                        .filter { !$0.isEmpty }
+                }
+            Text("Część tekstowa: każda linia to osobny akapit (maks. 10 akapitów po 512 znaków).")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            TextEditor(text: $tableText)
+                .frame(minHeight: 44)
+                .font(.system(.body, design: .monospaced))
+                .onChange(of: tableText) { _, newValue in
+                    block.tables = Self.parseTable(from: newValue).map { [$0] } ?? []
+                }
+            Text("Tabela (opcjonalna): pierwsza linia to nagłówki kolumn rozdzielone znakiem |, kolejne linie to wiersze (maks. 20 kolumn).")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .padding(.vertical, 4)
+    }
+
+    /// Tabela → tekst edytora (nagłówki | ... \n wiersze | ...).
+    private static func serializeTable(_ table: FA3AttachmentBlock.Table?) -> String {
+        guard let table, !table.columns.isEmpty else { return "" }
+        var linesText = [table.columns.joined(separator: " | ")]
+        linesText += table.rows.map { $0.joined(separator: " | ") }
+        return linesText.joined(separator: "\n")
+    }
+
+    /// Tekst edytora → tabela; pusty tekst = brak tabeli.
+    private static func parseTable(from text: String) -> FA3AttachmentBlock.Table? {
+        let rows = text
+            .split(separator: "\n")
+            .map { $0.components(separatedBy: "|").map { $0.trimmingCharacters(in: .whitespaces) } }
+            .filter { !$0.allSatisfy(\.isEmpty) }
+        guard let columns = rows.first else { return nil }
+        return FA3AttachmentBlock.Table(
+            columns: columns,
+            rows: Array(rows.dropFirst())
+        )
     }
 }

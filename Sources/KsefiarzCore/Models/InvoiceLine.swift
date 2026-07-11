@@ -28,6 +28,9 @@ public final class InvoiceLine {
     /// Oznaczenie procedury pozycji (np. "WSTO_EE", "IED") — element Procedura
     /// w FaWiersz. Wartość domyślna obowiązkowa (migracja bazy).
     public var procedure: String = ""
+    /// Stawka podatku od wartości dodanej dla procedury OSS (P_12_XII) —
+    /// nil = pozycja z polską stawką (P_12). Wartość domyślna (migracja bazy).
+    public var ossRate: Double? = nil
 
     /// Faktura, do której należy pozycja.
     public var invoice: Invoice?
@@ -43,7 +46,8 @@ public final class InvoiceLine {
         vatAmount: Double = 0,
         cnPkwiu: String = "",
         gtu: String = "",
-        procedure: String = ""
+        procedure: String = "",
+        ossRate: Double? = nil
     ) {
         self.index = index
         self.name = name
@@ -56,6 +60,7 @@ public final class InvoiceLine {
         self.cnPkwiu = cnPkwiu
         self.gtu = gtu
         self.procedure = procedure
+        self.ossRate = ossRate
     }
 }
 
@@ -106,6 +111,10 @@ public struct InvoiceLineDraft: Identifiable, Equatable, Sendable {
     public var gtu: String
     /// Oznaczenie procedury (TOznaczenieProcedury, np. "WSTO_EE") — opcjonalne.
     public var procedure: String = ""
+    /// Stawka podatku od wartości dodanej państwa konsumpcji dla procedury
+    /// OSS (dział XII rozdz. 6a) — gdy ustawiona, pozycja trafia do XML
+    /// z P_12_XII zamiast polskiej stawki, a jej podatek do sum P_13_5/P_14_5.
+    public var ossRate: Double? = nil
     /// Towar/usługa z załącznika 15 (ze słownika) — podpowiada włączenie
     /// mechanizmu podzielonej płatności na fakturze; nie trafia do XML pozycji.
     public var isAttachment15: Bool = false
@@ -125,7 +134,8 @@ public struct InvoiceLineDraft: Identifiable, Equatable, Sendable {
         vatRate: VATRate = .standard,
         cnPkwiu: String = "",
         gtu: String = "",
-        procedure: String = ""
+        procedure: String = "",
+        ossRate: Double? = nil
     ) {
         self.id = id
         self.name = name
@@ -136,6 +146,7 @@ public struct InvoiceLineDraft: Identifiable, Equatable, Sendable {
         self.cnPkwiu = cnPkwiu
         self.gtu = gtu
         self.procedure = procedure
+        self.ossRate = ossRate
     }
 
     /// Wypełnia pola pozycji danymi towaru/usługi ze słownika.
@@ -155,9 +166,11 @@ public struct InvoiceLineDraft: Identifiable, Equatable, Sendable {
         ((quantity * unitNetPrice) * 100).rounded() / 100
     }
 
-    /// Kwota VAT pozycji, zaokrąglona do groszy.
+    /// Kwota VAT pozycji, zaokrąglona do groszy. Pozycja OSS liczy podatek
+    /// od wartości dodanej według stawki państwa konsumpcji.
     public var vatAmount: Double {
-        ((netAmount * vatRate.multiplier) * 100).rounded() / 100
+        let multiplier = ossRate.map { $0 / 100 } ?? vatRate.multiplier
+        return ((netAmount * multiplier) * 100).rounded() / 100
     }
 
     /// Wartość brutto pozycji.
