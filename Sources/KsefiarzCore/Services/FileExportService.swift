@@ -1,0 +1,86 @@
+import AppKit
+import UniformTypeIdentifiers
+
+/// Zapis plików faktur (XML / PDF) przez systemowy panel zapisu.
+@MainActor
+public enum FileExportService {
+
+    /// Eksportuje oryginalny dokument XML faktury.
+    /// Zwraca `true` tylko, gdy plik faktycznie zapisano (nie przy anulowaniu).
+    @discardableResult
+    public static func exportXML(of invoice: Invoice) -> Bool {
+        guard let xml = invoice.rawXmlContent, !xml.isEmpty else { return false }
+        return save(
+            data: Data(xml.utf8),
+            suggestedName: "Faktura_\(sanitized(invoice.invoiceNumber)).xml",
+            contentType: .xml
+        )
+    }
+
+    /// Eksportuje dowolne dane (np. UPO) przez panel zapisu.
+    /// Zwraca `true` tylko, gdy plik faktycznie zapisano (nie przy anulowaniu).
+    @discardableResult
+    public static func exportData(_ data: Data, suggestedName: String, contentType: UTType) -> Bool {
+        save(data: data, suggestedName: suggestedName, contentType: contentType)
+    }
+
+    /// Eksportuje listę faktur do pliku CSV.
+    /// Zwraca `true` tylko, gdy plik faktycznie zapisano (nie przy anulowaniu).
+    @discardableResult
+    public static func exportCSV(of invoices: [Invoice], suggestedName: String) -> Bool {
+        guard !invoices.isEmpty else { return false }
+        return save(
+            data: Data(InvoiceCSVExporter.csv(for: invoices).utf8),
+            suggestedName: suggestedName,
+            contentType: .commaSeparatedText
+        )
+    }
+
+    /// Eksportuje fakturę jako dokument PDF.
+    /// Zwraca `true` tylko, gdy plik faktycznie zapisano (nie przy anulowaniu).
+    @discardableResult
+    public static func exportPDF(of invoice: Invoice) -> Bool {
+        guard let pdf = InvoicePDFGenerator.pdfData(for: invoice) else { return false }
+        return save(
+            data: pdf,
+            suggestedName: "Faktura_\(sanitized(invoice.invoiceNumber)).pdf",
+            contentType: .pdf
+        )
+    }
+
+    /// Otwiera NSSavePanel i zapisuje dane pod wybraną ścieżką.
+    /// Zwraca `true` po udanym zapisie; `false` przy anulowaniu lub błędzie.
+    private static func save(data: Data, suggestedName: String, contentType: UTType) -> Bool {
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [contentType]
+        panel.nameFieldStringValue = suggestedName
+        panel.canCreateDirectories = true
+
+        guard panel.runModal() == .OK, let url = panel.url else { return false }
+        do {
+            try data.write(to: url)
+            return true
+        } catch {
+            NSAlert(error: error).runModal()
+            return false
+        }
+    }
+
+    /// Otwiera panel wyboru pliku i zwraca jego zawartość (np. import kopii zapasowej).
+    public static func importData(allowedTypes: [UTType]) -> Data? {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = allowedTypes
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+
+        guard panel.runModal() == .OK, let url = panel.url else { return nil }
+        return try? Data(contentsOf: url)
+    }
+
+    /// Numer faktury bez znaków niedozwolonych w nazwie pliku.
+    private static func sanitized(_ name: String) -> String {
+        name.replacingOccurrences(of: "/", with: "-")
+            .replacingOccurrences(of: ":", with: "-")
+            .replacingOccurrences(of: " ", with: "_")
+    }
+}

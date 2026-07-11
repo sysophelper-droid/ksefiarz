@@ -1,0 +1,30 @@
+# macOS
+.DS_Store
+
+# Swift Package Manager / Xcode
+.build/
+.swiftpm/
+xcuserdata/
+DerivedData/
+
+# Artefakty budowania aplikacji (bundle .app z build-app.sh)
+dist/
+
+# Lokalna konfiguracja narzędzi (uprawnienia sesji — nie do repo)
+.claude/settings.local.json
+
+# Sekrety — nigdy nie commitować (zapora na wszelki wypadek;
+# token i certyfikaty KSeF żyją wyłącznie w pęku kluczy)
+*.p12
+*.pfx
+*.pem
+*.key
+*.der
+.env
+.env.*
+
+# Lokalne eksporty / kopie zapasowe, gdyby trafiły do katalogu projektu
+ksefiarz-kopia-*.json
+*.store
+*.store-wal
+*.store-shm

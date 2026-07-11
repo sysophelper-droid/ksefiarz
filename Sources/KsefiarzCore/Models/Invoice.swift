@@ -1,0 +1,421 @@
+import Foundation
+import SwiftData
+
+/// Trwały stan wysyłki faktury sprzedażowej do KSeF.
+public enum KSeFSubmissionStatus: String, Codable, CaseIterable, Sendable {
+    case local
+    /// Wystawiona w trybie offline24 — czeka w kolejce na dosłanie do KSeF
+    /// (termin: następny dzień roboczy po dacie wystawienia).
+    case offlinePending = "offline"
+    case processing
+    case accepted
+    case rejected
+
+    public var displayName: String {
+        switch self {
+        case .local: return "Lokalna"
+        case .offlinePending: return "Offline24 — oczekuje na dosłanie"
+        case .processing: return "Przetwarzana przez KSeF"
+        case .accepted: return "Przyjęta przez KSeF"
+        case .rejected: return "Odrzucona przez KSeF"
+        }
+    }
+}
+
+/// Model faktury przechowywany lokalnie w bazie SwiftData.
+///
+/// Obejmuje zarówno faktury sprzedażowe (wystawiane przez nas),
+/// jak i zakupowe (pobierane z KSeF — wystawione na nasz NIP).
+@Model
+public final class Invoice {
+
+    /// Rodzaj faktury — sprzedażowa lub zakupowa.
+    public enum Kind: String, Codable, CaseIterable, Sendable {
+        case sales = "sprzedaz"
+        case purchase = "zakup"
+
+        public var displayName: String {
+            switch self {
+            case .sales: return "Sprzedaż"
+            case .purchase: return "Zakup"
+            }
+        }
+    }
+
+    /// Unikalny identyfikator lokalny.
+    @Attribute(.unique) public var id: UUID
+
+    /// Unikalny numer identyfikacyjny nadany przez system KSeF (nil, jeśli faktura nie została jeszcze wysłana).
+    public var ksefId: String?
+
+    /// Numer własny faktury (np. FV/2026/06/001).
+    public var invoiceNumber: String
+
+    /// Data wystawienia.
+    public var issueDate: Date
+
+    /// Dane sprzedawcy.
+    public var sellerName: String
+    public var sellerNIP: String
+    public var sellerAddress: String = ""
+
+    /// Dane nabywcy.
+    public var buyerName: String
+    public var buyerNIP: String
+    public var buyerAddress: String = ""
+
+    /// Kwoty: netto, VAT, brutto.
+    public var netAmount: Double
+    public var vatAmount: Double
+    public var grossAmount: Double
+
+    /// Status opłacenia — domyślnie `false` (do opłacenia).
+    public var isPaid: Bool
+
+    /// Termin płatności (opcjonalny).
+    public var paymentDueDate: Date?
+
+    /// Forma płatności (kod słownika FA(2): 1-gotówka … 6-przelew) — patrz `PaymentForm`.
+    public var paymentFormRaw: String?
+
+    /// Numer rachunku bankowego do płatności (NrRB z faktury).
+    public var paymentBankAccount: String?
+
+    /// Data zapłaty (DataZaplaty), jeśli faktura była opłacona przy wystawieniu.
+    public var paymentDate: Date?
+
+    /// Flaga ukrycia faktury nieuprawnionej / nie do rozliczenia — domyślnie `false`.
+    /// Ukryte faktury nie są uwzględniane w rozliczeniach ani statystykach.
+    public var isArchivedOrHidden: Bool
+
+    /// Oryginalny dokument XML e-Faktury (FA(2)).
+    public var rawXmlContent: String?
+
+    /// Rodzaj dokumentu wg FA(2): "VAT" (zwykła) lub "KOR" (korygująca).
+    public var documentTypeRaw: String = "VAT"
+
+    /// Dane faktury korygowanej (tylko dla dokumentów KOR).
+    public var correctionReason: String?
+    public var correctedInvoiceNumber: String?
+    public var correctedInvoiceKsefId: String?
+    public var correctedInvoiceIssueDate: Date?
+
+    /// Numer referencyjny sesji KSeF, w której wysłano fakturę —
+    /// potrzebny do pobrania UPO.
+    public var ksefSessionReference: String?
+
+    /// Numer referencyjny faktury w sesji — osobny od docelowego numeru KSeF.
+    /// Jest dostępny od chwili przyjęcia przesyłki i służy do odpytywania
+    /// o wynik przetwarzania.
+    public var ksefInvoiceReference: String? = nil
+
+    /// Surowy stan wysyłki. Pusty oznacza rekord sprzed wprowadzenia pełnego
+    /// cyklu statusów; wtedy stan jest wyprowadzany z istniejących numerów.
+    public var ksefSubmissionStatusRaw: String = ""
+
+    /// Ostatni kod i opis zwrócony przez endpoint statusu faktury.
+    public var ksefStatusCode: Int? = nil
+    public var ksefStatusDescription: String? = nil
+    public var ksefLastCheckedAt: Date? = nil
+    public var ksefAcceptedAt: Date? = nil
+
+    /// Środowisko, do którego wysłano dokument. Puste dla starszych rekordów.
+    public var ksefEnvironmentRaw: String = ""
+
+    /// UPO pobrane automatycznie po przyjęciu faktury. Przechowujemy XML,
+    /// aby można go było wyeksportować także bez połączenia z siecią.
+    public var upoXmlContent: String? = nil
+
+    /// Uwagi na fakturze (dopisek pod pozycjami) — w XML: Stopka/Informacje/
+    /// StopkaFaktury. Wartość domyślna obowiązkowa (migracja bazy).
+    public var notes: String = ""
+
+    /// Waluta faktury (KodWaluty); kwoty faktury są w tej walucie.
+    public var currency: String = "PLN"
+    /// Kurs PLN dla waluty obcej (0 = nie dotyczy) — do pól P_14_xW
+    /// i przeliczeń statystyk.
+    public var exchangeRate: Double = 0
+    /// Mechanizm podzielonej płatności (Adnotacje P_18A = 1).
+    public var splitPayment: Bool = false
+    /// Data dokonania dostawy / otrzymania zapłaty (P_6) — dla ZAL data
+    /// otrzymania zaliczki.
+    public var saleDate: Date?
+    /// Numery KSeF faktur zaliczkowych rozliczanych dokumentem ROZ
+    /// (rozdzielone znakiem nowej linii — SwiftData nie lubi tablic w atrybutach).
+    public var advanceInvoiceRefsRaw: String = ""
+    /// Procedura marży (Adnotacje/PMarzy): "" = brak, "2" = biura podróży,
+    /// "3_1" = towary używane, "3_2" = dzieła sztuki, "3_3" = antyki.
+    public var marginProcedureRaw: String = ""
+
+    /// Dokument wystawiony w trybie offline24 (art. 106nda ustawy o VAT).
+    /// Przy dosyłaniu do KSeF wysyłany jest DOKŁADNIE zapisany XML
+    /// (`rawXmlContent`) — jego skrót jest częścią kodów QR na wydruku.
+    public var isOfflineMode: Bool = false
+    /// Skrót SHA-256 zapisanego XML (Base64) — utrwalony w chwili wystawienia
+    /// offline; wchodzi do kodów QR i pola invoiceHash przy dosyłaniu.
+    public var offlineHashBase64: String = ""
+
+    /// Czy dokument jest fakturą korygującą.
+    public var isCorrection: Bool { documentTypeRaw == "KOR" }
+
+    /// Numery KSeF faktur zaliczkowych (dokumenty ROZ) jako tablica.
+    public var advanceInvoiceRefs: [String] {
+        get { advanceInvoiceRefsRaw.split(separator: "\n").map(String.init) }
+        set { advanceInvoiceRefsRaw = newValue.joined(separator: "\n") }
+    }
+
+    /// Efektywny stan wysyłki. Obsługuje rekordy sprzed migracji: obecność
+    /// numeru KSeF oznacza dokument przyjęty, a referencji — przetwarzany.
+    public var ksefSubmissionStatus: KSeFSubmissionStatus {
+        get {
+            if let status = KSeFSubmissionStatus(rawValue: ksefSubmissionStatusRaw) {
+                return status
+            }
+            if ksefId != nil { return .accepted }
+            if ksefInvoiceReference != nil { return .processing }
+            return .local
+        }
+        set { ksefSubmissionStatusRaw = newValue.rawValue }
+    }
+
+    /// Czy faktura istnieje tylko lokalnie i nigdy nie została przekazana
+    /// do KSeF. Dokument w toku lub odrzucony nie jest ponownie edytowalny,
+    /// bo ponowna wysyłka mogłaby utworzyć duplikat.
+    public var isLocalOnly: Bool {
+        ksefId == nil && ksefInvoiceReference == nil && ksefSubmissionStatus == .local
+    }
+
+    /// Czy warto automatycznie ponowić sprawdzenie statusu lub pobranie UPO.
+    public var needsKSeFFollowUp: Bool {
+        guard ksefSessionReference != nil, ksefInvoiceReference != nil else { return false }
+        return ksefSubmissionStatus == .processing
+            || (ksefSubmissionStatus == .accepted && (upoXmlContent ?? "").isEmpty)
+    }
+
+    /// Termin dosłania dokumentu offline24 do KSeF — koniec następnego dnia
+    /// roboczego po dacie wystawienia. `nil`, gdy dokument nie czeka w kolejce.
+    public var offlineSendDeadline: Date? {
+        guard isOfflineMode, ksefSubmissionStatus == .offlinePending else { return nil }
+        return PolishBusinessCalendar.endOfNextBusinessDay(after: issueDate)
+    }
+
+    /// Pozycje faktury (FaWiersz).
+    @Relationship(deleteRule: .cascade, inverse: \InvoiceLine.invoice)
+    public var lines: [InvoiceLine] = []
+
+    /// Surowa wartość rodzaju faktury — przechowywana jako String,
+    /// aby można było jej używać w makrze #Predicate (SwiftData).
+    public var kindRaw: String
+
+    /// Wygodny dostęp do rodzaju faktury jako enum.
+    public var kind: Kind {
+        get { Kind(rawValue: kindRaw) ?? .purchase }
+        set { kindRaw = newValue.rawValue }
+    }
+
+    /// Forma płatności jako enum (jeśli znana).
+    public var paymentForm: PaymentForm? {
+        get { paymentFormRaw.flatMap(PaymentForm.init(rawValue:)) }
+        set { paymentFormRaw = newValue?.rawValue }
+    }
+
+    /// Pozycje posortowane po numerze wiersza.
+    public var sortedLines: [InvoiceLine] {
+        lines.sorted { $0.index < $1.index }
+    }
+
+    public init(
+        id: UUID = UUID(),
+        ksefId: String? = nil,
+        invoiceNumber: String,
+        issueDate: Date,
+        sellerName: String,
+        sellerNIP: String,
+        sellerAddress: String = "",
+        buyerName: String,
+        buyerNIP: String,
+        buyerAddress: String = "",
+        netAmount: Double,
+        vatAmount: Double,
+        grossAmount: Double,
+        isPaid: Bool = false,
+        paymentDueDate: Date? = nil,
+        paymentForm: PaymentForm? = nil,
+        paymentBankAccount: String? = nil,
+        paymentDate: Date? = nil,
+        isArchivedOrHidden: Bool = false,
+        rawXmlContent: String? = nil,
+        documentType: String = "VAT",
+        correctionReason: String? = nil,
+        correctedInvoiceNumber: String? = nil,
+        correctedInvoiceKsefId: String? = nil,
+        correctedInvoiceIssueDate: Date? = nil,
+        ksefSessionReference: String? = nil,
+        ksefInvoiceReference: String? = nil,
+        ksefSubmissionStatus: KSeFSubmissionStatus? = nil,
+        ksefStatusCode: Int? = nil,
+        ksefStatusDescription: String? = nil,
+        ksefLastCheckedAt: Date? = nil,
+        ksefAcceptedAt: Date? = nil,
+        ksefEnvironmentRaw: String = "",
+        upoXmlContent: String? = nil,
+        notes: String = "",
+        currency: String = "PLN",
+        exchangeRate: Double = 0,
+        splitPayment: Bool = false,
+        saleDate: Date? = nil,
+        advanceInvoiceRefs: [String] = [],
+        marginProcedure: String = "",
+        kind: Kind = .purchase
+    ) {
+        self.id = id
+        self.ksefId = ksefId
+        self.invoiceNumber = invoiceNumber
+        self.issueDate = issueDate
+        self.sellerName = sellerName
+        self.sellerNIP = sellerNIP
+        self.sellerAddress = sellerAddress
+        self.buyerName = buyerName
+        self.buyerNIP = buyerNIP
+        self.buyerAddress = buyerAddress
+        self.netAmount = netAmount
+        self.vatAmount = vatAmount
+        self.grossAmount = grossAmount
+        self.isPaid = isPaid
+        self.paymentDueDate = paymentDueDate
+        self.paymentFormRaw = paymentForm?.rawValue
+        self.paymentBankAccount = paymentBankAccount
+        self.paymentDate = paymentDate
+        self.isArchivedOrHidden = isArchivedOrHidden
+        self.rawXmlContent = rawXmlContent
+        self.documentTypeRaw = documentType
+        self.correctionReason = correctionReason
+        self.correctedInvoiceNumber = correctedInvoiceNumber
+        self.correctedInvoiceKsefId = correctedInvoiceKsefId
+        self.correctedInvoiceIssueDate = correctedInvoiceIssueDate
+        self.ksefSessionReference = ksefSessionReference
+        self.ksefInvoiceReference = ksefInvoiceReference
+        self.ksefSubmissionStatusRaw = ksefSubmissionStatus?.rawValue ?? ""
+        self.ksefStatusCode = ksefStatusCode
+        self.ksefStatusDescription = ksefStatusDescription
+        self.ksefLastCheckedAt = ksefLastCheckedAt
+        self.ksefAcceptedAt = ksefAcceptedAt
+        self.ksefEnvironmentRaw = ksefEnvironmentRaw
+        self.upoXmlContent = upoXmlContent
+        self.notes = notes
+        self.currency = currency
+        self.exchangeRate = exchangeRate
+        self.splitPayment = splitPayment
+        self.saleDate = saleDate
+        self.advanceInvoiceRefsRaw = advanceInvoiceRefs.joined(separator: "\n")
+        self.marginProcedureRaw = marginProcedure
+        self.kindRaw = kind.rawValue
+    }
+
+    /// Czy faktura jest zaległa (nieopłacona i po terminie płatności) na wskazany moment.
+    public func isOverdue(asOf date: Date = .now) -> Bool {
+        guard !isPaid, let due = paymentDueDate else { return false }
+        return due < date
+    }
+
+    /// Wygodny skrót — zaległość względem chwili bieżącej.
+    public var isOverdue: Bool { isOverdue(asOf: .now) }
+}
+
+// MARK: - Mapowanie z danych pobranych z KSeF
+
+public extension Invoice {
+    /// Tworzy fakturę na podstawie danych sparsowanych z dokumentu FA(2).
+    /// Znacznik „Zaplacono” z faktury ustawia status opłacenia.
+    ///
+    /// Uwaga: pozycje (relacja SwiftData) należy uzupełnić po wstawieniu
+    /// do kontekstu — metodą `applyDetails(from:)`.
+    convenience init(from data: FA2InvoiceData, kind: Kind) {
+        self.init(
+            ksefId: data.ksefId,
+            invoiceNumber: data.invoiceNumber,
+            issueDate: data.issueDate,
+            sellerName: data.sellerName,
+            sellerNIP: data.sellerNIP,
+            sellerAddress: data.sellerAddress,
+            buyerName: data.buyerName,
+            buyerNIP: data.buyerNIP,
+            buyerAddress: data.buyerAddress,
+            netAmount: data.netAmount,
+            vatAmount: data.vatAmount,
+            grossAmount: data.grossAmount,
+            isPaid: data.isPaidMarker,
+            paymentDueDate: data.paymentDueDate,
+            paymentForm: data.paymentForm.flatMap(PaymentForm.init(rawValue:)),
+            paymentBankAccount: data.paymentBankAccount,
+            paymentDate: data.paymentDate,
+            rawXmlContent: data.rawXML,
+            documentType: data.documentType,
+            correctionReason: data.correction?.reason,
+            correctedInvoiceNumber: data.correction?.originalNumber,
+            correctedInvoiceKsefId: data.correction?.originalKsefNumber,
+            correctedInvoiceIssueDate: data.correction?.originalIssueDate,
+            ksefSubmissionStatus: data.ksefId == nil ? nil : .accepted,
+            notes: data.notes,
+            currency: data.currency,
+            splitPayment: data.splitPayment,
+            saleDate: data.saleDate,
+            kind: kind
+        )
+    }
+
+    /// Uzupełnia/odświeża szczegóły faktury danymi z dokumentu FA(2)
+    /// (adresy, pozycje, dane płatności, XML). Nie nadpisuje decyzji
+    /// użytkownika: statusu „opłacona” nie cofa, ukrycia nie zmienia.
+    func applyDetails(from data: FA2InvoiceData) {
+        sellerName = data.sellerName.isEmpty ? sellerName : data.sellerName
+        sellerAddress = data.sellerAddress
+        buyerName = data.buyerName.isEmpty ? buyerName : data.buyerName
+        buyerAddress = data.buyerAddress
+        if data.netAmount != 0 || data.grossAmount != 0 {
+            netAmount = data.netAmount
+            vatAmount = data.vatAmount
+            grossAmount = data.grossAmount
+        }
+        if let due = data.paymentDueDate { paymentDueDate = due }
+        if let form = data.paymentForm { paymentFormRaw = form }
+        if let account = data.paymentBankAccount { paymentBankAccount = account }
+        if let paid = data.paymentDate { paymentDate = paid }
+        // Znacznik „Zaplacono” może tylko ustawić status — nigdy go nie cofa.
+        if data.isPaidMarker { isPaid = true }
+        if !data.rawXML.isEmpty { rawXmlContent = data.rawXML }
+        if let number = data.ksefId {
+            ksefId = number
+            ksefSubmissionStatus = .accepted
+        }
+        documentTypeRaw = data.documentType
+        if let correction = data.correction {
+            correctionReason = correction.reason
+            correctedInvoiceNumber = correction.originalNumber
+            correctedInvoiceKsefId = correction.originalKsefNumber
+            correctedInvoiceIssueDate = correction.originalIssueDate
+        }
+
+        if !data.notes.isEmpty { notes = data.notes }
+        currency = data.currency
+        splitPayment = data.splitPayment
+        if let sale = data.saleDate { saleDate = sale }
+
+        // Pozycje budujemy od nowa z dokumentu.
+        lines = data.lines.map { line in
+            InvoiceLine(
+                index: line.index,
+                name: line.name,
+                unit: line.unit,
+                quantity: line.quantity,
+                unitNetPrice: line.unitNetPrice,
+                netAmount: line.netAmount,
+                vatRate: line.vatRate,
+                vatAmount: line.vatAmount,
+                cnPkwiu: line.cnPkwiu,
+                gtu: line.gtu,
+                procedure: line.procedure
+            )
+        }
+    }
+}

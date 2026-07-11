@@ -1,0 +1,262 @@
+import SwiftUI
+import SwiftData
+import UserNotifications
+
+/// Sekcje paska bocznego aplikacji.
+public enum SidebarSection: String, CaseIterable, Identifiable, Hashable {
+    case dashboard
+    case sales
+    case purchases
+    case dictionaries
+    case automation
+    case hidden
+    case settings
+
+    public var id: String { rawValue }
+
+    public var title: String {
+        switch self {
+        case .dashboard: return "Kokpit"
+        case .sales: return "Faktury Sprzedaży"
+        case .purchases: return "Faktury Zakupu"
+        case .dictionaries: return "Słowniki"
+        case .automation: return "Szablony i cykle"
+        case .hidden: return "Nieuprawnione / Ukryte"
+        case .settings: return "Ustawienia"
+        }
+    }
+
+    public var icon: String {
+        switch self {
+        case .dashboard: return "gauge.with.dots.needle.50percent"
+        case .sales: return "arrow.up.doc"
+        case .purchases: return "arrow.down.doc"
+        case .dictionaries: return "text.book.closed"
+        case .automation: return "calendar.badge.clock"
+        case .hidden: return "eye.slash"
+        case .settings: return "gearshape"
+        }
+    }
+}
+
+/// Główny układ okna aplikacji — pasek boczny + zawartość (NavigationSplitView).
+/// Odpowiada też za automatyczną synchronizację z KSeF (przy starcie
+/// i cyklicznie), bo żyje przez cały czas działania aplikacji.
+public struct MainContentView: View {
+
+    @State private var selection: SidebarSection? = .dashboard
+    @State private var isAutoSyncing = false
+
+    @Environment(\.modelContext) private var modelContext
+    @ObservedObject private var tokenStore = TokenStore.shared
+    @AppStorage(AppSettingsKeys.nip) private var myNIP = ""
+    @AppStorage(AppSettingsKeys.environment) private var environmentRaw = KSeFEnvironment.test.rawValue
+    @AppStorage(AppSettingsKeys.rangeMode) private var rangeModeRaw = DateRangeMode.last3Months.rawValue
+    @AppStorage(AppSettingsKeys.rangeFrom) private var rangeFromInterval = Date.now.timeIntervalSince1970 - 30 * 86_400
+    @AppStorage(AppSettingsKeys.rangeTo) private var rangeToInterval = Date.now.timeIntervalSince1970
+    @AppStorage(AppSettingsKeys.prepaidForms) private var prepaidFormsRaw = PaymentFormPolicy.encode(PaymentFormPolicy.defaultPrepaidForms)
+    @AppStorage(AppSettingsKeys.syncOnLaunch) private var syncOnLaunch = false
+    @AppStorage(AppSettingsKeys.autoSync) private var autoSync = false
+    @AppStorage(AppSettingsKeys.autoSyncIntervalMinutes) private var autoSyncIntervalMinutes = 60
+    @AppStorage(AppSettingsKeys.lastSyncAt) private var lastSyncAt = 0.0
+    @AppStorage(AppSettingsKeys.autoBackup) private var autoBackup = true
+    @AppStorage(AppSettingsKeys.autoBackupRotationMode) private var backupRotationModeRaw = AutoBackupService.RotationMode.keepCount.rawValue
+    @AppStorage(AppSettingsKeys.autoBackupKeepCount) private var backupKeepCount = 14
+    @AppStorage(AppSettingsKeys.autoBackupKeepDays) private var backupKeepDays = 30
+    @AppStorage(AppSettingsKeys.notifyNewPurchases) private var notifyNewPurchases = true
+
+    public init() {}
+
+    public var body: some View {
+        NavigationSplitView {
+            List(SidebarSection.allCases, selection: $selection) { section in
+                Label(section.title, systemImage: section.icon)
+                    .tag(section)
+            }
+            .listStyle(.sidebar)
+            .navigationSplitViewColumnWidth(min: 200, ideal: 230, max: 300)
+            .navigationTitle("Ksefiarz")
+            // Status synchronizacji — żeby było widać, że automatyka żyje.
+            .safeAreaInset(edge: .bottom) {
+                if isAutoSyncing || lastSyncAt > 0 {
+                    HStack(spacing: 6) {
+                        if isAutoSyncing {
+                            ProgressView().controlSize(.small)
+                            Text("Synchronizuję…")
+                        } else {
+                            Image(systemName: "arrow.triangle.2.circlepath")
+                            Text("Synchronizacja: ")
+                                + Text(Date(timeIntervalSince1970: lastSyncAt), style: .relative)
+                                + Text(" temu")
+                        }
+                    }
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                }
+            }
+        } detail: {
+            switch selection ?? .dashboard {
+            case .dashboard:
+                DashboardView()
+            case .sales:
+                InvoiceListView(kind: .sales)
+            case .purchases:
+                InvoiceListView(kind: .purchase)
+            case .dictionaries:
+                DictionariesView()
+            case .automation:
+                InvoiceAutomationView()
+            case .hidden:
+                HiddenInvoicesView()
+            case .settings:
+                SettingsView()
+            }
+        }
+        .frame(minWidth: 920, minHeight: 580)
+        // Kopia zapasowa PRZED synchronizacją — utrwala stan sprzed zmian.
+        .task {
+            if autoBackup { performAutoBackup() }
+            await reconcileOutstandingSubmissions()
+            if syncOnLaunch { await syncBothKinds() }
+        }
+        // Cykliczne pobieranie, dopóki aplikacja działa. Zmiana przełącznika
+        // lub interwału w Ustawieniach restartuje pętlę (zmiana `id` taska).
+        .task(id: "\(autoSync)-\(autoSyncIntervalMinutes)") {
+            guard autoSync, autoSyncIntervalMinutes > 0 else { return }
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(autoSyncIntervalMinutes * 60))
+                guard !Task.isCancelled else { return }
+                await syncBothKinds()
+            }
+        }
+        // Wysyłki w toku i UPO są domykane niezależnie od ustawień importu.
+        // Dzięki temu numer KSeF pojawia się bez ręcznego odświeżania także
+        // wtedy, gdy automatyczna synchronizacja faktur jest wyłączona.
+        .task(id: "ksef-follow-up-\(environmentRaw)") {
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(60))
+                guard !Task.isCancelled else { return }
+                await reconcileOutstandingSubmissions()
+            }
+        }
+    }
+
+    /// Automatyczna kopia zapasowa: jeden plik dziennie z rotacją wg Ustawień.
+    /// Błąd nie blokuje startu aplikacji — trafia tylko do logu systemowego.
+    private func performAutoBackup() {
+        let mode = AutoBackupService.RotationMode(rawValue: backupRotationModeRaw) ?? .keepCount
+        do {
+            try AutoBackupService.performIfNeeded(
+                directory: AutoBackupService.defaultDirectory,
+                mode: mode,
+                keepCount: backupKeepCount,
+                keepDays: backupKeepDays
+            ) {
+                try BackupService.makeCurrentBackup(context: modelContext)
+            }
+        } catch {
+            NSLog("Ksefiarz: automatyczna kopia zapasowa nie powiodła się: %@",
+                  String(describing: error))
+        }
+    }
+
+    /// Pobiera faktury sprzedażowe i zakupowe zgodnie z zakresem dat
+    /// z Ustawień. Działa w tle — błędy (np. brak sieci) są ciche;
+    /// ręczna synchronizacja z listy pokazuje je wprost.
+    /// WYŁĄCZNIE na środowisku produkcyjnym — automat na środowisku
+    /// testowym zaśmiecał bazę fakturami testowymi (12.06.2026);
+    /// na test/demo synchronizuj ręcznie z listy.
+    @MainActor
+    private func syncBothKinds() async {
+        guard environmentRaw == KSeFEnvironment.production.rawValue else { return }
+        guard !myNIP.isEmpty, !tokenStore.token.isEmpty || KSeFCertificateStore.shared.authenticationCertificate != nil, !isAutoSyncing else { return }
+        isAutoSyncing = true
+        defer { isAutoSyncing = false }
+
+        let environment = KSeFEnvironment(rawValue: environmentRaw) ?? .test
+        let service = KSeFService(environment: environment, nip: myNIP, authToken: tokenStore.token, certificate: KSeFCertificateStore.shared.authenticationCertificate)
+        await reconcileOutstandingSubmissions(using: service)
+        let range = DateRangeResolver.range(
+            mode: DateRangeMode(rawValue: rangeModeRaw) ?? .last3Months,
+            customFrom: Date(timeIntervalSince1970: rangeFromInterval),
+            customTo: Date(timeIntervalSince1970: rangeToInterval)
+        )
+        let prepaidForms = PaymentFormPolicy.decode(prepaidFormsRaw)
+
+        for kind in [Invoice.Kind.sales, .purchase] {
+            let inserted = (try? await InvoiceSyncEngine.sync(
+                kind: kind,
+                service: service,
+                from: range.from,
+                to: range.to,
+                prepaidForms: prepaidForms,
+                context: modelContext
+            )) ?? 0
+            if kind == .purchase, inserted > 0, notifyNewPurchases {
+                await postNewPurchasesNotification(count: inserted)
+            }
+        }
+    }
+
+    /// Ponawia statusy wysyłek niezależnie od automatycznego importu faktur.
+    /// Działa również na test/demo, ale wyłącznie dla rekordów zapisanych
+    /// z aktualnie wybranym środowiskiem.
+    @MainActor
+    private func reconcileOutstandingSubmissions() async {
+        guard !myNIP.isEmpty, !tokenStore.token.isEmpty || KSeFCertificateStore.shared.authenticationCertificate != nil else { return }
+        let environment = KSeFEnvironment(rawValue: environmentRaw) ?? .test
+        let service = KSeFService(
+            environment: environment,
+            nip: myNIP,
+            authToken: tokenStore.token,
+            certificate: KSeFCertificateStore.shared.authenticationCertificate
+        )
+        await reconcileOutstandingSubmissions(using: service)
+    }
+
+    @MainActor
+    private func reconcileOutstandingSubmissions(using service: KSeFService) async {
+        let allInvoices = (try? modelContext.fetch(FetchDescriptor<Invoice>())) ?? []
+        // Najpierw dosyłamy dokumenty offline24 z kolejki (bajt w bajt
+        // zapisany XML), potem domykamy statusy wysyłek i UPO.
+        _ = await OfflineQueueEngine.sendPending(
+            allInvoices,
+            environmentRaw: environmentRaw,
+            using: service
+        )
+        _ = await InvoiceSubmissionStatusEngine.refreshOutstanding(
+            allInvoices,
+            environmentRaw: environmentRaw,
+            using: service
+        )
+        try? modelContext.save()
+    }
+
+    /// Powiadomienie systemowe o nowych fakturach zakupowych z synchronizacji.
+    private func postNewPurchasesNotification(count: Int) async {
+        let center = UNUserNotificationCenter.current()
+        let granted = (try? await center.requestAuthorization(options: [.alert, .sound, .badge])) ?? false
+        guard granted else { return }
+
+        let content = UNMutableNotificationContent()
+        content.title = "Nowe faktury zakupowe"
+        content.body = count == 1
+            ? "Pobrano 1 nową fakturę zakupową z KSeF."
+            : "Pobrano \(count) nowych faktur zakupowych z KSeF."
+        content.sound = .default
+        let request = UNNotificationRequest(
+            identifier: "ksefiarz.newPurchases.\(UUID().uuidString)",
+            content: content,
+            trigger: nil
+        )
+        try? await center.add(request)
+    }
+}
+
+#Preview {
+    MainContentView()
+        .modelContainer(for: Invoice.self, inMemory: true)
+}
