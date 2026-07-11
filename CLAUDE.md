@@ -58,6 +58,14 @@ wykonuje też pełny wniosek o certyfikat KSeF):
 KSEF_LIVE_NIP=<NIP> KSEF_LIVE_ENV=test swift test --filter LiveCertificateAuthTests
 ```
 
+Weryfikacja kodów QR e2e na bramce qr-test (wysyła dokument offline na
+środowisko testowe; NIP może być fikcyjny, np. 9999999999):
+
+```bash
+KSEF_LIVE_SEND=1 KSEF_LIVE_ENV=test KSEF_LIVE_NIP=9999999999 \
+  swift test --filter LiveQRVerificationTests
+```
+
 ## Architektura
 
 ```
@@ -196,9 +204,6 @@ NrKSeFFaKorygowanej albo NrKSeFN=1. Parser jest odporny na przestrzenie nazw
 
 ## Znane ograniczenia
 
-- Kody QR: linki i podpisy zweryfikowane lokalnie i zgodne z przykładami
-  z kody-qr.md, ale bez potwierdzenia e2e na bramce `qr-test` (weryfikacja
-  wymaga ręcznego zeskanowania/otwarcia linku z realnym dokumentem).
 - Na produkcji pierwszy certyfikat KSeF trzeba zaimportować z pliku
   (pozyskany np. w Aplikacji Podatnika) — wniosek z aplikacji wymaga
   wcześniejszego zalogowania podpisem, a to na produkcji umożliwia dopiero
