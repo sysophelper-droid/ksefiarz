@@ -203,6 +203,32 @@ public final class Invoice {
     @Relationship(deleteRule: .cascade, inverse: \InvoiceLine.invoice)
     public var lines: [InvoiceLine] = []
 
+    /// Historia wpłat do faktury (płatności częściowe).
+    @Relationship(deleteRule: .cascade, inverse: \PaymentRecord.invoice)
+    public var payments: [PaymentRecord] = []
+
+    /// Suma zarejestrowanych wpłat (w walucie faktury).
+    public var paidAmount: Double {
+        payments.reduce(0) { $0 + $1.amount }
+    }
+
+    /// Saldo pozostałe do zapłaty. Faktura oznaczona jako opłacona ma saldo 0
+    /// niezależnie od historii wpłat (znacznik „opłacona” jest nadrzędny —
+    /// starsze rekordy i formy „z góry” nie mają wpisów wpłat).
+    public var outstandingAmount: Double {
+        isPaid ? 0 : max(0, grossAmount - paidAmount)
+    }
+
+    /// Częściowo opłacona: są wpłaty, ale saldo nie zostało domknięte.
+    public var isPartiallyPaid: Bool {
+        !isPaid && paidAmount > 0.005
+    }
+
+    /// Wpłaty od najnowszej.
+    public var sortedPayments: [PaymentRecord] {
+        payments.sorted { $0.date > $1.date }
+    }
+
     /// Surowa wartość rodzaju faktury — przechowywana jako String,
     /// aby można było jej używać w makrze #Predicate (SwiftData).
     public var kindRaw: String

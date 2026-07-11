@@ -77,6 +77,18 @@ public enum FileExportService {
         return try? Data(contentsOf: url)
     }
 
+    /// Panel wyboru pliku bez ograniczenia typu — np. wyciągi MT940, które
+    /// banki zapisują pod różnymi rozszerzeniami (.sta, .mt940, .txt, .940).
+    public static func importAnyData(message: String = "") -> Data? {
+        let panel = NSOpenPanel()
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        if !message.isEmpty { panel.message = message }
+
+        guard panel.runModal() == .OK, let url = panel.url else { return nil }
+        return try? Data(contentsOf: url)
+    }
+
     /// Numer faktury bez znaków niedozwolonych w nazwie pliku.
     private static func sanitized(_ name: String) -> String {
         name.replacingOccurrences(of: "/", with: "-")

@@ -513,6 +513,7 @@ public struct SettingsView: View {
                 let invoice = BackupService.makeInvoice(from: entry)
                 modelContext.insert(invoice)
                 invoice.lines = BackupService.makeLines(for: entry)
+                invoice.payments = BackupService.makePayments(for: entry)
             }
 
             // Ustawienia uzupełniamy wyłącznie tam, gdzie obecne są puste —

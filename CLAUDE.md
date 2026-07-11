@@ -71,9 +71,11 @@ KSEF_LIVE_SEND=1 KSEF_LIVE_ENV=test KSEF_LIVE_NIP=9999999999 \
 ```
 Sources/KsefiarzApp/InvoiceApp.swift   # @main, ModelContainer, AppDelegate (ikona, migracja defaults)
 Sources/KsefiarzCore/
-  Models/      Invoice (@Model) + InvoiceLine (relacja), InvoiceDraft (+ init(from: Invoice)),
-               słowniki: Contractor, Product, BankAccount (@Model, dane tylko
-               PODSTAWIANE do faktur — pola faktury zawsze edytowalne ręcznie)
+  Models/      Invoice (@Model) + InvoiceLine + PaymentRecord (relacje; wpłaty
+               przypisywać PO context.insert jak pozycje), InvoiceDraft
+               (+ init(from: Invoice)), słowniki: Contractor, Product,
+               BankAccount (@Model, dane tylko PODSTAWIANE do faktur —
+               pola faktury zawsze edytowalne ręcznie)
   Services/    KSeFService (API 2.0), KSeFCrypto, FA2XML (generator+parser), InvoiceValidator,
                BackupService, FileExportService (NSSave/OpenPanel), InvoicePDFGenerator (+ kody QR),
                TokenStore (token w pęku kluczy), ContractorLookupService (Biała
@@ -89,7 +91,10 @@ Sources/KsefiarzCore/
                PaymentFormPolicy, InvoiceSyncEngine (wspólny sync: ręczny,
                przy starcie i cykliczny — automatyka w MainContentView),
                PolishBusinessCalendar (dni robocze/święta — terminy offline24),
-               OfflineQueueEngine (kolejka dosłań offline24)
+               OfflineQueueEngine (kolejka dosłań offline24),
+               PaymentLedger (wpłaty częściowe/saldo — jedyne miejsce zmian
+               historii wpłat), MT940Parser (wyciągi bankowe),
+               PaymentMatcher (propozycje dopasowań przelewów)
   Views/       MainContentView (NavigationSplitView), InvoiceListView, InvoiceDetailView,
                NewInvoiceView (nowa/edycja/korekta), DashboardView, SettingsView, HiddenInvoicesView,
                DictionariesView (+ ContractorsView/ProductsView/BankAccountsView)

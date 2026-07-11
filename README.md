@@ -48,7 +48,7 @@ Sources/
         ├── InvoiceAutomationView.swift # szablony, cykle i kolejka zatwierdzeń
         ├── HiddenInvoicesView.swift # archiwum „Nieuprawnione / Ukryte”
         └── SettingsView.swift    # NIP, token KSeF, środowisko
-Tests/KsefiarzCoreTests/          # 249 testów (Swift Testing) — model, parser, usługa, kryptografia, logika
+Tests/KsefiarzCoreTests/          # 269 testów (Swift Testing) — model, parser, usługa, kryptografia, logika
 ```
 
 ## Funkcje
@@ -162,6 +162,16 @@ Tests/KsefiarzCoreTests/          # 249 testów (Swift Testing) — model, parse
 - **UPO** — automatyczne pobieranie i lokalne przechowywanie Urzędowego
   Poświadczenia Odbioru (XML) po przyjęciu faktury; w szczegółach można
   ponowić pobranie lub wyeksportować zapisany dokument także bez sieci.
+- **Ewidencja płatności** — historia wpłat na każdej fakturze: płatności
+  częściowe, saldo pozostałe do zapłaty, znacznik „Częściowo” na listach.
+  Pełne pokrycie kwoty brutto oznacza fakturę jako opłaconą automatycznie;
+  ręczne decyzje pozostają nadrzędne. **Import wyciągu bankowego (MT940)**
+  — standardowy format eksportu polskich banków (obsługa kodowań
+  Windows-1250/Latin-2) — z automatycznymi propozycjami dopasowania:
+  po numerze faktury w tytule przelewu (zaznaczane od razu) albo po zgodnej
+  kwocie salda (do świadomego potwierdzenia); wpływy trafiają na faktury
+  sprzedażowe, wypływy na zakupowe, a księgowanie następuje wyłącznie po
+  zatwierdzeniu. Historia wpłat wchodzi w skład kopii zapasowej.
 - **Płatności** — oznaczanie „Opłacona / Do opłacenia” gestem (swipe w prawo),
   z menu kontekstowego i z widoku szczegółów; znaczniki: zielony (opłacona),
   pomarańczowy (do opłacenia), czerwony (zaległa); dane do przelewu

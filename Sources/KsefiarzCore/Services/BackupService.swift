@@ -69,6 +69,17 @@ public struct BackupInvoice: Codable, Equatable, Sendable {
     /// Pola od wersji 4 — tryb offline24.
     public var isOfflineMode: Bool?
     public var offlineHashBase64: String?
+    /// Pola od wersji 4 — historia wpłat (płatności częściowe).
+    public var payments: [BackupPayment]?
+}
+
+/// Wpłata do faktury w kopii zapasowej.
+public struct BackupPayment: Codable, Equatable, Sendable {
+    public var id: UUID
+    public var amount: Double
+    public var date: Date
+    public var note: String?
+    public var sourceRaw: String?
 }
 
 /// Kontrahent w kopii zapasowej (słownik, od wersji 2).
@@ -335,6 +346,20 @@ public enum BackupService {
         return invoice
     }
 
+    /// Modele wpłat dla zaimportowanej faktury (przypisywać po wstawieniu
+    /// faktury do kontekstu — relacja SwiftData, jak pozycje).
+    public static func makePayments(for backup: BackupInvoice) -> [PaymentRecord] {
+        (backup.payments ?? []).map { payment in
+            PaymentRecord(
+                id: payment.id,
+                amount: payment.amount,
+                date: payment.date,
+                note: payment.note ?? "",
+                source: payment.sourceRaw.flatMap(PaymentRecord.Source.init(rawValue:)) ?? .manual
+            )
+        }
+    }
+
     /// Modele pozycji dla zaimportowanej faktury.
     public static func makeLines(for backup: BackupInvoice) -> [InvoiceLine] {
         backup.lines.map { line in
@@ -547,7 +572,16 @@ public enum BackupService {
             ksefEnvironmentRaw: invoice.ksefEnvironmentRaw.isEmpty ? nil : invoice.ksefEnvironmentRaw,
             upoXmlContent: invoice.upoXmlContent,
             isOfflineMode: invoice.isOfflineMode ? true : nil,
-            offlineHashBase64: invoice.offlineHashBase64.isEmpty ? nil : invoice.offlineHashBase64
+            offlineHashBase64: invoice.offlineHashBase64.isEmpty ? nil : invoice.offlineHashBase64,
+            payments: invoice.payments.isEmpty ? nil : invoice.sortedPayments.map { payment in
+                BackupPayment(
+                    id: payment.id,
+                    amount: payment.amount,
+                    date: payment.date,
+                    note: payment.note.isEmpty ? nil : payment.note,
+                    sourceRaw: payment.sourceRaw
+                )
+            }
         )
     }
 

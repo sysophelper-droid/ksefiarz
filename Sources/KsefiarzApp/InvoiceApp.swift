@@ -64,8 +64,8 @@ struct InvoiceApp: App {
     /// Apple, a ich migracja schematu kasuje cudze tabele (12.06.2026
     /// `com.apple.icloudmailagent` usunął w ten sposób wszystkie faktury).
     var sharedModelContainer: ModelContainer = {
-        let schema = Schema([Invoice.self, Contractor.self, Product.self, BankAccount.self,
-                             InvoiceTemplate.self, RecurringInvoice.self])
+        let schema = Schema([Invoice.self, PaymentRecord.self, Contractor.self, Product.self,
+                             BankAccount.self, InvoiceTemplate.self, RecurringInvoice.self])
         let storeDirectory = URL.applicationSupportDirectory
             .appending(path: "Ksefiarz", directoryHint: .isDirectory)
         do {
