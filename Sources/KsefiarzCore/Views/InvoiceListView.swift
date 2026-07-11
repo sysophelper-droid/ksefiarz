@@ -380,12 +380,16 @@ public struct InvoiceListView: View {
 
         do {
             if kind == .sales {
-                _ = await InvoiceSubmissionStatusEngine.refreshOutstanding(
-                    invoices,
+                // Domknięcie wysyłek (kolejka offline + statusy + UPO)
+                // z wpisem do historii Centrum synchronizacji.
+                let allInvoices = (try? modelContext.fetch(FetchDescriptor<Invoice>())) ?? []
+                await SyncCenter.reconcileSubmissions(
+                    invoices: allInvoices,
                     environmentRaw: environmentRaw,
-                    using: service
+                    trigger: .manual,
+                    using: service,
+                    context: modelContext
                 )
-                try? modelContext.save()
             }
             try await InvoiceSyncEngine.sync(
                 kind: kind,
@@ -393,7 +397,9 @@ public struct InvoiceListView: View {
                 from: range.from,
                 to: range.to,
                 prepaidForms: PaymentFormPolicy.decode(prepaidFormsRaw),
-                context: modelContext
+                context: modelContext,
+                trigger: .manual,
+                environmentRaw: environmentRaw
             )
         } catch {
             errorMessage = error.localizedDescription

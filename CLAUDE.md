@@ -75,7 +75,8 @@ Sources/KsefiarzCore/
                przypisywać PO context.insert jak pozycje), InvoiceDraft
                (+ init(from: Invoice)), słowniki: Contractor, Product,
                BankAccount (@Model, dane tylko PODSTAWIANE do faktur —
-               pola faktury zawsze edytowalne ręcznie)
+               pola faktury zawsze edytowalne ręcznie), SyncRun (@Model,
+               historia przebiegów Centrum synchronizacji)
   Services/    KSeFService (API 2.0), KSeFCrypto, FA2XML (generator+parser), InvoiceValidator,
                BackupService, FileExportService (NSSave/OpenPanel), InvoicePDFGenerator (+ kody QR),
                TokenStore (token w pęku kluczy), ContractorLookupService (Biała
@@ -92,6 +93,8 @@ Sources/KsefiarzCore/
                przy starcie i cykliczny — automatyka w MainContentView),
                PolishBusinessCalendar (dni robocze/święta — terminy offline24),
                OfflineQueueEngine (kolejka dosłań offline24),
+               SyncCenter (rejestracja przebiegów SyncRun, stany operacji,
+               wspólne domykanie wysyłek: kolejka offline + statusy + UPO),
                PaymentLedger (wpłaty częściowe/saldo — jedyne miejsce zmian
                historii wpłat), MT940Parser (wyciągi bankowe),
                PaymentMatcher (propozycje dopasowań przelewów),

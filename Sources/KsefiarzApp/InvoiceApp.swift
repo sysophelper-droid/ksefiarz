@@ -65,7 +65,8 @@ struct InvoiceApp: App {
     /// `com.apple.icloudmailagent` usunął w ten sposób wszystkie faktury).
     var sharedModelContainer: ModelContainer = {
         let schema = Schema([Invoice.self, PaymentRecord.self, Contractor.self, Product.self,
-                             BankAccount.self, InvoiceTemplate.self, RecurringInvoice.self])
+                             BankAccount.self, InvoiceTemplate.self, RecurringInvoice.self,
+                             SyncRun.self])
         let storeDirectory = URL.applicationSupportDirectory
             .appending(path: "Ksefiarz", directoryHint: .isDirectory)
         do {

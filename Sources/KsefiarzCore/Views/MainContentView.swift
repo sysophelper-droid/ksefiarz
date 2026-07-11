@@ -9,6 +9,7 @@ public enum SidebarSection: String, CaseIterable, Identifiable, Hashable {
     case purchases
     case dictionaries
     case automation
+    case syncCenter
     case hidden
     case settings
 
@@ -21,6 +22,7 @@ public enum SidebarSection: String, CaseIterable, Identifiable, Hashable {
         case .purchases: return "Faktury Zakupu"
         case .dictionaries: return "Słowniki"
         case .automation: return "Szablony i cykle"
+        case .syncCenter: return "Synchronizacja"
         case .hidden: return "Nieuprawnione / Ukryte"
         case .settings: return "Ustawienia"
         }
@@ -33,6 +35,7 @@ public enum SidebarSection: String, CaseIterable, Identifiable, Hashable {
         case .purchases: return "arrow.down.doc"
         case .dictionaries: return "text.book.closed"
         case .automation: return "calendar.badge.clock"
+        case .syncCenter: return "arrow.triangle.2.circlepath"
         case .hidden: return "eye.slash"
         case .settings: return "gearshape"
         }
@@ -109,6 +112,8 @@ public struct MainContentView: View {
                 DictionariesView()
             case .automation:
                 InvoiceAutomationView()
+            case .syncCenter:
+                SyncCenterView()
             case .hidden:
                 HiddenInvoicesView()
             case .settings:
@@ -119,8 +124,8 @@ public struct MainContentView: View {
         // Kopia zapasowa PRZED synchronizacją — utrwala stan sprzed zmian.
         .task {
             if autoBackup { performAutoBackup() }
-            await reconcileOutstandingSubmissions()
-            if syncOnLaunch { await syncBothKinds() }
+            await reconcileOutstandingSubmissions(trigger: .launch)
+            if syncOnLaunch { await syncBothKinds(trigger: .launch) }
         }
         // Cykliczne pobieranie, dopóki aplikacja działa. Zmiana przełącznika
         // lub interwału w Ustawieniach restartuje pętlę (zmiana `id` taska).
@@ -129,7 +134,7 @@ public struct MainContentView: View {
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(autoSyncIntervalMinutes * 60))
                 guard !Task.isCancelled else { return }
-                await syncBothKinds()
+                await syncBothKinds(trigger: .automatic)
             }
         }
         // Wysyłki w toku i UPO są domykane niezależnie od ustawień importu.
@@ -139,7 +144,7 @@ public struct MainContentView: View {
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(60))
                 guard !Task.isCancelled else { return }
-                await reconcileOutstandingSubmissions()
+                await reconcileOutstandingSubmissions(trigger: .automatic)
             }
         }
     }
@@ -170,7 +175,7 @@ public struct MainContentView: View {
     /// testowym zaśmiecał bazę fakturami testowymi (12.06.2026);
     /// na test/demo synchronizuj ręcznie z listy.
     @MainActor
-    private func syncBothKinds() async {
+    private func syncBothKinds(trigger: SyncRun.Trigger) async {
         guard environmentRaw == KSeFEnvironment.production.rawValue else { return }
         guard !myNIP.isEmpty, !tokenStore.token.isEmpty || KSeFCertificateStore.shared.authenticationCertificate != nil, !isAutoSyncing else { return }
         isAutoSyncing = true
@@ -178,7 +183,7 @@ public struct MainContentView: View {
 
         let environment = KSeFEnvironment(rawValue: environmentRaw) ?? .test
         let service = KSeFService(environment: environment, nip: myNIP, authToken: tokenStore.token, certificate: KSeFCertificateStore.shared.authenticationCertificate)
-        await reconcileOutstandingSubmissions(using: service)
+        await reconcileOutstandingSubmissions(using: service, trigger: trigger)
         let range = DateRangeResolver.range(
             mode: DateRangeMode(rawValue: rangeModeRaw) ?? .last3Months,
             customFrom: Date(timeIntervalSince1970: rangeFromInterval),
@@ -193,7 +198,9 @@ public struct MainContentView: View {
                 from: range.from,
                 to: range.to,
                 prepaidForms: prepaidForms,
-                context: modelContext
+                context: modelContext,
+                trigger: trigger,
+                environmentRaw: environmentRaw
             )) ?? 0
             if kind == .purchase, inserted > 0, notifyNewPurchases {
                 await postNewPurchasesNotification(count: inserted)
@@ -205,7 +212,7 @@ public struct MainContentView: View {
     /// Działa również na test/demo, ale wyłącznie dla rekordów zapisanych
     /// z aktualnie wybranym środowiskiem.
     @MainActor
-    private func reconcileOutstandingSubmissions() async {
+    private func reconcileOutstandingSubmissions(trigger: SyncRun.Trigger) async {
         guard !myNIP.isEmpty, !tokenStore.token.isEmpty || KSeFCertificateStore.shared.authenticationCertificate != nil else { return }
         let environment = KSeFEnvironment(rawValue: environmentRaw) ?? .test
         let service = KSeFService(
@@ -214,25 +221,22 @@ public struct MainContentView: View {
             authToken: tokenStore.token,
             certificate: KSeFCertificateStore.shared.authenticationCertificate
         )
-        await reconcileOutstandingSubmissions(using: service)
+        await reconcileOutstandingSubmissions(using: service, trigger: trigger)
     }
 
     @MainActor
-    private func reconcileOutstandingSubmissions(using service: KSeFService) async {
+    private func reconcileOutstandingSubmissions(using service: KSeFService, trigger: SyncRun.Trigger) async {
         let allInvoices = (try? modelContext.fetch(FetchDescriptor<Invoice>())) ?? []
-        // Najpierw dosyłamy dokumenty offline24 z kolejki (bajt w bajt
-        // zapisany XML), potem domykamy statusy wysyłek i UPO.
-        _ = await OfflineQueueEngine.sendPending(
-            allInvoices,
+        // Kolejka offline24 (bajt w bajt zapisany XML), statusy wysyłek
+        // i UPO — z wpisem do historii Centrum synchronizacji, gdy było
+        // co robić.
+        await SyncCenter.reconcileSubmissions(
+            invoices: allInvoices,
             environmentRaw: environmentRaw,
-            using: service
+            trigger: trigger,
+            using: service,
+            context: modelContext
         )
-        _ = await InvoiceSubmissionStatusEngine.refreshOutstanding(
-            allInvoices,
-            environmentRaw: environmentRaw,
-            using: service
-        )
-        try? modelContext.save()
     }
 
     /// Powiadomienie systemowe o nowych fakturach zakupowych z synchronizacji.
