@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import Charts
 
 /// Kokpit — podsumowanie kwot oraz faktury do opłacenia w najbliższych dniach.
 public struct DashboardView: View {
@@ -46,6 +47,20 @@ public struct DashboardView: View {
     private var metrics: DashboardMetrics {
         DashboardMetrics(invoices: displayFilter.apply(to: invoices), dueSoonDays: dueSoonDays)
     }
+
+    /// Rozszerzona analityka: VAT liczony z okresu Kokpitu; przepływy,
+    /// wiekowanie i porównania miesięczne — ze wszystkich widocznych faktur.
+    private var analytics: DashboardAnalytics {
+        DashboardAnalytics(invoices: invoices, periodInvoices: displayFilter.apply(to: invoices))
+    }
+
+    /// Etykieta miesiąca na osi wykresów, np. „lip 26”.
+    private static let monthLabelFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "LLL yy"
+        formatter.locale = Locale(identifier: "pl_PL")
+        return formatter
+    }()
 
     private let columns = [GridItem(.adaptive(minimum: 220), spacing: 16)]
 
@@ -156,6 +171,32 @@ public struct DashboardView: View {
                     Label("Płatności w najbliższych: \(dueSoonDaysLabel)", systemImage: "calendar.badge.clock")
                         .font(.headline)
                 }
+
+                // VAT w analizowanym okresie.
+                LazyVGrid(columns: columns, spacing: 16) {
+                    StatCard(
+                        title: "VAT należny (sprzedaż)",
+                        value: analytics.vatDue.formatted(.currency(code: "PLN")),
+                        icon: "plus.forwardslash.minus",
+                        color: .blue
+                    )
+                    StatCard(
+                        title: "VAT naliczony (zakupy)",
+                        value: analytics.vatInput.formatted(.currency(code: "PLN")),
+                        icon: "minus.forwardslash.plus",
+                        color: .teal
+                    )
+                    StatCard(
+                        title: analytics.vatBalance >= 0 ? "VAT do zapłaty (saldo)" : "VAT do zwrotu (saldo)",
+                        value: abs(analytics.vatBalance).formatted(.currency(code: "PLN")),
+                        icon: "scalemass",
+                        color: analytics.vatBalance >= 0 ? .orange : .green
+                    )
+                }
+
+                cashFlowSection
+                agingSection
+                monthComparisonSection
             }
             .padding(20)
         }
@@ -173,6 +214,153 @@ public struct DashboardView: View {
                 .help("Okres analizowanych faktur")
             }
         }
+    }
+}
+
+extension DashboardView {
+
+    /// Przepływy pieniężne z ewidencji wpłat — słupki wpływów i wydatków
+    /// per miesiąc (ostatnie 6 miesięcy, kwoty w PLN).
+    private var cashFlowSection: some View {
+        GroupBox {
+            let cashFlow = analytics.cashFlow
+            if cashFlow.allSatisfy({ $0.inflow == 0 && $0.outflow == 0 }) {
+                ContentUnavailableView(
+                    "Brak zaksięgowanych wpłat",
+                    systemImage: "chart.bar",
+                    description: Text("Przepływy liczone są z ewidencji wpłat — księguj wpłaty w szczegółach faktur albo importuj wyciągi MT940.")
+                )
+                .frame(maxWidth: .infinity, minHeight: 120)
+            } else {
+                Chart {
+                    ForEach(cashFlow, id: \.month) { point in
+                        BarMark(
+                            x: .value("Miesiąc", Self.monthLabelFormatter.string(from: point.month)),
+                            y: .value("Kwota", point.inflow)
+                        )
+                        .foregroundStyle(by: .value("Rodzaj", "Wpływy"))
+                        .position(by: .value("Rodzaj", "Wpływy"))
+                        BarMark(
+                            x: .value("Miesiąc", Self.monthLabelFormatter.string(from: point.month)),
+                            y: .value("Kwota", point.outflow)
+                        )
+                        .foregroundStyle(by: .value("Rodzaj", "Wydatki"))
+                        .position(by: .value("Rodzaj", "Wydatki"))
+                    }
+                }
+                .chartForegroundStyleScale(["Wpływy": Color.green, "Wydatki": Color.orange])
+                .chartYAxis {
+                    AxisMarks { value in
+                        AxisGridLine()
+                        AxisValueLabel {
+                            if let amount = value.as(Double.self) {
+                                Text(amount, format: .number.notation(.compactName).locale(Locale(identifier: "pl_PL")))
+                            }
+                        }
+                    }
+                }
+                .frame(height: 180)
+                .padding(.top, 6)
+            }
+        } label: {
+            Label("Przepływy pieniężne — ostatnie 6 miesięcy (wg ewidencji wpłat, PLN)", systemImage: "chart.bar.xaxis")
+                .font(.headline)
+        }
+    }
+
+    /// Struktura wiekowa nieopłaconych faktur (saldo w PLN):
+    /// należności (sprzedaż) i zobowiązania (zakupy) per przedział.
+    private var agingSection: some View {
+        GroupBox {
+            let aging = analytics.aging
+            if aging.allSatisfy({ $0.receivables == 0 && $0.payables == 0 }) {
+                ContentUnavailableView(
+                    "Brak nieopłaconych faktur",
+                    systemImage: "checkmark.seal",
+                    description: Text("Wszystkie widoczne faktury są opłacone.")
+                )
+                .frame(maxWidth: .infinity, minHeight: 100)
+            } else {
+                Grid(alignment: .trailing, horizontalSpacing: 18, verticalSpacing: 6) {
+                    GridRow {
+                        Text("Przedział").gridColumnAlignment(.leading)
+                        Text("Należności (sprzedaż)")
+                        Text("Zobowiązania (zakupy)")
+                    }
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    Divider()
+                    ForEach(aging, id: \.label) { bucket in
+                        GridRow {
+                            Text(bucket.label)
+                                .gridColumnAlignment(.leading)
+                                .foregroundStyle(bucket.label == "Przed terminem" ? .primary : Color.red)
+                            Text(bucket.receivables, format: .currency(code: "PLN")).monospacedDigit()
+                            Text(bucket.payables, format: .currency(code: "PLN")).monospacedDigit()
+                        }
+                        .font(.callout)
+                    }
+                    Divider()
+                    GridRow {
+                        Text("Razem").gridColumnAlignment(.leading).fontWeight(.semibold)
+                        Text(aging.reduce(0) { $0 + $1.receivables }, format: .currency(code: "PLN"))
+                            .monospacedDigit().fontWeight(.semibold)
+                        Text(aging.reduce(0) { $0 + $1.payables }, format: .currency(code: "PLN"))
+                            .monospacedDigit().fontWeight(.semibold)
+                    }
+                    .font(.callout)
+                }
+                .padding(.vertical, 4)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        } label: {
+            Label("Struktura wiekowa nieopłaconych (saldo, PLN)", systemImage: "hourglass")
+                .font(.headline)
+        }
+    }
+
+    /// Porównanie bieżącego i poprzedniego miesiąca (po dacie wystawienia).
+    private var monthComparisonSection: some View {
+        GroupBox {
+            let current = analytics.currentMonth
+            let previous = analytics.previousMonth
+            Grid(alignment: .trailing, horizontalSpacing: 18, verticalSpacing: 6) {
+                GridRow {
+                    Text("").gridColumnAlignment(.leading)
+                    Text(Self.monthLabelFormatter.string(from: previous.month))
+                    Text(Self.monthLabelFormatter.string(from: current.month))
+                    Text("Zmiana")
+                }
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+                Divider()
+                comparisonRow("Sprzedaż brutto", previous: previous.salesGross, current: current.salesGross)
+                comparisonRow("Zakupy brutto", previous: previous.purchasesGross, current: current.purchasesGross)
+                comparisonRow("VAT należny", previous: previous.vatDue, current: current.vatDue)
+            }
+            .padding(.vertical, 4)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        } label: {
+            Label("Porównanie miesięczne (PLN)", systemImage: "arrow.left.arrow.right")
+                .font(.headline)
+        }
+    }
+
+    /// Wiersz porównania: poprzedni miesiąc, bieżący i zmiana procentowa.
+    private func comparisonRow(_ title: String, previous: Double, current: Double) -> some View {
+        GridRow {
+            Text(title).gridColumnAlignment(.leading)
+            Text(previous, format: .currency(code: "PLN")).monospacedDigit()
+            Text(current, format: .currency(code: "PLN")).monospacedDigit()
+            if let change = DashboardAnalytics.MonthSummary.change(from: previous, to: current) {
+                Text("\(change >= 0 ? "▲" : "▼") \(abs(change).formatted(.number.precision(.fractionLength(0))))%")
+                    .foregroundStyle(change >= 0 ? .green : .red)
+                    .monospacedDigit()
+            } else {
+                Text("—").foregroundStyle(.secondary)
+            }
+        }
+        .font(.callout)
     }
 }
 

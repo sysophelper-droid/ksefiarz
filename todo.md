@@ -11,15 +11,6 @@ Zasady pracy i wiedza projektowa są w `CLAUDE.md` — tu tylko zadania.
   komputer (decyzja: na sam koniec). Usunie też pytanie o pęk kluczy po
   każdym wydaniu (ad-hoc zmienia sygnaturę).
 
-### Rekomendowane rozszerzenia
-- [ ] Wysyłanie faktur e-mailem: wykorzystanie adresu fakturowego ze słownika
-  kontrahentów, wiadomość z PDF/XML, edytowalny temat i treść oraz zapis
-  informacji o wysłaniu.
-- [ ] Rozbudowa Kokpitu: przepływy pieniężne, VAT należny i naliczony,
-  struktura wiekowa należności/zobowiązań oraz porównania miesięczne.
-- [ ] Rozszerzenie obsługi FA(3): załączniki do faktur oraz pełna obsługa
-  procedur OSS — realizować, gdy będą potrzebne w faktycznych dokumentach.
-
 ## Zrealizowane
 
 ### Specyfikacja pierwotna (sesja 11.06.2026)
@@ -110,6 +101,20 @@ Zasady pracy i wiedza projektowa są w `CLAUDE.md` — tu tylko zadania.
   (własny ZipWriter bez zależności) — CSV per rodzaj, oryginalne XML,
   PDF-y i raport.txt z sumami per waluta oraz listą braków (niewysłane,
   odrzucone, bez UPO/XML, offline w kolejce, brak NIP nabywcy).
+- [x] Wysyłanie faktur e-mailem (12.07.2026): adresat ze słownika kontrahentów
+  (adres fakturowy ma pierwszeństwo), edytowalny temat i treść, załączniki
+  PDF/XML, przekazanie do aplikacji Mail (NSSharingService) oraz zapis daty
+  i adresu wysłania na fakturze.
+- [x] Rozbudowa Kokpitu (12.07.2026): VAT należny/naliczony/saldo w okresie,
+  wykres przepływów pieniężnych z 6 miesięcy (ewidencja wpłat), struktura
+  wiekowa nieopłaconych (po saldzie) i porównanie miesięczne ze zmianą %
+  (DashboardAnalytics + Swift Charts).
+- [x] Rozszerzenie FA(3) (12.07.2026): procedura OSS (P_12_XII w pozycji,
+  sumy P_13_5/P_14_5, pole „OSS %” w formularzu) oraz załączniki do faktur
+  (element Zalacznik: bloki z metadanymi, akapitami i tabelami; edytor
+  w formularzu, podgląd w szczegółach). Wygenerowany dokument zweryfikowany
+  oficjalną XSD FA(3) (xmllint). Wysyłka faktur z załącznikiem wymaga
+  zgłoszenia w e-US — informacja w formularzu.
 - [x] Centrum synchronizacji (11.07.2026): sekcja „Synchronizacja” z osobnymi
   stanami zakupów, sprzedaży i wysyłek, historią przebiegów (model SyncRun,
   ostatnie 200 wpisów) — liczba pobranych/nowych dokumentów, wyzwalacz,

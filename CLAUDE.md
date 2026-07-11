@@ -76,7 +76,9 @@ Sources/KsefiarzCore/
                (+ init(from: Invoice)), słowniki: Contractor, Product,
                BankAccount (@Model, dane tylko PODSTAWIANE do faktur —
                pola faktury zawsze edytowalne ręcznie), SyncRun (@Model,
-               historia przebiegów Centrum synchronizacji)
+               historia przebiegów Centrum synchronizacji), FA3Attachment
+               (bloki załącznika FA(3); na fakturze jako JSON
+               w Invoice.attachmentJSON)
   Services/    KSeFService (API 2.0), KSeFCrypto, FA2XML (generator+parser), InvoiceValidator,
                BackupService, FileExportService (NSSave/OpenPanel), InvoicePDFGenerator (+ kody QR),
                TokenStore (token w pęku kluczy), ContractorLookupService (Biała
@@ -86,7 +88,9 @@ Sources/KsefiarzCore/
                XAdESSigner (AuthTokenRequest, ręczna kanonikalizacja exc-c14n),
                KSeFCertificateStore (pęk kluczy), KSeFCertificateService
                (enrollment API), KSeFCertificateImporter (.p12/PEM),
-               KSeFQRCode (linki weryfikacyjne KOD I/II + render QR)
+               KSeFQRCode (linki weryfikacyjne KOD I/II + render QR),
+               InvoiceEmailService (okno wiadomości Mail przez
+               NSSharingService; załączniki PDF/XML z katalogu tymczasowego)
   Logic/       InvoiceFilter, KSeFSyncFilter, DashboardMetrics, DateRangeResolver,
                DisplayDateFilter, InvoiceNumberGenerator, AmountInWords, InvoiceCSVExporter,
                PaymentFormPolicy, InvoiceSyncEngine (wspólny sync: ręczny,
@@ -99,7 +103,11 @@ Sources/KsefiarzCore/
                historii wpłat), MT940Parser (wyciągi bankowe),
                PaymentMatcher (propozycje dopasowań przelewów),
                ZipWriter (archiwum ZIP bez zależności; AccountingPackageBuilder
-               w Services — paczka dla księgowości)
+               w Services — paczka dla księgowości),
+               InvoiceEmailComposer (adresat ze słownika po NIP — invoiceEmail
+               przed email; domyślny temat/treść), DashboardAnalytics
+               (przepływy z PaymentRecord, VAT okresu, wiekowanie sald,
+               porównania miesięczne)
   Views/       MainContentView (NavigationSplitView), InvoiceListView, InvoiceDetailView,
                NewInvoiceView (nowa/edycja/korekta), DashboardView, SettingsView, HiddenInvoicesView,
                DictionariesView (+ ContractorsView/ProductsView/BankAccountsView)
@@ -162,8 +170,17 @@ PrzyczynaKorekty?, TypKorekty, DaneFaKorygowanej], FakturaZaliczkowa* (ROZ),
 FaWiersz*, Platnosc. Podmiot1 wymaga Adres; **Podmiot2 wymaga JST i GV**
 (dla zwykłych faktur oba = 2) — to nowość FA(3), wykryta na żywym API.
 Stawki → pola: 23→P_13_1, 8→P_13_2, 5→P_13_3, 0→P_13_6_1, zw→P_13_7.
-Pozycja: kod z kropkami→PKWiU, same cyfry→CN (między P_7 a P_8A); GTU po P_12.
+OSS (dział XII rozdz. 6a): pozycja z `ossRate` dostaje P_12_XII (TProcentowy,
+do 6 miejsc) ZAMIAST P_12, a jej sumy idą do sekwencji P_13_5+P_14_5
+(między blokiem taksówek P_13_4 a P_13_6_1); pozycje OSS nie wchodzą do sum
+polskich stawek. Pozycja: kod z kropkami→PKWiU, same cyfry→CN (między P_7
+a P_8A); GTU po P_12/P_12_XII.
 Uwagi faktury → Stopka/Informacje/StopkaFaktury (po elemencie Fa).
+Załącznik → element Zalacznik jako OSTATNI element Faktura (po Stopce):
+BlokDanych{ZNaglowek?, MetaDane+ (min. 1 para — XSD!), Tekst?/Akapit×10,
+Tabela*(Opis?, TNaglowek/Kol Typ="txt"/NKom, Wiersz+/WKom, Suma?/SKom)};
+wysyłka faktur z załącznikiem wymaga zgłoszenia w e-US. Wygenerowany
+dokument OSS+załącznik zweryfikowany oficjalną XSD (xmllint, 12.07.2026).
 Korekty (KOR): kwoty to RÓŻNICA (mogą być ujemne); wybór NrKSeF=1 +
 NrKSeFFaKorygowanej albo NrKSeFN=1. Parser jest odporny na przestrzenie nazw
 (wyszukiwanie po nazwach lokalnych) — czyta FA(2) i FA(3).
@@ -222,8 +239,8 @@ NrKSeFFaKorygowanej albo NrKSeFN=1. Parser jest odporny na przestrzenie nazw
 - Wysyłka faktury przeszła e2e na środowisku `test` w schemie FA(3)
   (LiveSendTests, 12.06.2026: numer KSeF + UPO); na produkcji jeszcze
   nigdy nie wykonana.
-- FA(3): poza zakresem pozostają faktury OSS w pełnym wymiarze (jest tylko
-  oznaczenie procedury pozycji, np. WSTO_EE/IED) oraz załączniki do faktur.
+- Wysyłka e-mail otwiera okno wiadomości w Mail (NSSharingService) —
+  aplikacja zapisuje moment PRZEKAZANIA do Mail, nie potwierdzenie wysyłki.
 - Bundle podpisany ad-hoc (dystrybucja wymaga Developer ID + notaryzacji).
 
 Zadania i backlog: **`todo.md`** (zrealizowane `[x]`, otwarte `[ ]`) —

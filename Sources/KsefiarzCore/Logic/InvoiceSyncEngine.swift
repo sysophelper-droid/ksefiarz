@@ -36,7 +36,7 @@ public enum InvoiceSyncEngine {
                 skipDocumentsFor: complete
             )
             let inserted = try merge(fetched, kind: kind, prepaidForms: prepaidForms, context: context)
-            try? SyncCenter.record(
+            _ = try? SyncCenter.record(
                 operation: operation,
                 trigger: trigger,
                 environmentRaw: environmentRaw,
@@ -52,7 +52,7 @@ public enum InvoiceSyncEngine {
             )
             return inserted
         } catch {
-            try? SyncCenter.record(
+            _ = try? SyncCenter.record(
                 operation: operation,
                 trigger: trigger,
                 environmentRaw: environmentRaw,

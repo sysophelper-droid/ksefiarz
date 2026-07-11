@@ -147,6 +147,15 @@ public final class Invoice {
     /// "3_1" = towary używane, "3_2" = dzieła sztuki, "3_3" = antyki.
     public var marginProcedureRaw: String = ""
 
+    /// Załącznik FA(3) (element Zalacznik) — bloki danych zserializowane
+    /// do JSON (`[FA3AttachmentBlock]`); "" = brak załącznika.
+    public var attachmentJSON: String = ""
+
+    /// Data przekazania faktury do wysyłki e-mailem (nil = nie wysyłano).
+    public var emailSentAt: Date? = nil
+    /// Adres, na który przekazano fakturę e-mailem.
+    public var emailSentTo: String = ""
+
     /// Dokument wystawiony w trybie offline24 (art. 106nda ustawy o VAT).
     /// Przy dosyłaniu do KSeF wysyłany jest DOKŁADNIE zapisany XML
     /// (`rawXmlContent`) — jego skrót jest częścią kodów QR na wydruku.
@@ -426,6 +435,7 @@ public extension Invoice {
         currency = data.currency
         splitPayment = data.splitPayment
         if let sale = data.saleDate { saleDate = sale }
+        if !data.attachments.isEmpty { attachmentJSON = data.attachments.encodedJSON() }
 
         // Pozycje budujemy od nowa z dokumentu.
         lines = data.lines.map { line in
@@ -440,7 +450,8 @@ public extension Invoice {
                 vatAmount: line.vatAmount,
                 cnPkwiu: line.cnPkwiu,
                 gtu: line.gtu,
-                procedure: line.procedure
+                procedure: line.procedure,
+                ossRate: line.ossRate
             )
         }
     }

@@ -142,6 +142,21 @@ Tests/KsefiarzCoreTests/          # 278 testów (Swift Testing) — model, parse
 - **Schemat FA(3)** — wystawiane faktury są generowane w bieżącej schemie
   FA(3) (zweryfikowane end-to-end na środowisku testowym KSeF); parser
   czyta dokumenty FA(2) i FA(3).
+- **Procedura OSS (dział XII rozdz. 6a)** — pozycja faktury może mieć stawkę
+  podatku od wartości dodanej państwa konsumpcji (pole „OSS %” w formularzu):
+  do XML trafia P_12_XII zamiast polskiej stawki, a sumy do P_13_5/P_14_5;
+  do tego oznaczenia procedur pozycji (WSTO_EE, IED…).
+- **Załączniki do faktur (FA(3))** — sekcja „Załącznik” w formularzu:
+  bloki danych z nagłówkiem, parami metadanych (wymagana min. jedna — XSD),
+  akapitami tekstu i prostą tabelą (nagłówki i wiersze rozdzielane znakiem |);
+  element Zalacznik w XML, odczyt i podgląd w szczegółach faktury.
+  ⚠️ Wystawianie faktur z załącznikiem wymaga wcześniejszego zgłoszenia
+  w e-Urzędzie Skarbowym.
+- **Wysyłanie faktur e-mailem** — „Wyślij e-mailem” w szczegółach faktury
+  sprzedażowej i menu listy: adresat podpowiadany ze słownika kontrahentów
+  (pole „E-mail do faktur”, potem adres ogólny), edytowalny temat i treść,
+  załączniki PDF i XML; wiadomość otwiera się w aplikacji Mail, a na
+  fakturze zapisywana jest data i adres przekazania do wysyłki.
 - **Faktury zaliczkowe i rozliczeniowe** — rodzaj dokumentu (VAT/ZAL/ROZ)
   do wyboru przy wystawianiu; ZAL z datą otrzymania zaliczki (P_6),
   ROZ ze wskazaniem numerów KSeF rozliczanych zaliczek.
@@ -159,6 +174,13 @@ Tests/KsefiarzCoreTests/          # 278 testów (Swift Testing) — model, parse
 - **Biała lista** — przycisk „Sprawdź rachunek na białej liście”
   w szczegółach faktury zakupowej weryfikuje rachunek sprzedawcy
   w wykazie podatników VAT (istotne przy przelewach powyżej 15 000 zł).
+- **Rozbudowany Kokpit** — oprócz podsumowań kwot i najbliższych płatności:
+  VAT należny/naliczony/saldo w analizowanym okresie, wykres przepływów
+  pieniężnych z ostatnich 6 miesięcy (wg ewidencji wpłat), struktura wiekowa
+  nieopłaconych należności i zobowiązań (przed terminem, 1–30, 31–60, 61–90,
+  ponad 90 dni — po saldzie z uwzględnieniem wpłat częściowych) oraz
+  porównanie bieżącego i poprzedniego miesiąca (sprzedaż, zakupy,
+  VAT należny, zmiana %). Kwoty walutowe po kursie z faktury.
 - **Powiadomienia** — systemowe powiadomienie o nowych fakturach zakupowych
   pobranych przez synchronizację (wyłączane w Ustawieniach).
 - **Faktury korygujące** — „Wystaw korektę” w szczegółach faktury sprzedażowej:

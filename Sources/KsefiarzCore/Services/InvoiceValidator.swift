@@ -18,6 +18,10 @@ public enum InvoiceValidationError: LocalizedError, Equatable, Hashable, Sendabl
     case missingExchangeRate
     case missingAdvanceInvoiceRefs
     case duplicateInvoiceNumber(String)
+    case invalidLineOSSRate(Int)
+    case attachmentMissingMetadata(Int)
+    case attachmentTooManyParagraphs(Int)
+    case attachmentInvalidTable(Int)
 
     public var errorDescription: String? {
         switch self {
@@ -37,6 +41,10 @@ public enum InvoiceValidationError: LocalizedError, Equatable, Hashable, Sendabl
         case .missingExchangeRate: return "Faktura w walucie obcej z kwotą VAT wymaga kursu PLN (przeliczenie VAT — art. 106e ust. 11 ustawy o VAT)."
         case .missingAdvanceInvoiceRefs: return "Faktura rozliczeniowa (ROZ) musi wskazywać numery KSeF faktur zaliczkowych."
         case .duplicateInvoiceNumber(let number): return "Faktura o numerze „\(number)” już istnieje w bazie — zmień numer, aby nie zaburzyć numeracji."
+        case .invalidLineOSSRate(let index): return "Pozycja \(index): stawka OSS musi mieścić się w zakresie 0–100%."
+        case .attachmentMissingMetadata(let index): return "Załącznik, blok \(index): wymagana jest co najmniej jedna para metadanych (klucz i wartość) — wymóg schematu FA(3)."
+        case .attachmentTooManyParagraphs(let index): return "Załącznik, blok \(index): część tekstowa może mieć najwyżej 10 akapitów."
+        case .attachmentInvalidTable(let index): return "Załącznik, blok \(index): tabela musi mieć od 1 do 20 kolumn i co najmniej jeden wiersz."
         }
     }
 }
@@ -110,6 +118,32 @@ public enum InvoiceValidator {
             }
             if !isCorrection, line.unitNetPrice < 0 {
                 errors.append(.negativeLinePrice(number))
+            }
+            if let ossRate = line.ossRate, !(0...100).contains(ossRate) {
+                errors.append(.invalidLineOSSRate(number))
+            }
+        }
+        // Walidacja załącznika FA(3) — ograniczenia z XSD.
+        for (offset, block) in draft.attachments.enumerated() {
+            let number = offset + 1
+            let metadata = block.metadata.filter {
+                !$0.key.trimmingCharacters(in: .whitespaces).isEmpty
+                    && !$0.value.trimmingCharacters(in: .whitespaces).isEmpty
+            }
+            if metadata.isEmpty {
+                errors.append(.attachmentMissingMetadata(number))
+            }
+            let paragraphs = block.paragraphs.filter {
+                !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            }
+            if paragraphs.count > 10 {
+                errors.append(.attachmentTooManyParagraphs(number))
+            }
+            for table in block.tables {
+                if table.columns.isEmpty || table.columns.count > 20 || table.rows.isEmpty {
+                    errors.append(.attachmentInvalidTable(number))
+                    break
+                }
             }
         }
         return errors
