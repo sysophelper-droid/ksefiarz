@@ -225,3 +225,10 @@ z tabeli powyżej.
   korygujące (KOR), zaliczkowe (ZAL), rozliczeniowe (ROZ), waluty obce
   i MPP; poza zakresem są m.in. procedury szczególne (marża, OSS),
   faktury UPR oraz korekty zaliczek (KOR_ZAL/KOR_ROZ).
+
+## Licencja
+
+Projekt jest udostępniany na licencji [Apache License 2.0](LICENSE).
+Możesz go używać, modyfikować i rozpowszechniać (także komercyjnie),
+zachowując informację o licencji; licencja udziela też jawnej licencji
+patentowej od kontrybutorów.
