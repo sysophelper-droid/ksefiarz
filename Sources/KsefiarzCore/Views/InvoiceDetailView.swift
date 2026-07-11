@@ -203,8 +203,11 @@ public struct InvoiceDetailView: View {
                             GridRow {
                                 Text("\(line.index)")
                                 VStack(alignment: .leading, spacing: 1) {
+                                    // Pełna nazwa pozycji — zawijana, nigdy
+                                    // nie przycinana (dokument księgowy).
                                     Text(line.name)
-                                        .lineLimit(2)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                        .frame(maxWidth: .infinity, alignment: .leading)
                                     if !line.cnPkwiu.isEmpty || !line.gtu.isEmpty {
                                         Text([
                                             line.cnPkwiu.isEmpty ? nil : "CN/PKWiU: \(line.cnPkwiu)",
