@@ -47,6 +47,13 @@ kolejność dowolna. ⚠️ operacje modyfikujące KSeF testować wyłącznie na
   zaliczka PIT, ZUS) + szacunek kwot VAT/PIT do zapłaty za bieżący okres.
 - [ ] B4. JPK_FA na żądanie — pełny JPK faktur (nie ewidencja), format dla
   kontroli US. Rzadkie.
+- [ ] B5. Ewidencja JPK_V7 dla VAT RR — ujęcie zryczałtowanego zwrotu po
+  stronie podatku naliczonego nabywcy (art. 116). Faktury VAT RR są zapisywane
+  jako `kind == .purchase`, a w `salesBuckets` jest dziś jedynie defensywne
+  ostrzeżenie dla stawek RR (ścieżka praktycznie nieosiągalna dla dokumentów
+  RR). Wymaga własnej specyfikacji podatkowej i testów — świadomie poza
+  zakresem A2 (który obejmował strukturę FA_RR(1), formularz, generator/parser
+  i wysyłkę).
 
 #### C. Płatności i windykacja
 
