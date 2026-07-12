@@ -66,12 +66,18 @@ Tests/KsefiarzCoreTests/          # 278 testów (Swift Testing) — model, parse
   Aplikacja pilnuje ważności (ostrzeżenie 30 dni przed wygaśnięciem),
   a przy niepowodzeniu loguje się zapasowo tokenem KSeF (tokeny mają
   przestać działać z końcem 2026 r.).
-- **Tryb offline24** — świadome wystawianie faktur bez połączenia z KSeF
-  (art. 106nda) oraz automatyczne przejście w offline przy braku sieci.
-  Dokument dostaje utrwalony skrót SHA-256 i trafia do kolejki dosłania
-  (termin: następny dzień roboczy — polski kalendarz świąt); aplikacja
-  dosyła zapisany XML bajt w bajt automatycznie co minutę, a w szczegółach
-  jest przycisk „Doślij teraz” i widoczny termin z alarmem po przekroczeniu.
+- **Tryby offline (offline24 / niedostępność / awaria)** — świadome
+  wystawianie faktur bez połączenia z KSeF oraz automatyczne przejście
+  w offline przy braku sieci. Dokument dostaje utrwalony skrót SHA-256
+  i trafia do kolejki dosłania; aplikacja dosyła zapisany XML bajt w bajt
+  automatycznie co minutę, a w szczegółach jest przycisk „Doślij teraz”
+  i widoczny termin z alarmem po przekroczeniu. Tryb wybiera się przy
+  wystawianiu (i można doprecyzować w szczegółach do czasu dosłania):
+  **offline24** (art. 106nda) — dosłanie do następnego dnia roboczego;
+  **niedostępność KSeF** (art. 106nh, komunikat MF) — następny dzień
+  roboczy po jej zakończeniu; **awaria KSeF** (art. 106nf, komunikat MF) —
+  7 dni roboczych od jej zakończenia (datę zakończenia wpisuje się
+  w szczegółach; do tego czasu termin prezentowany jest opisowo).
 - **Kody QR na wydrukach** — każdy PDF faktury z numerem KSeF zawiera
   KOD I (link weryfikacyjny `qr.ksef.mf.gov.pl` z numerem KSeF w podpisie);
   dokumenty offline24 dostają KOD I z etykietą „OFFLINE” oraz KOD II
@@ -181,8 +187,12 @@ Tests/KsefiarzCoreTests/          # 278 testów (Swift Testing) — model, parse
   ponad 90 dni — po saldzie z uwzględnieniem wpłat częściowych) oraz
   porównanie bieżącego i poprzedniego miesiąca (sprzedaż, zakupy,
   VAT należny, zmiana %). Kwoty walutowe po kursie z faktury.
-- **Powiadomienia** — systemowe powiadomienie o nowych fakturach zakupowych
-  pobranych przez synchronizację (wyłączane w Ustawieniach).
+- **Powiadomienia** — systemowe powiadomienia o nowych fakturach zakupowych
+  z synchronizacji oraz o terminach: płatność wypadająca dziś lub jutro
+  (należności i zobowiązania, z kwotą pozostałą do zapłaty) i termin
+  dosłania dokumentu offline do KSeF (dziś / po terminie). Każde
+  powiadomienie najwyżej raz dziennie na fakturę; oba rodzaje wyłączane
+  w Ustawieniach.
 - **Faktury korygujące** — „Wystaw korektę” w szczegółach faktury sprzedażowej:
   dokument KOR z danymi faktury korygowanej (DaneFaKorygowanej), pozycjami
   wyrażającymi różnicę (kwoty ujemne dozwolone) i przyczyną korekty.

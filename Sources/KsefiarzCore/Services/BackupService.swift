@@ -17,6 +17,8 @@ public struct BackupLine: Codable, Equatable, Sendable {
     public var cnPkwiu: String?
     public var gtu: String?
     public var procedure: String?
+    /// Pole od wersji 5 — stawka OSS pozycji (P_12_XII).
+    public var ossRate: Double?
 }
 
 /// Faktura w kopii zapasowej — pełne odwzorowanie modelu SwiftData.
@@ -71,6 +73,12 @@ public struct BackupInvoice: Codable, Equatable, Sendable {
     public var offlineHashBase64: String?
     /// Pola od wersji 4 — historia wpłat (płatności częściowe).
     public var payments: [BackupPayment]?
+    /// Pola od wersji 5 — tryby awaryjne KSeF, załącznik FA(3), e-mail.
+    public var offlineReasonRaw: String?
+    public var offlineEventEndedAt: Date?
+    public var attachmentJSON: String?
+    public var emailSentAt: Date?
+    public var emailSentTo: String?
 }
 
 /// Wpłata do faktury w kopii zapasowej.
@@ -189,7 +197,7 @@ public enum BackupService {
 
     /// Bieżąca wersja formatu pliku (3: + stan wysyłki i zapisane UPO,
     /// bez tokenu KSeF). Starsze pliki są nadal poprawnie importowane.
-    public static let currentVersion = 4
+    public static let currentVersion = 5
 
     /// Klucze ustawień obejmowane kopią zapasową.
     /// Tokenu KSeF celowo tu nie ma — sekret żyje w pęku kluczy i nie może
@@ -343,6 +351,11 @@ public enum BackupService {
         )
         invoice.isOfflineMode = backup.isOfflineMode ?? false
         invoice.offlineHashBase64 = backup.offlineHashBase64 ?? ""
+        invoice.offlineReasonRaw = backup.offlineReasonRaw ?? ""
+        invoice.offlineEventEndedAt = backup.offlineEventEndedAt
+        invoice.attachmentJSON = backup.attachmentJSON ?? ""
+        invoice.emailSentAt = backup.emailSentAt
+        invoice.emailSentTo = backup.emailSentTo ?? ""
         return invoice
     }
 
@@ -374,7 +387,8 @@ public enum BackupService {
                 vatAmount: line.vatAmount,
                 cnPkwiu: line.cnPkwiu ?? "",
                 gtu: line.gtu ?? "",
-                procedure: line.procedure ?? ""
+                procedure: line.procedure ?? "",
+                ossRate: line.ossRate
             )
         }
     }
@@ -552,7 +566,8 @@ public enum BackupService {
                     vatAmount: line.vatAmount,
                     cnPkwiu: line.cnPkwiu.isEmpty ? nil : line.cnPkwiu,
                     gtu: line.gtu.isEmpty ? nil : line.gtu,
-                    procedure: line.procedure.isEmpty ? nil : line.procedure
+                    procedure: line.procedure.isEmpty ? nil : line.procedure,
+                    ossRate: line.ossRate
                 )
             },
             notes: invoice.notes.isEmpty ? nil : invoice.notes,
@@ -581,7 +596,12 @@ public enum BackupService {
                     note: payment.note.isEmpty ? nil : payment.note,
                     sourceRaw: payment.sourceRaw
                 )
-            }
+            },
+            offlineReasonRaw: invoice.offlineReasonRaw.isEmpty ? nil : invoice.offlineReasonRaw,
+            offlineEventEndedAt: invoice.offlineEventEndedAt,
+            attachmentJSON: invoice.attachmentJSON.isEmpty ? nil : invoice.attachmentJSON,
+            emailSentAt: invoice.emailSentAt,
+            emailSentTo: invoice.emailSentTo.isEmpty ? nil : invoice.emailSentTo
         )
     }
 

@@ -67,6 +67,7 @@ public struct MainContentView: View {
     @AppStorage(AppSettingsKeys.autoBackupKeepCount) private var backupKeepCount = 14
     @AppStorage(AppSettingsKeys.autoBackupKeepDays) private var backupKeepDays = 30
     @AppStorage(AppSettingsKeys.notifyNewPurchases) private var notifyNewPurchases = true
+    @AppStorage(AppSettingsKeys.notifyDeadlines) private var notifyDeadlines = true
 
     public init() {}
 
@@ -126,6 +127,18 @@ public struct MainContentView: View {
             if autoBackup { performAutoBackup() }
             await reconcileOutstandingSubmissions(trigger: .launch)
             if syncOnLaunch { await syncBothKinds(trigger: .launch) }
+            await postDeadlineNotifications()
+        }
+        // Powiadomienia o terminach (płatności, dosłania offline) —
+        // sprawdzane co 30 minut; deduplikacja gwarantuje jedno
+        // powiadomienie danego rodzaju na fakturę dziennie.
+        .task(id: "deadline-notifications-\(notifyDeadlines)") {
+            guard notifyDeadlines else { return }
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(30 * 60))
+                guard !Task.isCancelled else { return }
+                await postDeadlineNotifications()
+            }
         }
         // Cykliczne pobieranie, dopóki aplikacja działa. Zmiana przełącznika
         // lub interwału w Ustawieniach restartuje pętlę (zmiana `id` taska).
@@ -236,6 +249,45 @@ public struct MainContentView: View {
             trigger: trigger,
             using: service,
             context: modelContext
+        )
+    }
+
+    /// Powiadomienia o terminach płatności (dziś/jutro) i dosłań offline.
+    /// Doręczone klucze są zapamiętywane (UserDefaults) i przycinane,
+    /// żeby to samo powiadomienie nie wracało w kolejnych przebiegach.
+    @MainActor
+    private func postDeadlineNotifications() async {
+        guard notifyDeadlines else { return }
+        let invoices = (try? modelContext.fetch(FetchDescriptor<Invoice>())) ?? []
+        let delivered = Set(
+            UserDefaults.standard.stringArray(forKey: AppSettingsKeys.deadlineNotifiedKeys) ?? []
+        )
+        let pending = DeadlineNotificationEngine.pending(
+            invoices: invoices, alreadyDelivered: delivered
+        )
+        guard !pending.isEmpty else { return }
+
+        let center = UNUserNotificationCenter.current()
+        let granted = (try? await center.requestAuthorization(options: [.alert, .sound, .badge])) ?? false
+        guard granted else { return }
+
+        var updatedDelivered = delivered
+        for notification in pending {
+            let content = UNMutableNotificationContent()
+            content.title = notification.title
+            content.body = notification.body
+            content.sound = .default
+            let request = UNNotificationRequest(
+                identifier: "ksefiarz.deadline.\(notification.key)",
+                content: content,
+                trigger: nil
+            )
+            try? await center.add(request)
+            updatedDelivered.insert(notification.key)
+        }
+        UserDefaults.standard.set(
+            Array(DeadlineNotificationEngine.prune(delivered: updatedDelivered)),
+            forKey: AppSettingsKeys.deadlineNotifiedKeys
         )
     }
 

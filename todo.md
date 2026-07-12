@@ -11,6 +11,27 @@ Zasady pracy i wiedza projektowa są w `CLAUDE.md` — tu tylko zadania.
   komputer (decyzja: na sam koniec). Usunie też pytanie o pęk kluczy po
   każdym wydaniu (ad-hoc zmienia sygnaturę).
 
+### Rekomendowane rozszerzenia (sesja 12.07.2026)
+
+- [ ] Ewidencja VAT / eksport JPK_V7: generowanie JPK_V7M/K (lub zestawień
+  pod rejestr VAT) z faktur sprzedaży i zakupu, z oznaczeniami GTU
+  i procedur zbieranymi już na pozycjach.
+- [ ] Wezwania do zapłaty i noty odsetkowe: PDF wezwania z odsetkami
+  ustawowymi za opóźnienie dla zaległych faktur, wysyłka kanałem e-mail;
+  kandydaci ze struktury wiekowej Kokpitu.
+- [ ] Automatyczne odnowienie certyfikatu KSeF: wniosek o nowy certyfikat
+  (typ 1 i 2) przed wygaśnięciem starego, podmiana w pęku kluczy.
+- [ ] Zarządzanie uprawnieniami KSeF: nadawanie/odbieranie uprawnień
+  (np. biuro rachunkowe po NIP) i przegląd dostępów — API permissions.
+- [ ] Ikona w pasku menu (menu bar extra): status synchronizacji, liczba
+  zaległych i oczekujących dosłań, szybkie „Pobierz z KSeF”.
+- [ ] Raporty sprzedaży i kosztów: top kontrahenci, przychody per
+  towar/usługa, koszty per kategoria (wymaga tagów/kategorii na zakupach).
+- [ ] Faktury kosztowe spoza KSeF: ręczne dodawanie zakupów (faktury
+  zagraniczne, paragony z NIP) dla pełnego obrazu VAT i przepływów.
+- [ ] Dwujęzyczny PDF (PL/EN) dla kontrahentów zagranicznych + angielski
+  szablon treści e-mail.
+
 ## Zrealizowane
 
 ### Specyfikacja pierwotna (sesja 11.06.2026)
@@ -101,6 +122,18 @@ Zasady pracy i wiedza projektowa są w `CLAUDE.md` — tu tylko zadania.
   (własny ZipWriter bez zależności) — CSV per rodzaj, oryginalne XML,
   PDF-y i raport.txt z sumami per waluta oraz listą braków (niewysłane,
   odrzucone, bez UPO/XML, offline w kolejce, brak NIP nabywcy).
+- [x] Powiadomienia o terminach (12.07.2026): płatność dziś/jutro
+  (należności i zobowiązania, saldo w treści) oraz termin dosłania
+  offline dziś/po terminie — raz dziennie na fakturę
+  (DeadlineNotificationEngine, dedup w UserDefaults), przełącznik
+  w Ustawieniach.
+- [x] Tryby awaryjne KSeF (12.07.2026): wybór trybu przy wystawianiu
+  (offline24 / niedostępność art. 106nh / awaria art. 106nf), terminy
+  dosłań wg tabeli z docs CIRFMF (następny dzień roboczy / następny dzień
+  roboczy od końca niedostępności / 7 dni roboczych od końca awarii),
+  data zakończenia zdarzenia i zmiana trybu w szczegółach do czasu
+  dosłania. Kopia zapasowa v5 (tryby offline, załącznik FA(3), OSS,
+  e-mail).
 - [x] Wysyłanie faktur e-mailem (12.07.2026): adresat ze słownika kontrahentów
   (adres fakturowy ma pierwszeństwo), edytowalny temat i treść, załączniki
   PDF/XML, przekazanie do aplikacji Mail (NSSharingService) oraz zapis daty
