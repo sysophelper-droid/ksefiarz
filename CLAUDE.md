@@ -109,7 +109,11 @@ Sources/KsefiarzCore/
                InvoiceEmailComposer (adresat ze słownika po NIP — invoiceEmail
                przed email; domyślny temat/treść), DashboardAnalytics
                (przepływy z PaymentRecord, VAT okresu, wiekowanie sald,
-               porównania miesięczne)
+               porównania miesięczne), JPKV7Generator (JPK_V7M(2) zgodny
+               z XSD crd.gov.pl/wzor/2021/12/27/11148 — ewidencja + deklaracja
+               VAT-7(22); OSS poza JPK, ostrzeżenia o uproszczeniach),
+               PaymentDemandEngine (odsetki od salda, pozycje wezwań;
+               PDF w Services/PaymentDemandPDFGenerator)
   Views/       MainContentView (NavigationSplitView), InvoiceListView, InvoiceDetailView,
                NewInvoiceView (nowa/edycja/korekta), DashboardView, SettingsView, HiddenInvoicesView,
                DictionariesView (+ ContractorsView/ProductsView/BankAccountsView)

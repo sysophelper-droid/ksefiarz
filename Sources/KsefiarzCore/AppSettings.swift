@@ -58,4 +58,13 @@ public enum AppSettingsKeys {
     public static let notifyDeadlines = "ksef.notifyDeadlines"
     /// Pamięć doręczonych powiadomień o terminach (klucze z datą — dedup).
     public static let deadlineNotifiedKeys = "ksef.deadlineNotifiedKeys"
+    /// JPK_V7M: czterocyfrowy kod urzędu skarbowego (KodUrzedu).
+    public static let jpkTaxOfficeCode = "jpk.kodUrzedu"
+    /// JPK_V7M: adres e-mail podatnika (Podmiot1/Email).
+    public static let jpkEmail = "jpk.email"
+    /// Wezwania do zapłaty: roczna stopa odsetek za opóźnienie (%) —
+    /// domyślnie odsetki ustawowe za opóźnienie w transakcjach handlowych.
+    public static let demandInterestRate = "demand.interestRate"
+    /// Wezwania do zapłaty: termin zapłaty z wezwania (dni).
+    public static let demandPaymentDays = "demand.paymentDays"
 }

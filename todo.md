@@ -13,12 +13,6 @@ Zasady pracy i wiedza projektowa są w `CLAUDE.md` — tu tylko zadania.
 
 ### Rekomendowane rozszerzenia (sesja 12.07.2026)
 
-- [ ] Ewidencja VAT / eksport JPK_V7: generowanie JPK_V7M/K (lub zestawień
-  pod rejestr VAT) z faktur sprzedaży i zakupu, z oznaczeniami GTU
-  i procedur zbieranymi już na pozycjach.
-- [ ] Wezwania do zapłaty i noty odsetkowe: PDF wezwania z odsetkami
-  ustawowymi za opóźnienie dla zaległych faktur, wysyłka kanałem e-mail;
-  kandydaci ze struktury wiekowej Kokpitu.
 - [ ] Automatyczne odnowienie certyfikatu KSeF: wniosek o nowy certyfikat
   (typ 1 i 2) przed wygaśnięciem starego, podmiana w pęku kluczy.
 - [ ] Zarządzanie uprawnieniami KSeF: nadawanie/odbieranie uprawnień
@@ -122,6 +116,16 @@ Zasady pracy i wiedza projektowa są w `CLAUDE.md` — tu tylko zadania.
   (własny ZipWriter bez zależności) — CSV per rodzaj, oryginalne XML,
   PDF-y i raport.txt z sumami per waluta oraz listą braków (niewysłane,
   odrzucone, bez UPO/XML, offline w kolejce, brak NIP nabywcy).
+- [x] Ewidencja VAT / eksport JPK_V7M (12.07.2026): generator JPK_V7M(2)
+  zgodny z oficjalną XSD (walidacja xmllint) — ewidencja sprzedaży per
+  stawka z GTU i procedurami, zakupy jako pozostałe nabycia, deklaracja
+  VAT-7(22) w pełnych złotych (P_51/P_62), ostrzeżenia o uproszczeniach
+  (OSS poza JPK, marża, brak kursu, brak NIP → „BRAK”); arkusz eksportu
+  na listach faktur.
+- [x] Wezwania do zapłaty i noty odsetkowe (12.07.2026): PaymentDemandEngine
+  (odsetki proste od salda, konfigurowalna stopa roczna), PDF z tabelą
+  zaległości i sumami per waluta, wysyłka e-mailem (adres ze słownika);
+  wejście z sekcji wiekowania Kokpitu i menu listy sprzedaży.
 - [x] Powiadomienia o terminach (12.07.2026): płatność dziś/jutro
   (należności i zobowiązania, saldo w treści) oraz termin dosłania
   offline dziś/po terminie — raz dziennie na fakturę

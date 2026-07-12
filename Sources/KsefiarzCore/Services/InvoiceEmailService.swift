@@ -70,4 +70,31 @@ public enum InvoiceEmailService {
         }
         service.perform(withItems: items)
     }
+
+    /// Otwiera okno nowej wiadomości z dowolnym dokumentem (np. wezwaniem
+    /// do zapłaty) — załącznik zapisywany do katalogu tymczasowego.
+    public static func composeDocument(
+        recipient: String,
+        subject: String,
+        body: String,
+        attachmentName: String,
+        attachmentData: Data
+    ) throws {
+        guard let service = NSSharingService(named: .composeEmail) else {
+            throw InvoiceEmailError.composeUnavailable
+        }
+        let directory = FileManager.default.temporaryDirectory
+            .appending(path: "KsefiarzEmail-\(UUID().uuidString)", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let url = directory.appending(path: attachmentName)
+        try attachmentData.write(to: url)
+
+        let items: [Any] = [body, url]
+        service.recipients = recipient.isEmpty ? [] : [recipient]
+        service.subject = subject
+        guard service.canPerform(withItems: items) else {
+            throw InvoiceEmailError.composeUnavailable
+        }
+        service.perform(withItems: items)
+    }
 }
