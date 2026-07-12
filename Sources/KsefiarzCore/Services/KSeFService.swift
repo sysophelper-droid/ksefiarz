@@ -601,7 +601,8 @@ public final class KSeFService {
 
     // MARK: Wystawianie faktur (outbound)
 
-    /// Waliduje dane, generuje XML FA(3) i wysyła fakturę w sesji interaktywnej
+    /// Waliduje dane, generuje XML FA(3) lub FA_RR(1) i wysyła go w sesji
+    /// interaktywnej
     /// (z obowiązkowym szyfrowaniem AES-256-CBC). Zwraca numer KSeF faktury
     /// lub numer referencyjny przesyłki, jeśli numer nie został jeszcze nadany.
     public func sendInvoice(_ draft: InvoiceDraft) async throws -> KSeFSendResult {
@@ -627,10 +628,15 @@ public final class KSeFService {
         let iv = try KSeFCrypto.randomBytes(16)
         let encryptedKey = try KSeFCrypto.rsaEncryptOAEPSHA256(aesKey, publicKey: publicKey)
 
-        // 2. Otwarcie sesji interaktywnej dla schemy FA(3) — musi się zgadzać
-        // z KodFormularza generowanego dokumentu.
+        // 2. Otwarcie sesji dla schemy wskazanej przez dokument. FA_RR(1)
+        // ma osobny formCode; rozpoznanie z XML obsługuje też kolejkę offline.
+        let schema = KSeFInvoiceSchema.detect(in: xmlData)
         let openRequest = OpenOnlineSessionRequestDTO(
-            formCode: FormCodeDTO(systemCode: "FA (3)", schemaVersion: "1-0E", value: "FA"),
+            formCode: FormCodeDTO(
+                systemCode: schema.systemCode,
+                schemaVersion: schema.schemaVersion,
+                value: schema.value
+            ),
             encryption: .init(
                 encryptedSymmetricKey: encryptedKey.base64EncodedString(),
                 initializationVector: iv.base64EncodedString()

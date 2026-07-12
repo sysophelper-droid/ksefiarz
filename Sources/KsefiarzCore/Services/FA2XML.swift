@@ -24,6 +24,8 @@ public struct FA2InvoiceLine: Equatable, Sendable {
     /// rozdz. 6a ustawy) — element P_12_XII. Gdy ustawiona, pozycja nie ma
     /// polskiej stawki (P_12), a jej VAT trafia do sum P_13_5/P_14_5.
     public var ossRate: Double?
+    /// Klasa lub jakość produktu/usługi rolniczej (P_6C FA_RR).
+    public var rrQuality: String
 
     public init(
         index: Int,
@@ -37,7 +39,8 @@ public struct FA2InvoiceLine: Equatable, Sendable {
         cnPkwiu: String = "",
         gtu: String = "",
         procedure: String = "",
-        ossRate: Double? = nil
+        ossRate: Double? = nil,
+        rrQuality: String = ""
     ) {
         self.index = index
         self.name = name
@@ -51,6 +54,7 @@ public struct FA2InvoiceLine: Equatable, Sendable {
         self.gtu = gtu
         self.procedure = procedure
         self.ossRate = ossRate
+        self.rrQuality = rrQuality
     }
 }
 
@@ -214,6 +218,15 @@ public enum FA2Format {
         if text.hasSuffix(".") { text.removeLast() }
         return text
     }
+
+    /// Liczba dziesiętna z kontrolowaną precyzją (FA_RR: ilość do 6,
+    /// cena jednostkowa do 8 miejsc po przecinku).
+    public static func decimal(_ value: Double, fractionDigits: Int) -> String {
+        var text = String(format: "%.*f", fractionDigits, value)
+        while text.hasSuffix("0") { text.removeLast() }
+        if text.hasSuffix(".") { text.removeLast() }
+        return text
+    }
 }
 
 // MARK: - Generator XML FA(2)
@@ -232,6 +245,9 @@ public enum FA2XMLGenerator {
     ///   - draft: zwalidowane dane faktury,
     ///   - generatedAt: znacznik czasu wytworzenia dokumentu (parametr ułatwia testowanie).
     public static func generateXML(for draft: InvoiceDraft, generatedAt: Date = .now) -> String {
+        if draft.isRR {
+            return FARRXMLGenerator.generateXML(for: draft, generatedAt: generatedAt)
+        }
         let issueDate = FA2Format.dateFormatter.string(from: draft.issueDate)
         let createdAt = FA2Format.timestampFormatter.string(from: generatedAt)
 
@@ -639,6 +655,11 @@ public enum FA2XMLParser {
             throw KSeFError.xmlParsingFailed("Brak elementu głównego <Faktura>.")
         }
 
+        // FA_RR(1) ma osobny blok główny i inne nazwy pól niż FA(3).
+        if firstDescendant(named: "FakturaRR", in: root) != nil {
+            return try parseRR(root: root, rawData: data)
+        }
+
         guard let podmiot1 = firstDescendant(named: "Podmiot1", in: root) else {
             throw KSeFError.xmlParsingFailed("Brak elementu <Podmiot1> (sprzedawca).")
         }
@@ -748,6 +769,80 @@ public enum FA2XMLParser {
     }
 
     // MARK: Bloki dokumentu
+
+    /// Parsuje strukturę FA_RR(1) do wspólnego modelu danych faktury.
+    private static func parseRR(root: XMLElement, rawData: Data) throws -> FA2InvoiceData {
+        guard let supplier = firstDescendant(named: "Podmiot1", in: root),
+              let buyer = firstDescendant(named: "Podmiot2", in: root),
+              let rr = firstDescendant(named: "FakturaRR", in: root) else {
+            throw KSeFError.xmlParsingFailed("Brak wymaganych sekcji dokumentu FA_RR.")
+        }
+        guard let number = text(of: "P_4C", in: rr), !number.isEmpty else {
+            throw KSeFError.xmlParsingFailed("Brak numeru faktury VAT RR (P_4C).")
+        }
+        guard let dateText = text(of: "P_4B", in: rr),
+              let issueDate = FA2Format.dateFormatter.date(from: dateText) else {
+            throw KSeFError.xmlParsingFailed("Brak lub nieprawidłowa data wystawienia VAT RR (P_4B).")
+        }
+        guard let grossText = text(of: "P_12_1", in: rr), let gross = Double(grossText) else {
+            throw KSeFError.xmlParsingFailed("Brak lub nieprawidłowa kwota ogółem VAT RR (P_12_1).")
+        }
+
+        let lines = descendants(named: "FakturaRRWiersz", in: rr).enumerated().compactMap {
+            offset, row -> FA2InvoiceLine? in
+            guard let name = text(of: "P_5", in: row) else { return nil }
+            let rate = text(of: "P_9", in: row) ?? "7"
+            return FA2InvoiceLine(
+                index: text(of: "NrWierszaFa", in: row).flatMap(Int.init) ?? offset + 1,
+                name: name,
+                unit: text(of: "P_6A", in: row) ?? "szt.",
+                quantity: text(of: "P_6B", in: row).flatMap(Double.init) ?? 1,
+                unitNetPrice: text(of: "P_7", in: row).flatMap(Double.init) ?? 0,
+                netAmount: text(of: "P_8", in: row).flatMap(Double.init) ?? 0,
+                vatRate: rate,
+                vatAmount: text(of: "P_10", in: row).flatMap(Double.init) ?? 0,
+                cnPkwiu: text(of: "PKWiU", in: row) ?? text(of: "CN", in: row) ?? "",
+                rrQuality: text(of: "P_6C", in: row) ?? ""
+            )
+        }
+
+        let documentType = text(of: "RodzajFaktury", in: rr) ?? "VAT_RR"
+        var correction: InvoiceCorrectionInfo?
+        if documentType == "KOR_VAT_RR",
+           let corrected = firstDescendant(named: "DaneFaKorygowanej", in: rr) {
+            correction = InvoiceCorrectionInfo(
+                originalNumber: text(of: "NrFaKorygowanej", in: corrected) ?? "",
+                originalIssueDate: text(of: "DataWystFaKorygowanej", in: corrected)
+                    .flatMap { FA2Format.dateFormatter.date(from: $0) } ?? issueDate,
+                originalKsefNumber: text(of: "NrKSeFFaKorygowanej", in: corrected),
+                reason: text(of: "PrzyczynaKorekty", in: rr)
+            )
+        }
+        let payment = firstDescendant(named: "Platnosc", in: rr)
+
+        return FA2InvoiceData(
+            invoiceNumber: number,
+            issueDate: issueDate,
+            sellerName: text(of: "Nazwa", in: supplier) ?? "",
+            sellerNIP: text(of: "NIP", in: supplier) ?? "",
+            sellerAddress: parseAddress(in: supplier),
+            buyerName: text(of: "Nazwa", in: buyer) ?? "",
+            buyerNIP: text(of: "NIP", in: buyer) ?? "",
+            buyerAddress: parseAddress(in: buyer),
+            netAmount: text(of: "P_11_1", in: rr).flatMap(Double.init) ?? 0,
+            vatAmount: text(of: "P_11_2", in: rr).flatMap(Double.init) ?? 0,
+            grossAmount: gross,
+            paymentForm: payment.flatMap { text(of: "FormaPlatnosci", in: $0) } == "1" ? "6" : nil,
+            paymentBankAccount: payment.flatMap { text(of: "NrRB", in: $0) },
+            documentType: documentType,
+            correction: correction,
+            lines: lines,
+            notes: text(of: "StopkaFaktury", in: root) ?? "",
+            currency: text(of: "KodWaluty", in: rr) ?? "PLN",
+            saleDate: text(of: "P_4A", in: rr).flatMap { FA2Format.dateFormatter.date(from: $0) },
+            rawXML: String(decoding: rawData, as: UTF8.self)
+        )
+    }
 
     /// Adres podmiotu: AdresL1 + AdresL2 połączone przecinkiem.
     private static func parseAddress(in podmiot: XMLElement) -> String {

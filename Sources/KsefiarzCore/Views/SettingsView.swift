@@ -44,6 +44,7 @@ public struct SettingsView: View {
     @AppStorage(AppSettingsKeys.numberPatternROZ) private var numberPatternROZ = ""
     @AppStorage(AppSettingsKeys.numberPatternUPR) private var numberPatternUPR = ""
     @AppStorage(AppSettingsKeys.numberPatternKOR) private var numberPatternKOR = ""
+    @AppStorage(AppSettingsKeys.numberPatternRR) private var numberPatternRR = ""
     @AppStorage(AppSettingsKeys.prepaidForms) private var prepaidFormsRaw = PaymentFormPolicy.encode(PaymentFormPolicy.defaultPrepaidForms)
     @AppStorage(AppSettingsKeys.dueSoonDays) private var dueSoonDays = 7
 
@@ -295,6 +296,7 @@ public struct SettingsView: View {
                 patternRow("Rozliczeniowe (ROZ)", text: $numberPatternROZ, example: "ROZ/{NN}/{MM}/{RRRR}")
                 patternRow("Uproszczone (UPR)", text: $numberPatternUPR, example: "UPR/{NN}/{MM}/{RRRR}")
                 patternRow("Korekty (KOR…)", text: $numberPatternKOR, example: "KOR/{NN}/{MM}/{RRRR}")
+                patternRow("Rolnik ryczałtowy (VAT RR)", text: $numberPatternRR, example: "RR/{NN}/{MM}/{RRRR}")
             } header: {
                 Text("Numeracja faktur")
             } footer: {

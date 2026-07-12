@@ -447,6 +447,39 @@ struct KSeFServiceFetchTests {
 @Suite("KSeFService — wystawianie faktur (sesja interaktywna)")
 struct KSeFServiceSendTests {
 
+    @Test("Wysyłka VAT RR otwiera sesję dla formCode FA_RR (1)")
+    func sendRRUsesRRSession() async throws {
+        let keys = TestRSAKeyPair()
+        let transport = MockTransport()
+        routeSuccessfulAuth(on: transport)
+        transport.routeOK("sessions/online/SESS-RR/invoices", data: Data(#"{"referenceNumber":"INV-RR"}"#.utf8))
+        transport.routeOK("sessions/online/SESS-RR/close", data: Data("{}".utf8))
+        transport.routeOK(
+            "sessions/SESS-RR/invoices/INV-RR",
+            data: Data(#"{"ksefNumber":"\#(testKsefNumber)","status":{"code":200,"description":"OK"}}"#.utf8)
+        )
+        transport.routeOK("sessions/online", data: Data(#"{"referenceNumber":"SESS-RR","validUntil":"2026-06-12T00:00:00Z"}"#.utf8))
+
+        let draft = InvoiceDraft(
+            invoiceNumber: "RR/2026/04/001",
+            issueDate: FA2Format.dateFormatter.date(from: "2026-04-15")!,
+            sellerName: "Jan Rolnik", sellerNIP: "1111111111", sellerAddress: "Wiejska 2",
+            buyerName: "ACME", buyerNIP: "5260250274", buyerAddress: "Firmowa 1",
+            lines: [InvoiceLineDraft(name: "Pszenica", quantity: 10, unitNetPrice: 10, vatRate: .rr, rrQuality: "klasa I")],
+            paymentForm: .transfer,
+            invoiceType: "VAT_RR"
+        )
+        let service = makeService(transport: transport, keys: keys, nip: "5260250274")
+        let result = try await service.sendInvoice(draft)
+
+        #expect(result.xml.contains("FA_RR (1)"))
+        let request = try #require(transport.requests.first { ($0.url?.path ?? "").hasSuffix("sessions/online") })
+        let body = try JSONDecoder().decode(CapturedOpenSessionRequest.self, from: try #require(request.httpBody))
+        #expect(body.formCode.systemCode == "FA_RR (1)")
+        #expect(body.formCode.schemaVersion == "1-1E")
+        #expect(body.formCode.value == "FA_RR")
+    }
+
     @Test("Wysyłka: otwarcie sesji z szyfrowaniem AES, faktura, zamknięcie, numer KSeF")
     func sendInvoiceSuccess() async throws {
         let keys = TestRSAKeyPair()

@@ -124,10 +124,10 @@ public final class Invoice {
     /// Ukryte faktury nie są uwzględniane w rozliczeniach ani statystykach.
     public var isArchivedOrHidden: Bool
 
-    /// Oryginalny dokument XML e-Faktury (FA(2)).
+    /// Oryginalny dokument XML e-Faktury (FA(2), FA(3) lub FA_RR(1)).
     public var rawXmlContent: String?
 
-    /// Rodzaj dokumentu wg FA(2): "VAT" (zwykła) lub "KOR" (korygująca).
+    /// Rodzaj dokumentu, np. VAT, KOR, ZAL, VAT_RR albo KOR_VAT_RR.
     public var documentTypeRaw: String = "VAT"
 
     /// Dane faktury korygowanej (tylko dla dokumentów KOR).
@@ -211,7 +211,14 @@ public final class Invoice {
     public var offlineEventEndedAt: Date? = nil
 
     /// Czy dokument jest fakturą korygującą.
-    public var isCorrection: Bool { documentTypeRaw == "KOR" }
+    public var isCorrection: Bool {
+        ["KOR", "KOR_ZAL", "KOR_ROZ", "KOR_VAT_RR"].contains(documentTypeRaw)
+    }
+
+    /// Czy dokument należy do osobnej struktury FA_RR(1).
+    public var isRR: Bool {
+        documentTypeRaw == "VAT_RR" || documentTypeRaw == "KOR_VAT_RR"
+    }
 
     /// Numery KSeF faktur zaliczkowych (dokumenty ROZ) jako tablica.
     public var advanceInvoiceRefs: [String] {
@@ -516,7 +523,8 @@ public extension Invoice {
                 cnPkwiu: line.cnPkwiu,
                 gtu: line.gtu,
                 procedure: line.procedure,
-                ossRate: line.ossRate
+                ossRate: line.ossRate,
+                rrQuality: line.rrQuality
             )
         }
     }

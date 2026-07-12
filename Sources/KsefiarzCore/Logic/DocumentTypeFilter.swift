@@ -7,6 +7,7 @@ public enum DocumentTypeFilter: String, CaseIterable, Identifiable, Sendable {
     case zal
     case roz
     case upr
+    case rr
     case corrections
 
     public var id: String { rawValue }
@@ -18,6 +19,7 @@ public enum DocumentTypeFilter: String, CaseIterable, Identifiable, Sendable {
         case .zal: return "Zaliczkowe (ZAL)"
         case .roz: return "Rozliczeniowe (ROZ)"
         case .upr: return "Uproszczone (UPR)"
+        case .rr: return "VAT RR"
         case .corrections: return "Korekty (KOR…)"
         }
     }
@@ -31,6 +33,7 @@ public enum DocumentTypeFilter: String, CaseIterable, Identifiable, Sendable {
         case .zal: return documentTypeRaw == "ZAL"
         case .roz: return documentTypeRaw == "ROZ"
         case .upr: return documentTypeRaw == "UPR"
+        case .rr: return documentTypeRaw == "VAT_RR"
         case .corrections: return documentTypeRaw.hasPrefix("KOR")
         }
     }

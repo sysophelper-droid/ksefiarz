@@ -34,7 +34,8 @@ Sources/
     │   ├── KSeFService.swift     # API KSeF 2.0: uwierzytelnienie, pobieranie i wysyłka faktur
     │   ├── KSeFPermissionsService.swift # API permissions: nadawanie/odbieranie/przegląd uprawnień
     │   ├── KSeFCrypto.swift      # RSA-OAEP (SHA-256), AES-256-CBC, SHA-256
-    │   ├── FA2XML.swift          # generator i parser uproszczonej struktury FA(2)
+    │   ├── FA2XML.swift          # generator FA(3) i parser FA(2)/FA(3)/FA_RR(1)
+    │   ├── FARRXML.swift         # generator VAT RR i dobór schemy sesji KSeF
     │   └── InvoiceValidator.swift# walidacja pól + suma kontrolna NIP/PESEL
     ├── Logic/
     │   ├── InvoiceFilter.swift   # filtrowanie list (status płatności, wyszukiwarka)
@@ -51,7 +52,7 @@ Sources/
         ├── InvoiceAutomationView.swift # szablony, cykle i kolejka zatwierdzeń
         ├── HiddenInvoicesView.swift # archiwum „Nieuprawnione / Ukryte”
         └── SettingsView.swift    # NIP, token KSeF, środowisko
-Tests/KsefiarzCoreTests/          # 412 testów (Swift Testing) — model, parser, usługa, kryptografia, logika
+Tests/KsefiarzCoreTests/          # 597 testów (Swift Testing) — model, parser, usługa, kryptografia, logika
 ```
 
 ## Funkcje
@@ -60,6 +61,16 @@ Tests/KsefiarzCoreTests/          # 412 testów (Swift Testing) — model, parse
   (`api-test`/`api-demo`/`api.ksef.mf.gov.pl`): uwierzytelnienie certyfikatem
   lub tokenem, pobieranie faktur zakupowych (metadane + oryginalny XML),
   wystawianie faktur w sesji interaktywnej z obowiązkowym szyfrowaniem AES-256-CBC.
+- **Faktury VAT RR (rolnik ryczałtowy)** — w formularzu wystawiania można
+  wybrać dokument VAT RR, wskazać dostawcę–rolnika, klasę/jakość produktu
+  rolnego oraz stawkę zryczałtowanego zwrotu 7% (lub historyczną 6,5%).
+  Aplikacja poprawnie odwraca role stron (rolnik jest dostawcą, firma
+  użytkownika nabywcą), zapisuje dokument jako zakup i generuje osobną,
+  oficjalną strukturę `FA_RR (1)` (`1-1E`, namespace z 6.03.2026), a sesję
+  KSeF otwiera z `formCode` `FA_RR`. Obsługiwane są również korekty
+  `KOR_VAT_RR`, odczyt pobranego XML, tryby offline oraz osobny wzorzec
+  numeracji RR w Ustawieniach. Funkcja wymaga wcześniejszego uprawnienia
+  `RRInvoicing`; specyfikacja: [struktura logiczna FA_RR(1)](https://ksef.podatki.gov.pl/informacje-ogolne-ksef-20/struktura-logiczna-fa_rr/).
 - **Uwierzytelnianie certyfikatem KSeF (preferowane)** — podpis XAdES-BES
   dokumentu AuthTokenRequest wykonywany w całości lokalnie (własna
   kanonikalizacja i podpis RSA/ECDSA, bez zewnętrznych bibliotek).
@@ -119,7 +130,7 @@ Tests/KsefiarzCoreTests/          # 412 testów (Swift Testing) — model, parse
   forma płatności, numer rachunku, termin i znacznik „Zaplacono”
   (faktury opłacone gotówką/kartą przy wystawieniu są automatycznie
   oznaczane jako opłacone). Generowany XML zawiera komplet elementów
-  wymaganych przez XSD FA(2) (Adres, Adnotacje, RodzajFaktury).
+  wymaganych przez XSD FA(3) (Adres, Adnotacje, RodzajFaktury).
 - **Synchronizacja dwukierunkowa** — pobieranie faktur zakupowych (Subject2)
   i sprzedażowych (Subject1); ponowna synchronizacja uzupełnia szczegóły
   wcześniej pobranych faktur bez nadpisywania decyzji użytkownika.
@@ -158,7 +169,7 @@ Tests/KsefiarzCoreTests/          # 412 testów (Swift Testing) — model, parse
   PDF” w szczegółach faktury i przełącznikiem w arkuszu e-mail; kontrahent
   z włączonym polem „Dokumenty dwujęzyczne (PL/EN)” w słowniku dostaje ten
   wariant automatycznie.
-- **Numeracja per rodzaj dokumentu** — każdy rodzaj (VAT/ZAL/ROZ/UPR/korekty)
+- **Numeracja per rodzaj dokumentu** — każdy rodzaj (VAT/ZAL/ROZ/UPR/VAT RR/korekty)
   może mieć w Ustawieniach własny wzorzec i niezależną serię numeracji;
   na listach faktur dostępny jest filtr rodzaju dokumentu.
 - **Standardy fakturowania** — automatyczna numeracja według konfigurowalnego
@@ -185,7 +196,7 @@ Tests/KsefiarzCoreTests/          # 412 testów (Swift Testing) — model, parse
   zwolnienia z VAT); trafia do XML (stopka faktury) i na wydruk PDF.
 - **Schemat FA(3)** — wystawiane faktury są generowane w bieżącej schemie
   FA(3) (zweryfikowane end-to-end na środowisku testowym KSeF); parser
-  czyta dokumenty FA(2) i FA(3).
+  czyta dokumenty FA(2), FA(3) i osobną strukturę FA_RR(1).
 - **Procedura OSS (dział XII rozdz. 6a)** — pozycja faktury może mieć stawkę
   podatku od wartości dodanej państwa konsumpcji (pole „OSS %” w formularzu):
   do XML trafia P_12_XII zamiast polskiej stawki, a sumy do P_13_5/P_14_5;

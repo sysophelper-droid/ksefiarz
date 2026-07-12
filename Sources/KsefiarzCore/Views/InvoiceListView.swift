@@ -370,8 +370,8 @@ public struct InvoiceListView: View {
                     }
                 }
             }
-            // Korekta dostępna dla każdej faktury sprzedażowej niebędącej korektą.
-            if kind == .sales, !invoice.isCorrection {
+            // Korekta dostępna dla sprzedaży oraz wystawionej przez nas VAT RR.
+            if (kind == .sales || invoice.isRR), !invoice.isCorrection {
                 Button("Wystaw korektę") {
                     correctedInvoice = invoice
                 }
@@ -380,7 +380,7 @@ public struct InvoiceListView: View {
                 }
             }
             // Faktury tylko lokalne (niewysłane do KSeF) można edytować i usuwać.
-            if kind == .sales, invoice.isLocalOnly {
+            if (kind == .sales || invoice.isRR), invoice.isLocalOnly {
                 Divider()
                 Button("Edytuj fakturę") {
                     editedInvoice = invoice
