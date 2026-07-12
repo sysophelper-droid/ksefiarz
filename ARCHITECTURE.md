@@ -80,6 +80,12 @@ Sources/KsefiarzCore/
                porównania miesięczne), JPKV7Generator (JPK_V7M(2) zgodny
                z XSD crd.gov.pl/wzor/2021/12/27/11148 — ewidencja + deklaracja
                VAT-7(22); OSS poza JPK, ostrzeżenia o uproszczeniach),
+               VATUEGenerator (informacja podsumowująca VAT-UE(5) zgodna
+               z XSD crd.gov.pl/wzor/2021/01/12/10293 — WDT/część C,
+               WNT/część D, usługi UE/część E z danych faktur; kontrahent
+               UE po prefiksie kraju w numerze VAT, towar/usługa z CN/PKWiU,
+               kwoty w pełnych złotych per kontrahent; import usług i OSS
+               poza VAT-UE),
                PaymentDemandEngine (odsetki od salda, pozycje wezwań;
                PDF w Services/PaymentDemandPDFGenerator),
                ReportsEngine (raporty: top kontrahenci, przychody per
@@ -100,6 +106,8 @@ Sources/KsefiarzCore/
                SettingsView, HiddenInvoicesView,
                PermissionsView (sekcja Uprawnienia — nadawanie/odbieranie
                i przegląd dostępów KSeF),
+               JPKExportView i VATUEExportView (eksport ewidencji VAT
+               z menu „Ewidencje” na listach faktur),
                DictionariesView (+ ContractorsView/ProductsView/BankAccountsView)
 Tests/KsefiarzCoreTests/               # Swift Testing (#expect/#require), nazwy PO POLSKU
 Scripts/build-app.sh                   # składanie bundla .app
@@ -201,6 +209,36 @@ dokument OSS+załącznik zweryfikowany oficjalną XSD (xmllint, 12.07.2026).
 Korekty (KOR): kwoty to RÓŻNICA (mogą być ujemne); wybór NrKSeF=1 +
 NrKSeFFaKorygowanej albo NrKSeFN=1. Parser jest odporny na przestrzenie nazw
 (wyszukiwanie po nazwach lokalnych) — czyta FA(2) i FA(3).
+
+## VAT-UE(5) — informacja podsumowująca
+
+Osobna ewidencja (poza JPK_V7M), składana do e-Deklaracji. Źródło prawdy:
+oficjalna XSD `http://crd.gov.pl/wzor/2021/01/12/10293/` (importy: etd
+`.../2020/03/11/eD/DefinicjeTypy/`, kue `.../2021/01/04/eD/KodyUE/`).
+Struktura (kolejność XSD): root `Deklaracja` → `Naglowek` (KodFormularza
+`kodSystemowy="VAT-UE (5)" wersjaSchemy="2-0E"`=VAT-UE, WariantFormularza=5,
+Rok, Miesiac, **CelZlozenia=1 na stałe** — brak wariantu korekty w schemie,
+KodUrzedu) → `Podmiot1 rola="Podatnik"` z **etd:OsobaNiefizyczna{etd:NIP,
+etd:PelnaNazwa}** (typ TPodmiotDowolnyBezAdresu3, BEZ Email/REGON;
+elementy kwalifikowane prefiksem etd) → `PozycjeSzczegolowe` → `Pouczenie`=1.
+Sekcje w PozycjeSzczegolowe (każda Grupa minOccurs=0, unbounded; klucz
+unikalności = kraj+numer+flaga): **Grupa1** WDT/część C
+{P_Da kraj, P_Db nr VAT, P_Dc kwota (TKwotaC, pełne złote, ≤12 cyfr),
+**P_Dd=1 wymagane** — flaga transakcji trójstronnej}; **Grupa2** WNT/część D
+{P_Na, P_Nb, P_Nc, **P_Nd=1**}; **Grupa3** usługi/część E {P_Ua, P_Ub, P_Uc —
+bez flagi}; Grupa4 (call-off stock) NIE generowana (brak modelu danych).
+Kody krajów: `TKodKrajuUE` (towary) i `TKodKrajuUEUslugi` (usługi, bez XI);
+Grecja = **EL**, Irlandia Płn. **XI tylko dla towarów**, PL wykluczone.
+Stary słownik XSD nadal technicznie zawiera GB, ale generator pomija Wielką
+Brytanię po Brexicie. Numer VAT bez prefiksu kraju (TNrVatUE, 1–12 znaków).
+Kwalifikacja z faktury: kontrahent UE po prefiksie kraju (buyerNIP sprzedaż /
+sellerNIP zakup; same cyfry = krajowy, GR→EL); towar vs usługa po kodzie
+pozycji (CN=towar, PKWiU z kropkami=usługa), a dla sprzedaży dodatkowo po
+stawce 0%. Brak kodu i sprzedaż z inną stawką są pomijane z ostrzeżeniem;
+kwoty per kontrahent, zaokrąglenie do złotych. **Import usług** (zakup usług
+z UE) i **procedura OSS** świadomie POZA VAT-UE (tylko JPK_V7 / procedura
+unijna). Wygenerowany dokument (WDT+WNT+usługi, EL, XI) zweryfikowany
+oficjalną XSD (xmllint, 12.07.2026).
 
 ## Gdzie przechowywane są dane
 

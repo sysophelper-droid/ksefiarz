@@ -11,11 +11,105 @@ Zasady pracy i wiedza projektowa są w `CLAUDE.md` — tu tylko zadania.
   komputer (decyzja: na sam koniec). Usunie też pytanie o pęk kluczy po
   każdym wydaniu (ad-hoc zmienia sygnaturę).
 
-### Rekomendowane rozszerzenia (sesja 12.07.2026)
+### Backlog propozycji funkcji (burza mózgów 12.07.2026)
 
-_(wszystkie zrealizowane — patrz niżej)_
+Zaproponowane do decyzji; ⭐ = rekomendowane (największy zwrot / rozsądny
+koszt, bez łamania „tylko odczyt na żywo"). Numeracja pomocnicza —
+kolejność dowolna. ⚠️ operacje modyfikujące KSeF testować wyłącznie na `test`.
+
+#### A. Zgodność / KSeF
+
+- [ ] A2. Faktury RR (rolnik ryczałtowy) — generowanie RR (uprawnienie
+  `RRInvoicing` już nadajemy; brak samego wystawiania). Niszowe.
+- [ ] A3. Samofakturowanie — wystawianie faktur w imieniu dostawcy
+  (uprawnienie `SelfInvoicing` już obsługiwane po stronie nadawania).
+- [ ] A4. Wsadowa wysyłka do KSeF (sesja batch/ZIP) — masowa wysyłka zamiast
+  pojedynczej sesji interaktywnej (migracja/zaległości). ⚠️ tylko `test`.
+- [ ] A5. Anonimowy dostęp / pobranie faktury po numerze KSeF — wciągnięcie
+  faktury zakupowej po numerze KSeF + danych, gdy nie przyszła synchronizacją.
+- [ ] ⭐ A6. Auto-wykrywanie trybu awaryjnego KSeF — pobieranie komunikatów MF
+  o niedostępności/awarii i automatyczne proponowanie trybu offline + terminu
+  (dziś datę zakończenia zdarzenia wpisuje użytkownik ręcznie).
+- [ ] A7. Weryfikacja kontrahenta w KSeF — sprawdzenie, czy odbiorca ma
+  aktywne konto/uprawnienia w KSeF. Niszowe.
+
+#### B. Podatki dochodowe / ewidencje
+
+- [ ] ⭐ B0. JPK_V7K — wariant kwartalny ewidencji VAT (mały podatnik / VAT
+  kwartalny): ewidencja co miesiąc, deklaracja raz na kwartał (część
+  deklaracyjna tylko w 3. miesiącu kwartału). Dziś generujemy tylko V7M.
+- [ ] B1. KPiR (Księga Przychodów i Rozchodów) — ewidencja dla zasad
+  ogólnych/podatku liniowego, z eksportem.
+- [ ] B2. Ewidencja przychodów (ryczałt) — z podziałem na stawki ryczałtu.
+- [ ] ⭐ B3. Kalendarz i prognoza podatkowa — terminarz (JPK do 25., VAT,
+  zaliczka PIT, ZUS) + szacunek kwot VAT/PIT do zapłaty za bieżący okres.
+- [ ] B4. JPK_FA na żądanie — pełny JPK faktur (nie ewidencja), format dla
+  kontroli US. Rzadkie.
+
+#### C. Płatności i windykacja
+
+- [ ] ⭐ C1. Kod QR płatności na PDF (standard 2D ZBP) — klient skanuje i płaci
+  z aplikacji banku; tanio (mamy już render QR).
+- [ ] C2. Plik przelewów do banku (Elixir / przelew zbiorczy) — eksport
+  zobowiązań (zakupów) do pliku importowalnego w bankowości.
+- [ ] C3. Ścieżka windykacji — eskalacja: przypomnienie → wezwanie → nota →
+  dane do EPU (e-sąd); status windykacji na fakturze (bazuje na wezwaniach).
+- [ ] C4. Automatyczne przypomnienia e-mail przed/po terminie — cykliczne
+  miękkie ponaglenia do kontrahentów (dziś powiadomienia tylko systemowe).
+
+#### D. Kontrahenci / dane wejściowe
+
+- [ ] ⭐ D1. OCR faktur kosztowych (macOS Vision) — skan/PDF papierowej faktury
+  → dane do „zakupu spoza KSeF"; natywnie, bez zależności zewnętrznych.
+- [ ] ⭐ D2. Karta / historia kontrahenta — jeden widok: wszystkie dokumenty,
+  saldo, średni czas płatności, terminowość (scoring).
+- [ ] D3. Weryfikacja VIES (kontrahenci UE) — sprawdzenie VAT-UE analogicznie
+  do Białej listy dla krajowych.
+- [ ] D4. Import wsadowy z CSV/Excel — masowy import kontrahentów, towarów,
+  faktur (migracja z Fakturowni/wFirmy).
+
+#### E. Dokumenty / wygląd
+
+- [ ] ⭐ E1. Logo i branding na PDF — logo firmy, kolory, własna stopka
+  (dziś wydruk „klasyczny", bez personalizacji).
+- [ ] E2. Faktura proforma — dokument handlowy (nie idzie do KSeF),
+  z konwersją proforma → właściwa faktura.
+- [ ] E3. Eksport do formatów programów księgowych — struktura importowalna
+  w Symfonii/Comarch/WAPRO (najlepiej pod konkretny program księgowej). Duży
+  koszt, formaty zamknięte.
+- [ ] E4. Wydruk wielu faktur naraz (batch PDF/druk) — jeden PDF/wydruk
+  z zaznaczonych.
+
+#### F. Skala / wielofirmowość / UX
+
+- [ ] F1. Wielofirmowość (przełączanie kontekstu NIP) — kilka firm/NIP
+  w jednej aplikacji z izolacją danych; fundament pod tryb biura rachunkowego.
+  Duży koszt (dotyka modelu danych) — osobna, świadoma decyzja.
+- [ ] F2. Blokada aplikacji Touch ID / hasłem — ochrona danych finansowych
+  przy odejściu od biurka.
+- [ ] F3. Globalna wyszukiwarka ⌘K — szybki skok do faktury/kontrahenta/
+  ustawienia.
+- [ ] F4. Cykliczny raport e-mail (podsumowanie miesiąca) — automatyczne
+  zestawienie sprzedaż/VAT/należności na koniec okresu.
+- [ ] F5. Konfigurowalne szablony e-mail — edytowalne wzory tematu/treści
+  (dziś zaszyte PL/EN).
 
 ## Zrealizowane
+
+### Informacja podsumowująca VAT-UE (12.07.2026)
+
+- [x] A1. Generator VAT-UE(5) obok JPK_V7M: WDT (część C), WNT (część D)
+  i świadczenie usług UE (część E) z danych faktur. Kontrahent UE
+  rozpoznawany po prefiksie kraju w numerze VAT (buyerNIP sprzedaż /
+  sellerNIP zakup; GR→EL; XI tylko dla towarów; PL, GB i spoza UE pomijane),
+  towar vs usługa z kodu CN/PKWiU pozycji, sprzedaż dodatkowo po stawce 0%,
+  dane niejednoznaczne pomijane z ostrzeżeniem, kwoty w pełnych złotych sumowane
+  per kontrahent. Import usług i procedura OSS świadomie poza VAT-UE
+  (z ostrzeżeniami). Dokument zgodny z oficjalną XSD (crd.gov.pl/wzor/2021/
+  01/12/10293) — zweryfikowany xmllintem. VATUEGenerator (czysta logika,
+  pokrycie 99,6% linii, 23 testy) + VATUEExportView (menu „Ewidencje” na
+  listach faktur). Cel złożenia na stałe = 1 (schema nie zna wariantu
+  korekty); część F (call-off stock) poza zakresem.
 
 ### Pokrycie testami logiki domenowej (12.07.2026)
 

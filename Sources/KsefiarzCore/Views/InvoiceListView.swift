@@ -33,6 +33,7 @@ public struct InvoiceListView: View {
     @State private var showingStatementImport = false
     @State private var showingAccountingPackage = false
     @State private var showingJPKExport = false
+    @State private var showingVATUEExport = false
 
     @AppStorage(AppSettingsKeys.prepaidForms) private var prepaidFormsRaw = PaymentFormPolicy.encode(PaymentFormPolicy.defaultPrepaidForms)
 
@@ -149,6 +150,9 @@ public struct InvoiceListView: View {
             .sheet(isPresented: $showingJPKExport) {
                 JPKExportView()
             }
+            .sheet(isPresented: $showingVATUEExport) {
+                VATUEExportView()
+            }
             .sheet(item: $duplicatedInvoice) { invoice in
                 NewInvoiceView(
                     initialDraft: InvoiceAutomationEngine.duplicate(invoice),
@@ -251,12 +255,21 @@ public struct InvoiceListView: View {
             .help("Eksportuj wybrany okres do ZIP: zestawienia CSV, XML, PDF i raport braków")
         }
         ToolbarItem {
-            Button {
-                showingJPKExport = true
+            Menu {
+                Button {
+                    showingJPKExport = true
+                } label: {
+                    Label("JPK_V7M — ewidencja VAT", systemImage: "doc.badge.gearshape")
+                }
+                Button {
+                    showingVATUEExport = true
+                } label: {
+                    Label("VAT-UE — informacja podsumowująca", systemImage: "globe.europe.africa")
+                }
             } label: {
-                Label("JPK_V7M", systemImage: "doc.badge.gearshape")
+                Label("Ewidencje", systemImage: "doc.badge.gearshape")
             }
-            .help("Eksportuj ewidencję VAT wybranego miesiąca do pliku JPK_V7M (sprzedaż + zakup, GTU, procedury, deklaracja)")
+            .help("Eksport ewidencji VAT wybranego miesiąca: JPK_V7M (sprzedaż + zakup, GTU, procedury, deklaracja) lub VAT-UE (WDT, WNT, usługi UE)")
         }
         ToolbarItem {
             Button {

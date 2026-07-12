@@ -259,6 +259,17 @@ Tests/KsefiarzCoreTests/          # 412 testów (Swift Testing) — model, parse
   do wpłaty / do przeniesienia). Plik zgodny z oficjalną XSD JPK_V7M(2);
   arkusz pokazuje podsumowanie i listę pozycji do ręcznej weryfikacji
   (m.in. pozycje OSS rozliczane poza JPK, procedura marży, brak kursu).
+- **Eksport VAT-UE** — informacja podsumowująca za wybrany miesiąc
+  (obok JPK_V7M w menu „Ewidencje”): wewnątrzwspólnotowe dostawy towarów
+  (WDT, część C), nabycia towarów (WNT, część D) i świadczenie usług UE
+  (część E) na podstawie faktur. Kontrahent UE rozpoznawany po prefiksie
+  kraju w numerze VAT (Grecja jako „EL”, Irlandia Płn. „XI” tylko dla
+  towarów; GB pomijane po Brexicie), towar vs usługa z kodu CN/PKWiU
+  pozycji, a sprzedaż dodatkowo po stawce 0%; dane niejednoznaczne są
+  pomijane z ostrzeżeniem. Kwoty w pełnych
+  złotych sumowane per kontrahent. Plik zgodny z oficjalną XSD VAT-UE(5)
+  (zweryfikowany xmllint); arkusz pokazuje zestawienia i ostrzeżenia
+  (import usług i procedura OSS pozostają poza VAT-UE).
 - **Wezwania do zapłaty i noty odsetkowe** — dla dłużników z zaległymi
   fakturami (kandydaci ze struktury wiekowej Kokpitu): wybór faktur,
   odsetki naliczane od salda według konfigurowalnej stopy rocznej
