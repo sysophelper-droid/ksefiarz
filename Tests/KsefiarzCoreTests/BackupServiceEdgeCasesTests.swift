@@ -85,12 +85,20 @@ struct BackupServiceEdgeCasesTests {
         // zmianę w defer, żeby nie zostawić śladu.
         let settingsKey = AppSettingsKeys.sellerName
         let previousValue = UserDefaults.standard.string(forKey: settingsKey)
+        let brandingKey = AppSettingsKeys.pdfBrandingEnabled
+        let previousBrandingValue = UserDefaults.standard.object(forKey: brandingKey)
         UserDefaults.standard.set("Firma Edge Sp. z o.o.", forKey: settingsKey)
+        UserDefaults.standard.set(true, forKey: brandingKey)
         defer {
             if let previousValue {
                 UserDefaults.standard.set(previousValue, forKey: settingsKey)
             } else {
                 UserDefaults.standard.removeObject(forKey: settingsKey)
+            }
+            if let previousBrandingValue {
+                UserDefaults.standard.set(previousBrandingValue, forKey: brandingKey)
+            } else {
+                UserDefaults.standard.removeObject(forKey: brandingKey)
             }
         }
 
@@ -126,6 +134,7 @@ struct BackupServiceEdgeCasesTests {
         #expect(decoded.version == BackupService.currentVersion)
         // Niepusta wartość ustawienia trafiła do kopii (gałąź true pętli).
         #expect(decoded.settings[settingsKey] == "Firma Edge Sp. z o.o.")
+        #expect(decoded.settings[brandingKey] != nil)
         #expect(decoded.invoices.count == 1)
         #expect(decoded.invoices.first?.ksefId == "KSEF-EDGE-1")
         #expect(decoded.contractors?.count == 1)

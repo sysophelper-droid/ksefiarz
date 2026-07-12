@@ -45,8 +45,15 @@ public enum InvoicePDFGenerator {
     /// Generuje dane PDF dla faktury. Zwraca `nil` przy błędzie renderowania.
     /// - Parameter bilingual: układ dwujęzyczny (PL/EN) dla kontrahentów
     ///   zagranicznych — treść dokumentu bez zmian, etykiety w obu językach.
-    public static func pdfData(for invoice: Invoice, bilingual: Bool = false) -> Data? {
+    /// - Parameter branding: konfiguracja firmy; generator sam sprawdza NIP,
+    ///   żeby nie oznaczyć brandingiem pobranej faktury kosztowej.
+    public static func pdfData(
+        for invoice: Invoice,
+        bilingual: Bool = false,
+        branding: InvoicePDFBranding = .current()
+    ) -> Data? {
         let labels = InvoicePDFLabels(bilingual: bilingual)
+        let appliedBranding = branding.applies(to: invoice) ? branding : .classic
         let qrCodes = makeQRCodes(for: invoice)
         let chunks = paginate(invoice.sortedLines, reserveQRSpace: qrCodes != nil)
 
@@ -54,6 +61,12 @@ public enum InvoicePDFGenerator {
         guard let consumer = CGDataConsumer(data: data as CFMutableData) else { return nil }
         var mediaBox = CGRect(origin: .zero, size: pageSize)
         guard let context = CGContext(consumer: consumer, mediaBox: &mediaBox, nil) else { return nil }
+
+        // Sztywna wysokość strony tylko przy brandingu — potrzebna, by stopka
+        // marki trafiła na dół każdej strony. Bez brandingu zostawiamy układ
+        // „content-sized" jak dotąd, inaczej rozpychane `Spacer`-y zepchnęłyby
+        // numer strony na środek klasycznego wydruku.
+        let pageHeight: CGFloat? = appliedBranding.isEnabled ? pageSize.height - 80 : nil
 
         for (index, chunk) in chunks.enumerated() {
             let page = InvoicePrintPageView(
@@ -64,9 +77,10 @@ public enum InvoicePDFGenerator {
                 pageNumber: index + 1,
                 pageCount: chunks.count,
                 qrCodes: index == chunks.count - 1 ? qrCodes : nil,
-                labels: labels
+                labels: labels,
+                branding: appliedBranding
             )
-            .frame(width: pageSize.width - 80)
+            .frame(width: pageSize.width - 80, height: pageHeight, alignment: .top)
             .padding(40)
             .background(Color.white)
             .environment(\.colorScheme, .light) // wydruk zawsze w jasnym motywie
@@ -197,6 +211,16 @@ struct InvoicePrintPageView: View {
     var qrCodes: InvoicePDFGenerator.InvoiceQRCodes?
     /// Etykiety wydruku (polskie albo dwujęzyczne PL/EN).
     var labels = InvoicePDFLabels(bilingual: false)
+    /// Branding firmy; `.classic` zachowuje tradycyjny wygląd.
+    var branding = InvoicePDFBranding.classic
+
+    private var primaryColor: Color {
+        InvoicePDFBranding.color(hex: branding.primaryColorHex)
+    }
+
+    private var accentColor: Color {
+        InvoicePDFBranding.color(hex: branding.accentColorHex)
+    }
 
     private var dateText: String {
         FA2Format.dateFormatter.string(from: invoice.issueDate)
@@ -240,6 +264,9 @@ struct InvoicePrintPageView: View {
             }
 
             Spacer(minLength: 0)
+            if branding.isEnabled {
+                brandedFooter
+            }
         }
         .foregroundStyle(.black)
     }
@@ -247,34 +274,60 @@ struct InvoicePrintPageView: View {
     // MARK: Nagłówki
 
     private var fullHeader: some View {
-        HStack(alignment: .top) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(documentTitle)
-                    .font(.system(size: 22, weight: .bold))
-                Text("\(labels.text("Nr", "No")) \(invoice.invoiceNumber)")
-                    .font(.system(size: 14, weight: .semibold))
-            }
-            Spacer()
-            VStack(alignment: .trailing, spacing: 2) {
-                Text("\(labels.text("Data wystawienia", "Issue date")): \(dateText)")
-                if let ksefId = invoice.ksefId {
-                    Text("Nr KSeF: \(ksefId)")
+        VStack(spacing: 8) {
+            if branding.isEnabled {
+                HStack(spacing: 0) {
+                    Rectangle().fill(primaryColor).frame(height: 5)
+                    Rectangle().fill(accentColor).frame(width: 72, height: 5)
                 }
             }
-            .font(.system(size: 9))
-            .foregroundStyle(.secondary)
+            HStack(alignment: .top, spacing: 14) {
+                if branding.isEnabled,
+                   let data = branding.logoData,
+                   let image = NSImage(data: data) {
+                    Image(nsImage: image)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 94, height: 44, alignment: .leading)
+                }
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(documentTitle)
+                        .font(.system(size: 22, weight: .bold))
+                        .foregroundStyle(branding.isEnabled ? primaryColor : .black)
+                    Text("\(labels.text("Nr", "No")) \(invoice.invoiceNumber)")
+                        .font(.system(size: 14, weight: .semibold))
+                }
+                Spacer()
+                VStack(alignment: .trailing, spacing: 2) {
+                    Text("\(labels.text("Data wystawienia", "Issue date")): \(dateText)")
+                    if let ksefId = invoice.ksefId {
+                        Text("Nr KSeF: \(ksefId)")
+                    }
+                }
+                .font(.system(size: 9))
+                .foregroundStyle(.secondary)
+            }
         }
     }
 
     /// Skrócony nagłówek stron kontynuacji.
     private var continuationHeader: some View {
-        HStack {
-            Text("\(documentTitle) \(labels.text("nr", "no")) \(invoice.invoiceNumber) — \(labels.text("ciąg dalszy", "continued"))")
-                .font(.system(size: 11, weight: .semibold))
-            Spacer()
-            Text("\(labels.text("Data wystawienia", "Issue date")): \(dateText)")
-                .font(.system(size: 9))
-                .foregroundStyle(.secondary)
+        VStack(spacing: 6) {
+            if branding.isEnabled {
+                HStack(spacing: 0) {
+                    Rectangle().fill(primaryColor).frame(height: 3)
+                    Rectangle().fill(accentColor).frame(width: 54, height: 3)
+                }
+            }
+            HStack {
+                Text("\(documentTitle) \(labels.text("nr", "no")) \(invoice.invoiceNumber) — \(labels.text("ciąg dalszy", "continued"))")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(branding.isEnabled ? primaryColor : .black)
+                Spacer()
+                Text("\(labels.text("Data wystawienia", "Issue date")): \(dateText)")
+                    .font(.system(size: 9))
+                    .foregroundStyle(.secondary)
+            }
         }
     }
 
@@ -300,6 +353,7 @@ struct InvoicePrintPageView: View {
                 }
             }
             .font(.system(size: 11))
+            .foregroundStyle(branding.isEnabled ? primaryColor : .black)
         }
 
         // Kwota słownie — standardowy element polskiej faktury
@@ -376,7 +430,7 @@ struct InvoicePrintPageView: View {
         VStack(alignment: .leading, spacing: 3) {
             Text(title)
                 .font(.system(size: 9, weight: .semibold))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(branding.isEnabled ? accentColor : .secondary)
             Text(name).font(.system(size: 11, weight: .semibold))
             if !address.isEmpty {
                 Text(address).font(.system(size: 9))
@@ -428,7 +482,30 @@ struct InvoicePrintPageView: View {
             }
         }
         .padding(8)
-        .overlay(Rectangle().strokeBorder(.gray.opacity(0.4), lineWidth: 0.5))
+        .overlay(alignment: .top) {
+            Rectangle()
+                .fill(branding.isEnabled ? primaryColor : .gray.opacity(0.4))
+                .frame(height: branding.isEnabled ? 3 : 0.5)
+        }
+        .overlay(Rectangle().strokeBorder(
+            branding.isEnabled ? primaryColor.opacity(0.45) : .gray.opacity(0.4),
+            lineWidth: 0.5
+        ))
+    }
+
+    private var brandedFooter: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            HStack(spacing: 0) {
+                Rectangle().fill(accentColor).frame(width: 72, height: 2)
+                Rectangle().fill(primaryColor.opacity(0.35)).frame(height: 1)
+            }
+            if !branding.footer.isEmpty {
+                Text(branding.footer)
+                    .font(.system(size: 8))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
     }
 
     private var documentTitle: String {

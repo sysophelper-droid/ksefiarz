@@ -28,7 +28,9 @@ Sources/KsefiarzCore/
                (bloki załącznika FA(3); na fakturze jako JSON
                w Invoice.attachmentJSON)
   Services/    KSeFService (API 2.0), KSeFCrypto, FA2XML (generator+parser), InvoiceValidator,
-               BackupService, FileExportService (NSSave/OpenPanel), InvoicePDFGenerator (+ kody QR),
+               BackupService, FileExportService (NSSave/OpenPanel), InvoicePDFGenerator (+ kody QR,
+               opcjonalny branding własnych dokumentów: logo, dwa kolory,
+               stopka na każdej stronie),
                TokenStore (token w pęku kluczy), ContractorLookupService (Biała
                lista VAT, wl-api.mf.gov.pl — publiczne, bez klucza),
                kryptografia certyfikatów: ASN1DER (koder/czytnik DER —
@@ -47,7 +49,9 @@ Sources/KsefiarzCore/
                InvoiceEmailService (okno wiadomości Mail przez
                NSSharingService; załączniki PDF/XML z katalogu tymczasowego),
                InvoicePDFGenerator ma wariant dwujęzyczny
-               (pdfData(for:bilingual:), etykiety w InvoicePDFLabels),
+               (pdfData(for:bilingual:branding:), etykiety w InvoicePDFLabels);
+               PDFBrandingLogoProcessor skaluje importowane logo do maks.
+               1200 px i koduje PNG przed zapisem Base64 w UserDefaults,
                SyncActivity (współdzielony stan synchronizacji: pasek
                boczny + ikona w pasku menu; QuickSyncRunner — ręczne
                „Pobierz z KSeF” z paska menu; MainWindowOpener — most do
@@ -61,7 +65,10 @@ Sources/KsefiarzCore/
                UserDefaults.didChangeNotification)
   Logic/       InvoiceFilter, KSeFSyncFilter, DashboardMetrics, DateRangeResolver,
                DisplayDateFilter, InvoiceNumberGenerator, AmountInWords, InvoiceCSVExporter,
-               PaymentFormPolicy, InvoiceSyncEngine (wspólny sync: ręczny,
+               PaymentFormPolicy, InvoicePDFBranding (czysta konfiguracja,
+               normalizacja #RRGGBB i reguła zastosowania tylko do własnej
+               sprzedaży; VAT RR po NIP nabywcy),
+               InvoiceSyncEngine (wspólny sync: ręczny,
                przy starcie i cykliczny — automatyka w MainContentView),
                PolishBusinessCalendar (dni robocze/święta — terminy trybów
                offline), OfflineQueueEngine (kolejka dosłań offline),
@@ -107,7 +114,9 @@ Sources/KsefiarzCore/
   Views/       MainContentView (NavigationSplitView), InvoiceListView, InvoiceDetailView,
                NewInvoiceView (nowa/edycja/korekta), NewPurchaseView (zakup
                spoza KSeF), ReportsView (sekcja Raporty), DashboardView,
-               SettingsView, HiddenInvoicesView,
+               SettingsView (zakładka Firma: import/podgląd logo,
+               ColorPicker koloru głównego i akcentu, własna stopka PDF),
+               HiddenInvoicesView,
                PermissionsView (sekcja Uprawnienia — nadawanie/odbieranie
                i przegląd dostępów KSeF),
                JPKExportView i VATUEExportView (eksport ewidencji VAT
