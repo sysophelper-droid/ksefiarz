@@ -64,8 +64,9 @@ public enum InvoicePDFGenerator {
 
         // Sztywna wysokość strony tylko przy brandingu — potrzebna, by stopka
         // marki trafiła na dół każdej strony. Bez brandingu zostawiamy układ
-        // „content-sized" jak dotąd, inaczej rozpychane `Spacer`-y zepchnęłyby
-        // numer strony na środek klasycznego wydruku.
+        // „content-sized" jak dotąd, inaczej rozpychany `Spacer` zepchnąłby
+        // dolny blok (numer strony, notka „ciąg dalszy") na środek
+        // klasycznego wydruku.
         let pageHeight: CGFloat? = appliedBranding.isEnabled ? pageSize.height - 80 : nil
 
         for (index, chunk) in chunks.enumerated() {
@@ -246,8 +247,17 @@ struct InvoicePrintPageView: View {
 
             if isLastPage {
                 summarySection
-            } else {
-                Spacer(minLength: 0)
+            }
+
+            // Jeden wspólny `Spacer` dosuwa cały dolny blok (notka „ciąg
+            // dalszy", numer strony i stopka marki) do dołu strony. Wcześniej
+            // dwa rozpychane `Spacer`-y zawieszały notkę i numer strony
+            // pośrodku wolnej przestrzeni na stronach kontynuacji (tryb
+            // z brandingiem). W trybie klasycznym strona jest content-sized,
+            // więc `Spacer` zwija się do zera i układ pozostaje bez zmian.
+            Spacer(minLength: 0)
+
+            if !isLastPage {
                 Text(labels.text("ciąg dalszy na następnej stronie…", "continued on the next page…"))
                     .font(.system(size: 8))
                     .foregroundStyle(.secondary)
@@ -263,7 +273,6 @@ struct InvoicePrintPageView: View {
                     .frame(maxWidth: .infinity, alignment: .center)
             }
 
-            Spacer(minLength: 0)
             if branding.isEnabled {
                 brandedFooter
             }

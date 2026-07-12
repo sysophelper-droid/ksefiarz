@@ -79,13 +79,6 @@ kolejność dowolna. ⚠️ operacje modyfikujące KSeF testować wyłącznie na
   koszt, formaty zamknięte.
 - [ ] E4. Wydruk wielu faktur naraz (batch PDF/druk) — jeden PDF/wydruk
   z zaznaczonych.
-- [ ] E5. Kosmetyka brandingu: na stronach kontynuacji wielostronicowej
-  faktury (tryb z brandingiem) numer strony i notka „ciąg dalszy" zawisają
-  pośrodku między dwoma rozpychanymi `Spacer`-ami. Stopka marki jest na dole
-  poprawnie — chodzi tylko o dosunięcie tych podpisów do dołu (jeden wspólny
-  `Spacer` nad blokiem „ciąg dalszy + numer strony + stopka"). Ujawnione
-  w review PR #20.
-
 #### F. Skala / wielofirmowość / UX
 
 - [ ] F1. Wielofirmowość (przełączanie kontekstu NIP) — kilka firm/NIP
@@ -104,6 +97,13 @@ kolejność dowolna. ⚠️ operacje modyfikujące KSeF testować wyłącznie na
 
 ### Logo i branding wydruków PDF (13.07.2026)
 
+- [x] E5. Kosmetyka brandingu: na stronach kontynuacji wielostronicowej
+  faktury (tryb z brandingiem) notka „ciąg dalszy" i numer strony zawisały
+  pośrodku między dwoma rozpychanymi `Spacer`-ami. Zastąpione jednym wspólnym
+  `Spacer`-em nad dolnym blokiem („ciąg dalszy" + numer strony + stopka marki),
+  który dosuwa cały blok do dołu strony. Numer strony jest teraz przy stopce
+  także na stronie ostatniej. Tryb klasyczny (content-sized) bez zmian.
+  Ujawnione w review PR #20.
 - [x] ⭐ E1. Konfigurowalny branding własnych faktur PDF: import i
   automatyczne skalowanie logo, osobny kolor główny i akcent, własna stopka
   na każdej stronie oraz pasek marki w nagłówku. Ustawienia są dostępne
