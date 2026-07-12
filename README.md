@@ -66,6 +66,14 @@ Tests/KsefiarzCoreTests/          # 352 testy (Swift Testing) — model, parser,
   Aplikacja pilnuje ważności (ostrzeżenie 30 dni przed wygaśnięciem),
   a przy niepowodzeniu loguje się zapasowo tokenem KSeF (tokeny mają
   przestać działać z końcem 2026 r.).
+- **Automatyczne odnowienie certyfikatów** — na ok. 30 dni przed końcem
+  ważności aplikacja sama składa wniosek o nowy certyfikat (typ 1 i typ 2)
+  i podmienia go w pęku kluczy, zanim stary przestanie działać. Odnowienie
+  loguje się wciąż ważnym certyfikatem typu 1 (typ 1 odnawia się nim samym,
+  póki jeszcze ważny; typ 2 — o ile istnieje ważny typ 1), więc po wygaśnięciu
+  typu 1 nowy trzeba zaimportować ręcznie. Próba jest podejmowana najwyżej raz
+  na certyfikat na dobę, a nieudana nie narusza dotychczasowego certyfikatu;
+  o wyniku informuje powiadomienie. Przełącznik w Ustawieniach → KSeF.
 - **Tryby offline (offline24 / niedostępność / awaria)** — świadome
   wystawianie faktur bez połączenia z KSeF oraz automatyczne przejście
   w offline przy braku sieci. Dokument dostaje utrwalony skrót SHA-256

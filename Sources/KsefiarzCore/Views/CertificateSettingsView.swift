@@ -11,6 +11,7 @@ struct CertificateSettingsSection: View {
     @ObservedObject private var certificateStore = KSeFCertificateStore.shared
     @AppStorage(AppSettingsKeys.nip) private var nip = ""
     @AppStorage(AppSettingsKeys.environment) private var environmentRaw = KSeFEnvironment.test.rawValue
+    @AppStorage(AppSettingsKeys.autoRenewCertificates) private var autoRenew = true
 
     @State private var isBusy = false
     @State private var statusMessage: String?
@@ -78,6 +79,9 @@ struct CertificateSettingsSection: View {
                     .font(.callout)
                     .foregroundStyle(statusIsError ? .red : .green)
             }
+
+            Toggle("Automatycznie odnawiaj certyfikaty przed wygaśnięciem", isOn: $autoRenew)
+                .help("Na ok. 30 dni przed końcem ważności aplikacja sama złoży wniosek o nowy certyfikat (typ 1 i typ 2) i podmieni go w pęku kluczy. Wymaga ważnego certyfikatu typu 1 do zalogowania — po jego wygaśnięciu odnowienie trzeba wykonać ręcznie (import z pliku).")
         } header: {
             Text("Certyfikaty KSeF")
         } footer: {
@@ -178,7 +182,7 @@ struct CertificateSettingsSection: View {
                 certificate: bootstrap
             )
             let issued = try await service.requestCertificate(
-                name: "Ksefiarz \(type == .authentication ? "uwierzytelniający" : "offline")",
+                name: KSeFService.certificateName(for: type),
                 type: type
             )
             certificateStore.save(issued, type: type)

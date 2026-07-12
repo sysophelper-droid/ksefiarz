@@ -69,4 +69,10 @@ public enum AppSettingsKeys {
     public static let demandPaymentDays = "demand.paymentDays"
     /// Ikona Ksefiarza w pasku menu (status synchronizacji i dosłań).
     public static let menuBarExtra = "ksef.menuBarExtra"
+    /// Automatyczne odnawianie certyfikatów KSeF przed wygaśnięciem
+    /// (wniosek o nowy typ 1/typ 2 i podmiana w pęku kluczy).
+    public static let autoRenewCertificates = "ksef.autoRenewCertificates"
+    /// Pamięć podjętych prób odnowienia certyfikatu (klucze z datą — dedup,
+    /// jedna próba na certyfikat na dobę).
+    public static let certificateRenewalAttemptedKeys = "ksef.certificateRenewalAttemptedKeys"
 }

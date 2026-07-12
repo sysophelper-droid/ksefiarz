@@ -75,6 +75,7 @@ public struct MainContentView: View {
     @AppStorage(AppSettingsKeys.autoBackupKeepDays) private var backupKeepDays = 30
     @AppStorage(AppSettingsKeys.notifyNewPurchases) private var notifyNewPurchases = true
     @AppStorage(AppSettingsKeys.notifyDeadlines) private var notifyDeadlines = true
+    @AppStorage(AppSettingsKeys.autoRenewCertificates) private var autoRenewCertificates = true
 
     public init() {}
 
@@ -145,6 +146,7 @@ public struct MainContentView: View {
             await reconcileOutstandingSubmissions(trigger: .launch)
             if syncOnLaunch { await syncBothKinds(trigger: .launch) }
             await postDeadlineNotifications()
+            await renewCertificatesIfNeeded()
         }
         // Powiadomienia o terminach (płatności, dosłania offline) —
         // sprawdzane co 30 minut; deduplikacja gwarantuje jedno
@@ -175,6 +177,17 @@ public struct MainContentView: View {
                 try? await Task.sleep(for: .seconds(60))
                 guard !Task.isCancelled else { return }
                 await reconcileOutstandingSubmissions(trigger: .automatic)
+            }
+        }
+        // Odnowienie certyfikatów sprawdzane cyklicznie (okno ~30 dni przed
+        // wygaśnięciem — wystarczy raz na kilka godzin; deduplikacja
+        // gwarantuje jedną próbę na certyfikat na dobę).
+        .task(id: "cert-renewal-\(autoRenewCertificates)-\(environmentRaw)") {
+            guard autoRenewCertificates else { return }
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(12 * 3600))
+                guard !Task.isCancelled else { return }
+                await renewCertificatesIfNeeded()
             }
         }
     }
@@ -310,6 +323,83 @@ public struct MainContentView: View {
             Array(DeadlineNotificationEngine.prune(delivered: updatedDelivered)),
             forKey: AppSettingsKeys.deadlineNotifiedKeys
         )
+    }
+
+    /// Automatyczne odnowienie certyfikatów KSeF: gdy któryś zbliża się do
+    /// końca ważności (okno ~30 dni), aplikacja sama składa wniosek o nowy
+    /// (typ 1 i/lub typ 2) i podmienia go w pęku kluczy. Wymaga WAŻNEGO
+    /// certyfikatu typu 1 do zalogowania podpisem XAdES — po jego wygaśnięciu
+    /// (albo bez niego) automat nic nie robi. Próby są deduplikowane
+    /// (UserDefaults) do jednej na certyfikat na dobę; niepowodzenie nie
+    /// narusza dotychczasowego certyfikatu.
+    @MainActor
+    private func renewCertificatesIfNeeded() async {
+        guard autoRenewCertificates, !myNIP.isEmpty else { return }
+        let store = KSeFCertificateStore.shared
+        // Podpisujący i środowisko USTALONE RAZ, przed sieciowym przebiegiem.
+        // W punktach `await` użytkownik mógłby przełączyć środowisko, a zapis
+        // typu 1 podmienia certyfikat w magazynie — dlatego wszystkie wnioski
+        // podpisujemy tym samym, wciąż ważnym certyfikatem typu 1 (nigdy
+        // świeżo wystawionym, który po stronie serwera może nie być aktywny),
+        // a nowe certyfikaty zapisujemy pod środowiskiem z chwili startu.
+        guard let signer = store.authenticationCertificate else { return }
+        let renewalEnvRaw = environmentRaw
+        let environment = KSeFEnvironment(rawValue: renewalEnvRaw) ?? .test
+        let nip = myNIP
+
+        let attempted = Set(
+            UserDefaults.standard.stringArray(forKey: AppSettingsKeys.certificateRenewalAttemptedKeys) ?? []
+        )
+        let candidates = CertificateRenewalEngine.candidates(
+            authentication: signer.info,
+            offline: store.offlineCertificate?.info,
+            alreadyAttempted: attempted
+        )
+        guard !candidates.isEmpty else { return }
+
+        let outcomes = await CertificateRenewalCoordinator.run(
+            candidates: candidates,
+            renew: { type in
+                // Bez tokenu: enrollment WYMAGA podpisu XAdES certyfikatem
+                // typu 1 (token dostałby 25002), więc token tylko maskowałby
+                // porażkę auth i marnował limitowany wniosek.
+                let service = KSeFService(
+                    environment: environment,
+                    nip: nip,
+                    authToken: "",
+                    certificate: signer
+                )
+                return try await service.renewCertificate(type: type)
+            },
+            save: { certificate, type in
+                store.save(certificate, type: type, environmentRaw: renewalEnvRaw)
+            }
+        )
+
+        // Zapamiętaj próby (dedup) niezależnie od wyniku — jedna próba na dobę.
+        var updatedAttempted = attempted
+        for outcome in outcomes { updatedAttempted.insert(outcome.dedupKey) }
+        UserDefaults.standard.set(
+            Array(CertificateRenewalEngine.prune(attempted: updatedAttempted)),
+            forKey: AppSettingsKeys.certificateRenewalAttemptedKeys
+        )
+
+        // Powiadomienia o wyniku (sukces i niepowodzenie).
+        let center = UNUserNotificationCenter.current()
+        let granted = (try? await center.requestAuthorization(options: [.alert, .sound, .badge])) ?? false
+        guard granted else { return }
+        for outcome in outcomes {
+            let content = UNMutableNotificationContent()
+            content.title = outcome.notificationTitle
+            content.body = outcome.notificationBody
+            content.sound = .default
+            let request = UNNotificationRequest(
+                identifier: "ksefiarz.certRenewal.\(outcome.dedupKey)",
+                content: content,
+                trigger: nil
+            )
+            try? await center.add(request)
+        }
     }
 
     /// Powiadomienie systemowe o nowych fakturach zakupowych z synchronizacji.

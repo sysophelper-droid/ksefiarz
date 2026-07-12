@@ -132,7 +132,12 @@ Sources/KsefiarzCore/
                ReportsEngine (raporty: top kontrahenci, przychody per
                towar/usługa, koszty per kategoria; CostCategories —
                podpowiedzi kategorii), MenuBarStatus (liczniki dosłań
-               i opisy dla ikony w pasku menu)
+               i opisy dla ikony w pasku menu), CertificateRenewalEngine
+               (+ CertificateRenewalCoordinator — automatyczne odnowienie
+               certyfikatów przed wygaśnięciem: typ 1 odnawia się wciąż
+               ważnym typem 1, typ 2 wymaga ważnego typu 1; dedup jednej
+               próby na dobę, zapis w pęku kluczy tylko przy sukcesie;
+               wpięte w MainContentView, przełącznik ksef.autoRenewCertificates)
   Views/       MainContentView (NavigationSplitView), InvoiceListView, InvoiceDetailView,
                NewInvoiceView (nowa/edycja/korekta), NewPurchaseView (zakup
                spoza KSeF), ReportsView (sekcja Raporty), DashboardView,

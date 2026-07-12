@@ -155,6 +155,19 @@ public extension KSeFService {
         )
     }
 
+    /// Standardowa nazwa certyfikatu nadawana przy wniosku i odnowieniu.
+    static func certificateName(for type: KSeFCertificateType) -> String {
+        "Ksefiarz \(type == .authentication ? "uwierzytelniający" : "offline")"
+    }
+
+    /// Odnawia certyfikat KSeF danego typu: składa nowy wniosek (nowa para
+    /// kluczy, CSR z aktualnych danych podmiotu) i zwraca świeży certyfikat.
+    /// Wymaga sesji uwierzytelnionej WAŻNYM certyfikatem typu 1 (podpis XAdES);
+    /// zapis nowego certyfikatu w pęku kluczy — po stronie wołającego.
+    func renewCertificate(type: KSeFCertificateType) async throws -> KSeFCertificate {
+        try await requestCertificate(name: Self.certificateName(for: type), type: type)
+    }
+
     /// Odpytuje o status wniosku do wystawienia certyfikatu (kod 200).
     private func waitForEnrollment(referenceNumber: String) async throws -> String {
         for attempt in 0..<maxPollAttempts {

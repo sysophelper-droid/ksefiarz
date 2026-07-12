@@ -13,8 +13,6 @@ Zasady pracy i wiedza projektowa są w `CLAUDE.md` — tu tylko zadania.
 
 ### Rekomendowane rozszerzenia (sesja 12.07.2026)
 
-- [ ] Automatyczne odnowienie certyfikatu KSeF: wniosek o nowy certyfikat
-  (typ 1 i 2) przed wygaśnięciem starego, podmiana w pęku kluczy.
 - [ ] Zarządzanie uprawnieniami KSeF: nadawanie/odbieranie uprawnień
   (np. biuro rachunkowe po NIP) i przegląd dostępów — API permissions.
 
@@ -80,6 +78,16 @@ Zasady pracy i wiedza projektowa są w `CLAUDE.md` — tu tylko zadania.
 - [x] Szablony i automatyzacja wystawiania: duplikowanie istniejącej faktury,
   zapisywanie szablonów, harmonogramy tygodniowe/miesięczne/roczne oraz
   obowiązkowy podgląd i ręczne zatwierdzenie przed zapisem lub wysyłką do KSeF.
+
+### Rozszerzenia (sesja 12.07.2026)
+
+- [x] Automatyczne odnowienie certyfikatu KSeF (12.07.2026): na ~30 dni przed
+  wygaśnięciem aplikacja sama składa wniosek o nowy certyfikat (typ 1 i typ 2)
+  i podmienia go w pęku kluczy (CertificateRenewalEngine + Coordinator, czysta
+  logika z testami; wpięcie w MainContentView — start + timer 12 h). Typ 1
+  odnawia się wciąż ważnym typem 1, typ 2 — o ile typ 1 ważny; dedup jednej
+  próby na certyfikat na dobę (UserDefaults), nieudana próba nie narusza
+  działającego certyfikatu, powiadomienie o wyniku, przełącznik w Ustawieniach.
 
 ### Certyfikaty i offline24 (sesja 11.07.2026)
 
