@@ -62,6 +62,12 @@ public enum InvoicePDFGenerator {
         var mediaBox = CGRect(origin: .zero, size: pageSize)
         guard let context = CGContext(consumer: consumer, mediaBox: &mediaBox, nil) else { return nil }
 
+        // Sztywna wysokość strony tylko przy brandingu — potrzebna, by stopka
+        // marki trafiła na dół każdej strony. Bez brandingu zostawiamy układ
+        // „content-sized" jak dotąd, inaczej rozpychane `Spacer`-y zepchnęłyby
+        // numer strony na środek klasycznego wydruku.
+        let pageHeight: CGFloat? = appliedBranding.isEnabled ? pageSize.height - 80 : nil
+
         for (index, chunk) in chunks.enumerated() {
             let page = InvoicePrintPageView(
                 invoice: invoice,
@@ -74,7 +80,7 @@ public enum InvoicePDFGenerator {
                 labels: labels,
                 branding: appliedBranding
             )
-            .frame(width: pageSize.width - 80, height: pageSize.height - 80, alignment: .top)
+            .frame(width: pageSize.width - 80, height: pageHeight, alignment: .top)
             .padding(40)
             .background(Color.white)
             .environment(\.colorScheme, .light) // wydruk zawsze w jasnym motywie
