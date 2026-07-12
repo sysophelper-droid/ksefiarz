@@ -13,6 +13,13 @@ public struct SettingsView: View {
     @AppStorage(AppSettingsKeys.sellerAddress) private var sellerAddress = ""
     @AppStorage(AppSettingsKeys.nip) private var nip = ""
     @AppStorage(AppSettingsKeys.bankAccount) private var bankAccount = ""
+    @AppStorage(AppSettingsKeys.pdfBrandingEnabled) private var pdfBrandingEnabled = false
+    @AppStorage(AppSettingsKeys.pdfBrandingLogo) private var pdfBrandingLogo = ""
+    @AppStorage(AppSettingsKeys.pdfBrandingPrimaryColor) private var pdfBrandingPrimaryColor = InvoicePDFBranding.defaultPrimaryHex
+    @AppStorage(AppSettingsKeys.pdfBrandingAccentColor) private var pdfBrandingAccentColor = InvoicePDFBranding.defaultAccentHex
+    @AppStorage(AppSettingsKeys.pdfBrandingFooter) private var pdfBrandingFooter = ""
+    @State private var isChoosingBrandingLogo = false
+    @State private var brandingLogoError: String?
     @ObservedObject private var tokenStore = TokenStore.shared
     @AppStorage(AppSettingsKeys.syncOnLaunch) private var syncOnLaunch = false
     @AppStorage(AppSettingsKeys.autoSync) private var autoSync = false
@@ -89,6 +96,8 @@ public struct SettingsView: View {
     private static let searchIndex: [(label: String, tab: SettingsTab)] = [
         ("Nazwa firmy", .company), ("NIP", .company), ("Adres firmy", .company),
         ("Rachunek bankowy (domyślny)", .company),
+        ("Branding PDF", .company), ("Logo na PDF", .company),
+        ("Kolory PDF", .company), ("Stopka PDF", .company),
         ("Token autoryzacyjny KSeF", .ksef), ("Środowisko KSeF", .ksef),
         ("Certyfikaty KSeF (typ 1 / typ 2)", .ksef),
         ("Import certyfikatu z pliku", .ksef),
@@ -226,6 +235,20 @@ public struct SettingsView: View {
             }
         }
         .navigationTitle("Ustawienia")
+        .fileImporter(
+            isPresented: $isChoosingBrandingLogo,
+            allowedContentTypes: [.image],
+            allowsMultipleSelection: false,
+            onCompletion: importBrandingLogo
+        )
+        .alert("Nie udało się wczytać logo", isPresented: Binding(
+            get: { brandingLogoError != nil },
+            set: { if !$0 { brandingLogoError = nil } }
+        )) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(brandingLogoError ?? "")
+        }
     }
 
     // MARK: Sekcje zakładek
@@ -246,6 +269,61 @@ public struct SettingsView: View {
                 .listRowBackground(highlight("Adres firmy"))
                 TextField("Rachunek bankowy", text: $bankAccount, prompt: Text("26 cyfr (NRB) — na wystawianych fakturach"))
                 .listRowBackground(highlight("Rachunek bankowy (domyślny)"))
+            }
+
+            Section {
+                Toggle("Używaj brandingu na własnych fakturach", isOn: $pdfBrandingEnabled)
+                    .listRowBackground(highlight("Branding PDF"))
+
+                HStack(alignment: .center, spacing: 14) {
+                    brandingLogoPreview
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(pdfBrandingLogo.isEmpty ? "Brak logo" : "Logo firmy")
+                            .font(.callout.weight(.medium))
+                        HStack {
+                            Button(pdfBrandingLogo.isEmpty ? "Wybierz logo…" : "Zmień logo…") {
+                                isChoosingBrandingLogo = true
+                            }
+                            if !pdfBrandingLogo.isEmpty {
+                                Button("Usuń", role: .destructive) {
+                                    pdfBrandingLogo = ""
+                                }
+                            }
+                        }
+                    }
+                    Spacer()
+                }
+                .disabled(!pdfBrandingEnabled)
+                .listRowBackground(highlight("Logo na PDF"))
+
+                ColorPicker("Kolor główny", selection: colorBinding(
+                    hex: $pdfBrandingPrimaryColor,
+                    fallback: InvoicePDFBranding.defaultPrimaryHex
+                ), supportsOpacity: false)
+                .disabled(!pdfBrandingEnabled)
+                .listRowBackground(highlight("Kolory PDF"))
+                ColorPicker("Kolor akcentu", selection: colorBinding(
+                    hex: $pdfBrandingAccentColor,
+                    fallback: InvoicePDFBranding.defaultAccentHex
+                ), supportsOpacity: false)
+                .disabled(!pdfBrandingEnabled)
+                .listRowBackground(highlight("Kolory PDF"))
+
+                TextField(
+                    "Własna stopka",
+                    text: $pdfBrandingFooter,
+                    prompt: Text("np. Dziękujemy za współpracę • www.twojafirma.pl"),
+                    axis: .vertical
+                )
+                .lineLimit(2...4)
+                .disabled(!pdfBrandingEnabled)
+                .listRowBackground(highlight("Stopka PDF"))
+            } header: {
+                Text("Branding wydruków PDF")
+            } footer: {
+                Text("Logo, kolory i stopka pojawią się tylko na fakturach Twojej firmy. Pobrane faktury kosztowe zachowują wygląd wystawcy. Logo zostanie pomniejszone i zapisane w kopii zapasowej razem z pozostałymi ustawieniami.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
     }
 
@@ -477,6 +555,70 @@ public struct SettingsView: View {
             } else {
                 Color.clear
             }
+        }
+    }
+
+    /// Miniatura logo w ustawieniach; puste miejsce ma celowy, dokumentowy
+    /// charakter i pokazuje użytkownikowi docelowe proporcje znaku na PDF.
+    @ViewBuilder
+    private var brandingLogoPreview: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 8)
+                .fill(.quaternary.opacity(0.45))
+            if let data = Data(base64Encoded: pdfBrandingLogo),
+               let image = NSImage(data: data) {
+                Image(nsImage: image)
+                    .resizable()
+                    .scaledToFit()
+                    .padding(8)
+            } else {
+                Image(systemName: "building.2.crop.circle")
+                    .font(.system(size: 24))
+                    .foregroundStyle(.tertiary)
+            }
+        }
+        .frame(width: 112, height: 58)
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .strokeBorder(.separator.opacity(0.5), lineWidth: 0.5)
+        )
+    }
+
+    /// Wiązanie ColorPicker ↔ zapis #RRGGBB w AppStorage.
+    private func colorBinding(hex: Binding<String>, fallback: String) -> Binding<Color> {
+        Binding(
+            get: { InvoicePDFBranding.color(hex: hex.wrappedValue) },
+            set: { color in
+                guard let rgb = NSColor(color).usingColorSpace(.sRGB) else {
+                    hex.wrappedValue = fallback
+                    return
+                }
+                hex.wrappedValue = String(
+                    format: "#%02X%02X%02X",
+                    Int((rgb.redComponent * 255).rounded()),
+                    Int((rgb.greenComponent * 255).rounded()),
+                    Int((rgb.blueComponent * 255).rounded())
+                )
+            }
+        )
+    }
+
+    /// Importuje obraz z panelu systemowego i zapisuje jego lekką wersję PNG.
+    private func importBrandingLogo(_ result: Result<[URL], Error>) {
+        do {
+            guard let url = try result.get().first else { return }
+            let hasAccess = url.startAccessingSecurityScopedResource()
+            defer { if hasAccess { url.stopAccessingSecurityScopedResource() } }
+            let source = try Data(contentsOf: url)
+            guard let normalized = PDFBrandingLogoProcessor.normalizedPNG(from: source) else {
+                brandingLogoError = source.count > PDFBrandingLogoProcessor.maximumSourceBytes
+                    ? "Plik jest większy niż 10 MB. Wybierz mniejszy obraz."
+                    : "Wybrany plik nie jest obsługiwanym obrazem. Użyj PNG, JPEG, HEIC albo TIFF."
+                return
+            }
+            pdfBrandingLogo = normalized.base64EncodedString()
+        } catch {
+            brandingLogoError = error.localizedDescription
         }
     }
 

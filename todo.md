@@ -72,8 +72,6 @@ kolejność dowolna. ⚠️ operacje modyfikujące KSeF testować wyłącznie na
 
 #### E. Dokumenty / wygląd
 
-- [ ] ⭐ E1. Logo i branding na PDF — logo firmy, kolory, własna stopka
-  (dziś wydruk „klasyczny", bez personalizacji).
 - [ ] E2. Faktura proforma — dokument handlowy (nie idzie do KSeF),
   z konwersją proforma → właściwa faktura.
 - [ ] E3. Eksport do formatów programów księgowych — struktura importowalna
@@ -97,6 +95,15 @@ kolejność dowolna. ⚠️ operacje modyfikujące KSeF testować wyłącznie na
   (dziś zaszyte PL/EN).
 
 ## Zrealizowane
+
+### Logo i branding wydruków PDF (13.07.2026)
+
+- [x] ⭐ E1. Konfigurowalny branding własnych faktur PDF: import i
+  automatyczne skalowanie logo, osobny kolor główny i akcent, własna stopka
+  na każdej stronie oraz pasek marki w nagłówku. Ustawienia są dostępne
+  w zakładce Firma i wchodzą do kopii zapasowej. Reguła po NIP chroni
+  pobrane faktury kosztowe przed oznaczeniem logo użytkownika; VAT RR jest
+  rozpoznawany po firmie występującej jako nabywca/wystawca dokumentu.
 
 ### JPK_V7K — kwartalny wariant ewidencji VAT (12.07.2026)
 

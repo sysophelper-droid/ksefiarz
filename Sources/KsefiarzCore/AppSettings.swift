@@ -14,6 +14,15 @@ public enum AppSettingsKeys {
     public static let nip = "ksef.nip"
     /// Numer rachunku bankowego do płatności (na wystawianych fakturach).
     public static let bankAccount = "ksef.bankAccount"
+    /// Czy wydruki własnych faktur mają używać brandingu firmy.
+    public static let pdfBrandingEnabled = "pdf.branding.enabled"
+    /// Logo firmy jako znormalizowany PNG zakodowany Base64.
+    public static let pdfBrandingLogo = "pdf.branding.logo"
+    /// Kolory brandingu zapisane jako RGB w formacie #RRGGBB.
+    public static let pdfBrandingPrimaryColor = "pdf.branding.primaryColor"
+    public static let pdfBrandingAccentColor = "pdf.branding.accentColor"
+    /// Własna stopka umieszczana na każdej stronie wydruku faktury.
+    public static let pdfBrandingFooter = "pdf.branding.footer"
     /// Token autoryzacyjny KSeF.
     public static let token = "ksef.token"
     /// Wybrane środowisko KSeF (rawValue `KSeFEnvironment`).

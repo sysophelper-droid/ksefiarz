@@ -160,9 +160,15 @@ Tests/KsefiarzCoreTests/          # 608 testów (Swift Testing) — model, parse
   `~/Library/Application Support/Ksefiarz/Backups/` z konfigurowalną
   rotacją: liczba przechowywanych kopii albo liczba dni wstecz.
 - **Eksport** — zapis oryginalnego XML e-Faktury, generowanie PDF
-  z klasycznym układem faktury (z kwotą słownie; długie faktury dzielone
-  na wiele stron z numeracją) oraz eksport widocznej listy faktur do CSV
-  (format zgodny z polskim Excelem).
+  z kwotą słownie (długie faktury są dzielone na wiele stron z numeracją)
+  oraz eksport widocznej listy faktur do CSV (format zgodny z polskim
+  Excelem).
+- **Logo i branding PDF** — w Ustawieniach → Firma można włączyć logo,
+  wybrać kolor główny i akcent oraz wpisać własną stopkę drukowaną na każdej
+  stronie. Logo jest automatycznie skalowane, a konfiguracja trafia do kopii
+  zapasowej. Branding obejmuje wyłącznie dokumenty własnej firmy (dla VAT RR:
+  firmy jako nabywcy/wystawcy), więc pobrane faktury kosztowe nie dostają
+  omyłkowo obcego znaku.
 - **Dwujęzyczny PDF (PL/EN)** — dla kontrahentów zagranicznych: wariant
   wydruku z etykietami w obu językach („Sprzedawca / Seller”, „Do zapłaty /
   Total due”…, angielskie nazwy form płatności). Wybór w menu „Eksportuj
@@ -343,7 +349,7 @@ Wszystkie dane pozostają lokalnie na Twoim komputerze:
 | Dane | Lokalizacja |
 | --- | --- |
 | Baza aplikacji (SwiftData/SQLite): faktury, pozycje, statusy wysyłki, surowe XML i UPO, szablony i harmonogramy | `~/Library/Application Support/Ksefiarz/Ksefiarz.store` (+ pliki `-wal`, `-shm`) |
-| Ustawienia: dane firmy, środowisko, numeracja, filtry | `~/Library/Preferences/pl.itkrak.ksefiarz.plist` |
+| Ustawienia: dane firmy, branding PDF (w tym pomniejszone logo), środowisko, numeracja, filtry | `~/Library/Preferences/pl.itkrak.ksefiarz.plist` |
 | **Token KSeF** | pęk kluczy macOS (Keychain), pozycja `pl.itkrak.ksefiarz` |
 | **Certyfikaty KSeF (typ 1 i 2) z kluczami prywatnymi** | pęk kluczy macOS, pozycje `ksef.cert.*` w usłudze `pl.itkrak.ksefiarz` (osobno per środowisko) |
 | Eksporty (XML / PDF / CSV / UPO / kopia zapasowa) | lokalizacja wybrana w panelu zapisu |
