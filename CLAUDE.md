@@ -100,7 +100,12 @@ Sources/KsefiarzCore/
                (pdfData(for:bilingual:), etykiety w InvoicePDFLabels),
                SyncActivity (współdzielony stan synchronizacji: pasek
                boczny + ikona w pasku menu; QuickSyncRunner — ręczne
-               „Pobierz z KSeF” z paska menu)
+               „Pobierz z KSeF” z paska menu; MainWindowOpener — most do
+               openWindow dla ikony w pasku menu),
+               MenuBarController (ikona w pasku menu jako AppKit NSStatusItem,
+               NIE scena SwiftUI MenuBarExtra — patrz niżej; @MainActor,
+               uruchamiany z InvoiceApp.init() i MainContentView.onAppear,
+               reużywa MenuBarStatus/SyncActivity/QuickSyncRunner)
   Logic/       InvoiceFilter, KSeFSyncFilter, DashboardMetrics, DateRangeResolver,
                DisplayDateFilter, InvoiceNumberGenerator, AmountInWords, InvoiceCSVExporter,
                PaymentFormPolicy, InvoiceSyncEngine (wspólny sync: ręczny,
@@ -130,11 +135,21 @@ Sources/KsefiarzCore/
                i opisy dla ikony w pasku menu)
   Views/       MainContentView (NavigationSplitView), InvoiceListView, InvoiceDetailView,
                NewInvoiceView (nowa/edycja/korekta), NewPurchaseView (zakup
-               spoza KSeF), ReportsView (sekcja Raporty), MenuBarExtraView
-               (+ MenuBarExtraLabel — scena MenuBarExtra w InvoiceApp,
-               przełącznik ksef.menuBarExtra), DashboardView, SettingsView,
-               HiddenInvoicesView,
+               spoza KSeF), ReportsView (sekcja Raporty), DashboardView,
+               SettingsView, HiddenInvoicesView,
                DictionariesView (+ ContractorsView/ProductsView/BankAccountsView)
+               // Ikona w pasku menu: MenuBarController (Services) na AppKit
+               // NSStatusItem, NIE scena SwiftUI MenuBarExtra — na macOS 26
+               // współistnienie MenuBarExtra z NavigationSplitView wpada
+               // w nieskończoną pętlę renderowania (100% CPU, zawieszenie).
+               // NSStatusItem nie dotyka grafu scen SwiftUI. Kontroler startuje
+               // z InvoiceApp.init() (Task @MainActor) ORAZ MainContentView
+               // .onAppear (idempotentnie) — bo applicationDidFinishLaunching
+               // przy @NSApplicationDelegateAdaptor bywa pomijany, a onAppear
+               // na NavigationSplitView nie jest niezawodny. Przełącznik
+               // ksef.menuBarExtra dodaje/usuwa ikonę na żywo (obserwacja
+               // UserDefaults.didChangeNotification). Ponowne otwarcie okna:
+               // MainWindowOpener.
 Tests/KsefiarzCoreTests/               # Swift Testing (#expect/#require), nazwy PO POLSKU
 Scripts/build-app.sh                   # składanie bundla .app
 ```

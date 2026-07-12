@@ -55,6 +55,9 @@ public struct MainContentView: View {
     @ObservedObject private var syncActivity = SyncActivity.shared
 
     @Environment(\.modelContext) private var modelContext
+    /// Akcja otwierania okna — udostępniana AppKit-owej ikonie w pasku menu
+    /// (patrz `MainWindowOpener`), by „Otwórz Ksefiarza” działało po zamknięciu okna.
+    @Environment(\.openWindow) private var openWindow
     @ObservedObject private var tokenStore = TokenStore.shared
     @AppStorage(AppSettingsKeys.nip) private var myNIP = ""
     @AppStorage(AppSettingsKeys.environment) private var environmentRaw = KSeFEnvironment.test.rawValue
@@ -128,6 +131,14 @@ public struct MainContentView: View {
             }
         }
         .frame(minWidth: 920, minHeight: 580)
+        // Udostępnij ikonie w pasku menu akcję otwarcia okna (NSStatusItem
+        // nie ma dostępu do środowiskowego `openWindow`) i uruchom kontroler
+        // ikony (tu jest dostęp do modelContext — delegat AppKit przy
+        // @NSApplicationDelegateAdaptor nie jest gwarantowany).
+        .onAppear {
+            MainWindowOpener.open = { openWindow(id: "main") }
+            MenuBarController.shared.start(context: modelContext)
+        }
         // Kopia zapasowa PRZED synchronizacją — utrwala stan sprzed zmian.
         .task {
             if autoBackup { performAutoBackup() }

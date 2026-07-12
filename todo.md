@@ -152,6 +152,12 @@ Zasady pracy i wiedza projektowa są w `CLAUDE.md` — tu tylko zadania.
   oczekujących i zaległych dosłań offline (czerwony trójkąt po terminie),
   szybkie „Pobierz z KSeF” i powrót do okna aplikacji; przełącznik
   w Ustawieniach → Synchronizacja (MenuBarStatus + SyncActivity).
+  - [x] NAPRAWA (12.07.2026): pierwsza wersja używała sceny SwiftUI
+    `MenuBarExtra`, która na macOS 26 razem z `NavigationSplitView`
+    wpadała w nieskończoną pętlę renderowania (100% CPU, zawieszenie
+    aplikacji — niezależnie od przełącznika, bo scena była zawsze
+    deklarowana). Przepisane na AppKit `NSStatusItem` w AppDelegate —
+    bez dotykania grafu scen SwiftUI. Ta sama funkcjonalność.
 - [x] Raporty sprzedaży i kosztów (12.07.2026): sekcja „Raporty” — top
   kontrahenci (wykres + tabela), przychody per towar/usługa, koszty per
   kategoria; pole `costCategory` na zakupach (edycja w szczegółach

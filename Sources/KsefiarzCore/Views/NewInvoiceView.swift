@@ -480,18 +480,22 @@ public struct NewInvoiceView: View {
 
             Divider()
 
-            // Pasek przycisków akcji.
+            // Pasek przycisków akcji. `fixedSize` na przyciskach i pickerze
+            // zapobiega obcinaniu etykiet („Zapisz jak…”, „Wystaw i…”) —
+            // arkusz rozszerza się do pełnych podpisów zamiast je skracać.
             HStack {
                 Button("Anuluj", role: .cancel) { dismiss() }
                     .keyboardShortcut(.cancelAction)
+                    .fixedSize()
                 if !isCorrectionDocument {
                     Button("Zapisz jako szablon") {
                         templateName = buyerName.isEmpty ? "Nowy szablon" : buyerName
                         showingTemplateName = true
                     }
+                    .fixedSize()
                     .disabled(isSending)
                 }
-                Spacer()
+                Spacer(minLength: 12)
                 Picker("Tryb", selection: $issueMode) {
                     ForEach(IssueMode.allCases) { mode in
                         Text(mode.displayName).tag(mode)
@@ -501,6 +505,7 @@ public struct NewInvoiceView: View {
                 .disabled(isSending)
                 .help("Tryby offline tworzą dokument od razu (z kodami QR na wydruku) i dosyłają go automatycznie. Termin dosłania: offline24 — następny dzień roboczy; niedostępność KSeF — następny dzień roboczy po jej zakończeniu; awaria KSeF — 7 dni roboczych od jej zakończenia (komunikaty MF w BIP).")
                 Button("Zapisz lokalnie") { saveLocally() }
+                    .fixedSize()
                     .disabled(isSending)
                 Button {
                     if let reason = issueMode.offlineReason {
@@ -515,6 +520,7 @@ public struct NewInvoiceView: View {
                         Text(issueMode == .online ? "Wystaw i wyślij do KSeF" : "Wystaw offline (doślij później)")
                     }
                 }
+                .fixedSize()
                 .keyboardShortcut(.defaultAction)
                 .buttonStyle(.borderedProminent)
                 .disabled(isSending)
@@ -522,7 +528,7 @@ public struct NewInvoiceView: View {
             .padding()
         }
         .navigationTitle(formTitle)
-        .frame(minWidth: 640, minHeight: 700)
+        .frame(minWidth: 820, minHeight: 700)
         // Pozycja z załącznika 15 (ze słownika) podpowiada włączenie MPP;
         // użytkownik może je wyłączyć ręcznie.
         .onChange(of: lines.contains(where: \.isAttachment15)) { _, hasAttachment15 in

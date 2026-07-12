@@ -26,6 +26,15 @@ public final class SyncActivity: ObservableObject {
     }
 }
 
+/// Most do ponownego otwarcia głównego okna z poziomu AppKit (ikona
+/// w pasku menu jest NSStatusItem-em, więc nie ma dostępu do środowiskowej
+/// akcji `openWindow`). Główne okno zapisuje tu swój domknięcie otwierające,
+/// a AppDelegate go wywołuje. `nil`, dopóki okno nie zostało zbudowane.
+@MainActor
+public enum MainWindowOpener {
+    public static var open: (() -> Void)?
+}
+
 /// Ręczna synchronizacja „wszystko naraz” dla paska menu: domknięcie
 /// wysyłek (kolejka offline + statusy + UPO) oraz pobranie faktur
 /// sprzedażowych i zakupowych z zakresu dat z Ustawień. Działa jak przycisk
