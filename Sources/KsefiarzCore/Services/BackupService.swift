@@ -83,6 +83,14 @@ public struct BackupInvoice: Codable, Equatable, Sendable {
     public var emailSentTo: String?
     /// Pole od wersji 6 — kategoria kosztu (raporty zakupów).
     public var costCategory: String?
+    /// Pola od wersji 8 — lokalna klasyfikacja podatkowa KPiR.
+    public var isExcludedFromKPiR: Bool?
+    public var kpirColumnRaw: String?
+    public var kpirEventDate: Date?
+    public var kpirDescription: String?
+    public var kpirNotes: String?
+    public var kpirAmountOverride: Double?
+    public var kpirResearchDevelopmentCost: Double?
 }
 
 /// Wpłata do faktury w kopii zapasowej.
@@ -201,9 +209,9 @@ public struct BackupFile: Codable, Sendable {
 /// pobierania wszystkiego z KSeF.
 public enum BackupService {
 
-    /// Bieżąca wersja formatu pliku (7: + klasa/jakość pozycji VAT RR).
+    /// Bieżąca wersja formatu pliku (8: + klasyfikacja KPiR faktur).
     /// Starsze pliki są nadal poprawnie importowane.
-    public static let currentVersion = 7
+    public static let currentVersion = 8
 
     /// Klucze ustawień obejmowane kopią zapasową.
     /// Tokenu KSeF celowo tu nie ma — sekret żyje w pęku kluczy i nie może
@@ -373,6 +381,13 @@ public enum BackupService {
         invoice.emailSentAt = backup.emailSentAt
         invoice.emailSentTo = backup.emailSentTo ?? ""
         invoice.costCategory = backup.costCategory ?? ""
+        invoice.isExcludedFromKPiR = backup.isExcludedFromKPiR ?? false
+        invoice.kpirColumnRaw = backup.kpirColumnRaw ?? ""
+        invoice.kpirEventDate = backup.kpirEventDate
+        invoice.kpirDescription = backup.kpirDescription ?? ""
+        invoice.kpirNotes = backup.kpirNotes ?? ""
+        invoice.kpirAmountOverride = backup.kpirAmountOverride
+        invoice.kpirResearchDevelopmentCost = backup.kpirResearchDevelopmentCost ?? 0
         return invoice
     }
 
@@ -622,7 +637,15 @@ public enum BackupService {
             attachmentJSON: invoice.attachmentJSON.isEmpty ? nil : invoice.attachmentJSON,
             emailSentAt: invoice.emailSentAt,
             emailSentTo: invoice.emailSentTo.isEmpty ? nil : invoice.emailSentTo,
-            costCategory: invoice.costCategory.isEmpty ? nil : invoice.costCategory
+            costCategory: invoice.costCategory.isEmpty ? nil : invoice.costCategory,
+            isExcludedFromKPiR: invoice.isExcludedFromKPiR ? true : nil,
+            kpirColumnRaw: invoice.kpirColumnRaw.isEmpty ? nil : invoice.kpirColumnRaw,
+            kpirEventDate: invoice.kpirEventDate,
+            kpirDescription: invoice.kpirDescription.isEmpty ? nil : invoice.kpirDescription,
+            kpirNotes: invoice.kpirNotes.isEmpty ? nil : invoice.kpirNotes,
+            kpirAmountOverride: invoice.kpirAmountOverride,
+            kpirResearchDevelopmentCost: invoice.kpirResearchDevelopmentCost == 0
+                ? nil : invoice.kpirResearchDevelopmentCost
         )
     }
 

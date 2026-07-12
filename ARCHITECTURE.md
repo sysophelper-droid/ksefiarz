@@ -19,7 +19,9 @@ Sources/KsefiarzCore/
                (+ init(from: Invoice)), ManualPurchaseDraft (zakupy spoza
                KSeF: walidacja + makeInvoice/apply; Invoice.isManualPurchase
                = zakup bez ksefId, edytowalny/usuwalny;
-               Invoice.costCategory — kategoria kosztu do raportów),
+               Invoice.costCategory — kategoria kosztu do raportów;
+               lokalne pola kpir* + isExcludedFromKPiR — klasyfikacja
+               podatkowa bez modyfikowania treści dokumentu KSeF),
                słowniki: Contractor (+ prefersBilingualDocuments — PDF
                PL/EN i angielski e-mail), Product,
                BankAccount (@Model, dane tylko PODSTAWIANE do faktur —
@@ -28,7 +30,8 @@ Sources/KsefiarzCore/
                (bloki załącznika FA(3); na fakturze jako JSON
                w Invoice.attachmentJSON)
   Services/    KSeFService (API 2.0), KSeFCrypto, FA2XML (generator+parser), InvoiceValidator,
-               BackupService, FileExportService (NSSave/OpenPanel), InvoicePDFGenerator (+ kody QR,
+               BackupService (format v8 obejmuje metadane KPiR),
+               FileExportService (NSSave/OpenPanel), InvoicePDFGenerator (+ kody QR,
                opcjonalny branding własnych dokumentów: logo, dwa kolory,
                stopka na każdej stronie),
                TokenStore (token w pęku kluczy), ContractorLookupService (Biała
@@ -99,6 +102,10 @@ Sources/KsefiarzCore/
                poza VAT-UE),
                PaymentDemandEngine (odsetki od salda, pozycje wezwań;
                PDF w Services/PaymentDemandPDFGenerator),
+               KPiREngine (ewidencja KPiR według wzoru od 2026 r.:
+               kolumny 1–19, klasyfikacja faktur do kol. 9/10/12–15,
+               przeliczenie PLN, podsumowania okresu i KPiRCSVExporter;
+               ukryte faktury zawsze pomijane),
                ReportsEngine (raporty: top kontrahenci, przychody per
                towar/usługa, koszty per kategoria; CostCategories —
                podpowiedzi kategorii), MenuBarStatus (liczniki dosłań
@@ -119,12 +126,32 @@ Sources/KsefiarzCore/
                HiddenInvoicesView,
                PermissionsView (sekcja Uprawnienia — nadawanie/odbieranie
                i przegląd dostępów KSeF),
+               KPiRView (tabela, edycja lokalnej klasyfikacji i CSV),
                JPKExportView i VATUEExportView (eksport ewidencji VAT
                z menu „Ewidencje” na listach faktur),
                DictionariesView (+ ContractorsView/ProductsView/BankAccountsView)
 Tests/KsefiarzCoreTests/               # Swift Testing (#expect/#require), nazwy PO POLSKU
 Scripts/build-app.sh                   # składanie bundla .app
 ```
+
+## KPiR (wzór od 2026 r.)
+
+- Źródłem układu jest rozporządzenie Ministra Finansów i Gospodarki
+  z 6 września 2025 r. (Dz.U. 2025 poz. 1299), obowiązujące od 1.01.2026:
+  <https://eli.gov.pl/eli/DU/2025/1299/ogl>.
+- Wpis jest wyprowadzany z widocznej faktury. Data to lokalna korekta KPiR,
+  następnie data sprzedaży, a na końcu data wystawienia. Kwota domyślna to
+  netto w PLN (`DashboardAnalytics.inPLN`); ręczne `kpirAmountOverride`
+  pozwala uwzględnić częściowy koszt lub nieodliczalny VAT.
+- Sprzedaż domyślnie trafia do kolumny 9, a zakup do 15. Użytkownik może
+  wybrać właściwą kolumnę 9/10 albo 12–15. Kolumny 11 i 16 są wyliczane;
+  kolumna 18 przechowuje informacyjną część B+R, kolumna 19 — uwagi.
+- Gdy kontrahent ma identyfikator podatkowy (kol. 5), eksport pozostawia
+  nazwę i adres (kol. 6–7) puste zgodnie z objaśnieniami wzoru.
+- `isExcludedFromKPiR` jest niezależne od ukrycia. Dokumenty ukryte są
+  bezwarunkowo pomijane; wykluczone można roboczo pokazać i przywrócić.
+- CSV jest pełnym, 19-kolumnowym eksportem roboczym, nie strukturą
+  JPK_PKPIR. Metadane KPiR są objęte `BackupService` od wersji 8.
 
 ## API KSeF 2.0 — fakty krytyczne
 

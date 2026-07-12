@@ -41,7 +41,8 @@ Sources/
     │   ├── InvoiceFilter.swift   # filtrowanie list (status płatności, wyszukiwarka)
     │   ├── DashboardMetrics.swift# agregaty Kokpitu (ukryte faktury pomijane)
     │   ├── PermissionsEngine.swift # walidacja i normalizacja uprawnień KSeF
-    │   └── InvoiceAutomationEngine.swift # duplikaty i terminy cykli
+    │   ├── InvoiceAutomationEngine.swift # duplikaty i terminy cykli
+    │   └── KPiREngine.swift       # KPiR 2026: klasyfikacja, sumy i CSV 1–19
     └── Views/
         ├── MainContentView.swift # NavigationSplitView + pasek boczny
         ├── DashboardView.swift   # Kokpit: podsumowania, płatności na 7 dni
@@ -52,7 +53,7 @@ Sources/
         ├── InvoiceAutomationView.swift # szablony, cykle i kolejka zatwierdzeń
         ├── HiddenInvoicesView.swift # archiwum „Nieuprawnione / Ukryte”
         └── SettingsView.swift    # NIP, token KSeF, środowisko
-Tests/KsefiarzCoreTests/          # 616 testów (Swift Testing) — model, parser, usługa, kryptografia, logika
+Tests/KsefiarzCoreTests/          # 623 testy (Swift Testing) — model, parser, usługa, kryptografia, logika
 ```
 
 ## Funkcje
@@ -251,6 +252,16 @@ Tests/KsefiarzCoreTests/          # 616 testów (Swift Testing) — model, parse
   w szczegółach faktury zakupowej (podpowiedzi z listy typowych i już
   użytych) albo przy ręcznym dodawaniu zakupu. Kwoty w PLN po kursie
   z faktury; okres analizy wybierany jak w Kokpicie.
+- **KPiR — Księga Przychodów i Rozchodów** (osobna sekcja w pasku
+  bocznym) — ewidencja dla zasad ogólnych i podatku liniowego zgodna
+  z 19-kolumnowym wzorem obowiązującym od 2026 r. Automatycznie ujmuje
+  widoczne faktury sprzedażowe i zakupowe, przelicza kwoty walutowe na PLN,
+  pokazuje przychód, koszty i dochód dla miesiąca lub roku oraz pozwala
+  skorygować lokalną klasyfikację: datę zdarzenia, opis, kolumnę 9/10/12–15,
+  kwotę podatkową, koszt B+R (kol. 18), uwagi i wykluczenie z księgi.
+  Eksport CSV zawiera pełne kolumny 1–19, w tym numer KSeF; ukryte faktury
+  nigdy nie wchodzą do ewidencji. CSV jest materiałem roboczym do
+  weryfikacji księgowej — nie jest plikiem JPK_PKPIR.
 - **Rozbudowany Kokpit** — oprócz podsumowań kwot i najbliższych płatności:
   VAT należny/naliczony/saldo w analizowanym okresie, wykres przepływów
   pieniężnych z ostatnich 6 miesięcy (wg ewidencji wpłat), struktura wiekowa

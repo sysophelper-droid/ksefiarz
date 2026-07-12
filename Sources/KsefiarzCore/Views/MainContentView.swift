@@ -8,6 +8,7 @@ public enum SidebarSection: String, CaseIterable, Identifiable, Hashable {
     case sales
     case purchases
     case reports
+    case kpir
     case dictionaries
     case automation
     case syncCenter
@@ -23,6 +24,7 @@ public enum SidebarSection: String, CaseIterable, Identifiable, Hashable {
         case .sales: return "Faktury Sprzedaży"
         case .purchases: return "Faktury Zakupu"
         case .reports: return "Raporty"
+        case .kpir: return "KPiR"
         case .dictionaries: return "Słowniki"
         case .automation: return "Szablony i cykle"
         case .syncCenter: return "Synchronizacja"
@@ -38,6 +40,7 @@ public enum SidebarSection: String, CaseIterable, Identifiable, Hashable {
         case .sales: return "arrow.up.doc"
         case .purchases: return "arrow.down.doc"
         case .reports: return "chart.bar.xaxis"
+        case .kpir: return "books.vertical"
         case .dictionaries: return "text.book.closed"
         case .automation: return "calendar.badge.clock"
         case .syncCenter: return "arrow.triangle.2.circlepath"
@@ -122,6 +125,8 @@ public struct MainContentView: View {
                 InvoiceListView(kind: .purchase)
             case .reports:
                 ReportsView()
+            case .kpir:
+                KPiRView()
             case .dictionaries:
                 DictionariesView()
             case .automation:

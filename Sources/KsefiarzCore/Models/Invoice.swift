@@ -196,6 +196,20 @@ public final class Invoice {
     /// Pusta = „Bez kategorii”. Wartość domyślna obowiązkowa (migracja bazy).
     public var costCategory: String = ""
 
+    /// Lokalne metadane KPiR. Nie zmieniają treści faktury ani dokumentu KSeF;
+    /// pozwalają księgowo zaklasyfikować dokument według wzoru obowiązującego
+    /// od 2026 r. Puste wartości oznaczają automatyczne wyprowadzenie z faktury.
+    public var isExcludedFromKPiR: Bool = false
+    public var kpirColumnRaw: String = ""
+    public var kpirEventDate: Date? = nil
+    public var kpirDescription: String = ""
+    public var kpirNotes: String = ""
+    /// Kwota w PLN przyjęta do KPiR; nil = kwota netto przeliczona kursem
+    /// faktury. Umożliwia ujęcie części kosztu albo VAT niepodlegającego odliczeniu.
+    public var kpirAmountOverride: Double? = nil
+    /// Część kosztu wykazywana dodatkowo informacyjnie w kolumnie 18 (B+R).
+    public var kpirResearchDevelopmentCost: Double = 0
+
     /// Dokument wystawiony w trybie offline (offline24 / niedostępność /
     /// awaria). Przy dosyłaniu do KSeF wysyłany jest DOKŁADNIE zapisany XML
     /// (`rawXmlContent`) — jego skrót jest częścią kodów QR na wydruku.
