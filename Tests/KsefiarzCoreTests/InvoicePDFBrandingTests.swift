@@ -140,13 +140,7 @@ struct InvoicePDFBrandingTests {
 
     @Test("Własna stopka jest drukowana na każdej stronie długiej faktury")
     func stopkaNaKazdejStronie() throws {
-        let invoice = salesInvoice()
-        invoice.lines = (1...15).map {
-            InvoiceLine(
-                index: $0, name: "Pozycja projektu \($0)", quantity: 1,
-                unitNetPrice: 100, netAmount: 100, vatRate: "23", vatAmount: 23
-            )
-        }
+        let invoice = longSalesInvoice()
         let branding = InvoicePDFBranding(
             isEnabled: true, companyNIP: "5260250274", footer: "STOPKA WIELOSTRONICOWA"
         )
@@ -158,6 +152,69 @@ struct InvoicePDFBrandingTests {
         for index in 0..<document.pageCount {
             #expect(document.page(at: index)?.string?.contains("STOPKA WIELOSTRONICOWA") == true)
         }
+    }
+
+    @Test("Notka kontynuacji i numer każdej strony z brandingiem są w dolnym bloku")
+    func dolnyBlokNaKazdejStronie() throws {
+        let branding = InvoicePDFBranding(
+            isEnabled: true, companyNIP: "5260250274", footer: "STOPKA WIELOSTRONICOWA"
+        )
+        let data = try #require(InvoicePDFGenerator.pdfData(
+            for: longSalesInvoice(), branding: branding
+        ))
+        let document = try #require(PDFDocument(data: data))
+        #expect(document.pageCount == 2)
+
+        let firstPage = try #require(document.page(at: 0))
+        let continuationBounds = try bounds(
+            of: "ciąg dalszy na następnej stronie…", on: firstPage
+        )
+        let firstPageNumberBounds = try bounds(of: "Strona 1 z 2", on: firstPage)
+        let firstFooterBounds = try bounds(of: "STOPKA WIELOSTRONICOWA", on: firstPage)
+
+        // Wspólny dolny blok ma pozostać przy stopce, a nie pośrodku wolnej
+        // przestrzeni strony. Współrzędne PDF są liczone od dolnej krawędzi.
+        #expect(continuationBounds.minY < 150)
+        #expect(continuationBounds.minY > firstPageNumberBounds.minY)
+        #expect(firstPageNumberBounds.minY > firstFooterBounds.minY)
+
+        let lastPage = try #require(document.page(at: 1))
+        let lastPageNumberBounds = try bounds(of: "Strona 2 z 2", on: lastPage)
+        let lastFooterBounds = try bounds(of: "STOPKA WIELOSTRONICOWA", on: lastPage)
+
+        #expect(lastPageNumberBounds.minY < 100)
+        #expect(lastPageNumberBounds.minY > lastFooterBounds.minY)
+    }
+
+    @Test("Tryb klasyczny zachowuje układ dopasowany do treści")
+    func klasycznyUkladDopasowanyDoTresci() throws {
+        let data = try #require(InvoicePDFGenerator.pdfData(for: longSalesInvoice()))
+        let document = try #require(PDFDocument(data: data))
+        let firstPage = try #require(document.page(at: 0))
+        let pageNumberBounds = try bounds(of: "Strona 1 z 2", on: firstPage)
+
+        // Bez sztywnej wysokości strona klasyczna jest renderowana od góry,
+        // więc numer nie zostaje sztucznie zepchnięty do dolnego marginesu.
+        #expect(pageNumberBounds.minY > 300)
+    }
+
+    private func longSalesInvoice() -> Invoice {
+        let invoice = salesInvoice()
+        invoice.lines = (1...15).map {
+            InvoiceLine(
+                index: $0, name: "Pozycja projektu \($0)", quantity: 1,
+                unitNetPrice: 100, netAmount: 100, vatRate: "23", vatAmount: 23
+            )
+        }
+        return invoice
+    }
+
+    private func bounds(of text: String, on page: PDFPage) throws -> CGRect {
+        let pageText = try #require(page.string)
+        let range = (pageText as NSString).range(of: text)
+        try #require(range.location != NSNotFound)
+        let selection = try #require(page.selection(for: range))
+        return selection.bounds(for: page)
     }
 
     private func makeTestLogo() throws -> Data {
