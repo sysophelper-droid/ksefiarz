@@ -45,6 +45,7 @@ public enum KSeFError: LocalizedError, Equatable {
     case authenticationTimeout
     case invoiceRejected(String)
     case certificateEnrollmentFailed(String)
+    case permissionOperationFailed(String)
 
     public var errorDescription: String? {
         switch self {
@@ -73,6 +74,8 @@ public enum KSeFError: LocalizedError, Equatable {
             return "KSeF odrzucił fakturę: \(details)"
         case .certificateEnrollmentFailed(let details):
             return "Wniosek o certyfikat KSeF nie powiódł się: \(details)"
+        case .permissionOperationFailed(let details):
+            return "Operacja na uprawnieniach KSeF nie powiodła się: \(details)"
         }
     }
 }

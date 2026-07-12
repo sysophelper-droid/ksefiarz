@@ -32,12 +32,14 @@ Sources/
     │   └── InvoiceAutomation.swift # szablony i harmonogramy SwiftData
     ├── Services/
     │   ├── KSeFService.swift     # API KSeF 2.0: uwierzytelnienie, pobieranie i wysyłka faktur
+    │   ├── KSeFPermissionsService.swift # API permissions: nadawanie/odbieranie/przegląd uprawnień
     │   ├── KSeFCrypto.swift      # RSA-OAEP (SHA-256), AES-256-CBC, SHA-256
     │   ├── FA2XML.swift          # generator i parser uproszczonej struktury FA(2)
-    │   └── InvoiceValidator.swift# walidacja pól + suma kontrolna NIP
+    │   └── InvoiceValidator.swift# walidacja pól + suma kontrolna NIP/PESEL
     ├── Logic/
     │   ├── InvoiceFilter.swift   # filtrowanie list (status płatności, wyszukiwarka)
     │   ├── DashboardMetrics.swift# agregaty Kokpitu (ukryte faktury pomijane)
+    │   ├── PermissionsEngine.swift # walidacja i normalizacja uprawnień KSeF
     │   └── InvoiceAutomationEngine.swift # duplikaty i terminy cykli
     └── Views/
         ├── MainContentView.swift # NavigationSplitView + pasek boczny
@@ -45,10 +47,11 @@ Sources/
         ├── InvoiceListView.swift # listy zakupów/sprzedaży, swipe/menu, badge
         ├── InvoiceDetailView.swift # szczegóły + podgląd surowego XML
         ├── NewInvoiceView.swift  # formularz wystawiania faktury z walidacją
+        ├── PermissionsView.swift # sekcja „Uprawnienia” + arkusz nadawania
         ├── InvoiceAutomationView.swift # szablony, cykle i kolejka zatwierdzeń
         ├── HiddenInvoicesView.swift # archiwum „Nieuprawnione / Ukryte”
         └── SettingsView.swift    # NIP, token KSeF, środowisko
-Tests/KsefiarzCoreTests/          # 352 testy (Swift Testing) — model, parser, usługa, kryptografia, logika
+Tests/KsefiarzCoreTests/          # 400 testów (Swift Testing) — model, parser, usługa, kryptografia, logika
 ```
 
 ## Funkcje
@@ -74,6 +77,18 @@ Tests/KsefiarzCoreTests/          # 352 testy (Swift Testing) — model, parser,
   typu 1 nowy trzeba zaimportować ręcznie. Próba jest podejmowana najwyżej raz
   na certyfikat na dobę, a nieudana nie narusza dotychczasowego certyfikatu;
   o wyniku informuje powiadomienie. Przełącznik w Ustawieniach → KSeF.
+- **Zarządzanie uprawnieniami KSeF** — sekcja „Uprawnienia” pozwala nadać
+  po NIP innej firmie (np. biuru rachunkowemu) dostęp do wystawiania i/lub
+  przeglądania faktur (z opcją dalszego delegowania), osobie fizycznej
+  (po NIP lub PESEL) wybrany zestaw uprawnień do pracy w KSeF, a także
+  uprawnienia podmiotowe (samofakturowanie, przedstawiciel podatkowy,
+  faktury RR/PEF). Nadane dostępy są prezentowane na dwóch listach
+  (uprawnienia do pracy w KSeF oraz podmiotowe) i można je stamtąd odebrać.
+  Operacje na uprawnieniach są w API asynchroniczne — aplikacja czeka na
+  potwierdzenie (`/permissions/operations/{ref}`), więc wynik jest
+  jednoznaczny. Wymaga poświadczeń z prawem zarządzania uprawnieniami
+  (właściciel NIP). Zweryfikowane na mockach; na produkcji nie modyfikuje
+  się uprawnień w testach (polityka „tylko odczyt na żywo”).
 - **Tryby offline (offline24 / niedostępność / awaria)** — świadome
   wystawianie faktur bez połączenia z KSeF oraz automatyczne przejście
   w offline przy braku sieci. Dokument dostaje utrwalony skrót SHA-256

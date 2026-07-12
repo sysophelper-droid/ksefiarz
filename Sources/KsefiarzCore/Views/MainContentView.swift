@@ -11,6 +11,7 @@ public enum SidebarSection: String, CaseIterable, Identifiable, Hashable {
     case dictionaries
     case automation
     case syncCenter
+    case permissions
     case hidden
     case settings
 
@@ -25,6 +26,7 @@ public enum SidebarSection: String, CaseIterable, Identifiable, Hashable {
         case .dictionaries: return "Słowniki"
         case .automation: return "Szablony i cykle"
         case .syncCenter: return "Synchronizacja"
+        case .permissions: return "Uprawnienia"
         case .hidden: return "Nieuprawnione / Ukryte"
         case .settings: return "Ustawienia"
         }
@@ -39,6 +41,7 @@ public enum SidebarSection: String, CaseIterable, Identifiable, Hashable {
         case .dictionaries: return "text.book.closed"
         case .automation: return "calendar.badge.clock"
         case .syncCenter: return "arrow.triangle.2.circlepath"
+        case .permissions: return "person.2.badge.key"
         case .hidden: return "eye.slash"
         case .settings: return "gearshape"
         }
@@ -125,6 +128,8 @@ public struct MainContentView: View {
                 InvoiceAutomationView()
             case .syncCenter:
                 SyncCenterView()
+            case .permissions:
+                PermissionsView()
             case .hidden:
                 HiddenInvoicesView()
             case .settings:
