@@ -264,14 +264,18 @@ Tests/KsefiarzCoreTests/          # 597 testów (Swift Testing) — model, parse
 - **UPO** — automatyczne pobieranie i lokalne przechowywanie Urzędowego
   Poświadczenia Odbioru (XML) po przyjęciu faktury; w szczegółach można
   ponowić pobranie lub wyeksportować zapisany dokument także bez sieci.
-- **Eksport JPK_V7M** — ewidencja VAT wybranego miesiąca (sprzedaż
+- **Eksport JPK_V7M / JPK_V7K** — ewidencja VAT wybranego miesiąca (sprzedaż
   z podziałem na stawki, oznaczenia GTU i procedur z pozycji; zakupy jako
-  pozostałe nabycia) z częścią deklaracyjną VAT-7 (kwoty w pełnych złotych,
-  do wpłaty / do przeniesienia). Plik zgodny z oficjalną XSD JPK_V7M(2);
+  pozostałe nabycia) z częścią deklaracyjną VAT-7/VAT-7K (kwoty w pełnych
+  złotych, do wpłaty / do przeniesienia). W arkuszu wybierasz wariant:
+  **miesięczny** (JPK_V7M) albo **kwartalny** (JPK_V7K — mały podatnik / VAT
+  kwartalny), gdzie ewidencję składa się co miesiąc, a deklarację raz na
+  kwartał — powstaje ona tylko w pliku ostatniego miesiąca kwartału i obejmuje
+  sumy całego kwartału. Pliki zgodne z oficjalnymi XSD JPK_V7M(2)/JPK_V7K(2);
   arkusz pokazuje podsumowanie i listę pozycji do ręcznej weryfikacji
   (m.in. pozycje OSS rozliczane poza JPK, procedura marży, brak kursu).
 - **Eksport VAT-UE** — informacja podsumowująca za wybrany miesiąc
-  (obok JPK_V7M w menu „Ewidencje”): wewnątrzwspólnotowe dostawy towarów
+  (obok JPK_V7M/V7K w menu „Ewidencje”): wewnątrzwspólnotowe dostawy towarów
   (WDT, część C), nabycia towarów (WNT, część D) i świadczenie usług UE
   (część E) na podstawie faktur. Kontrahent UE rozpoznawany po prefiksie
   kraju w numerze VAT (Grecja jako „EL”, Irlandia Płn. „XI” tylko dla

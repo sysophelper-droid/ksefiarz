@@ -259,7 +259,7 @@ public struct InvoiceListView: View {
                 Button {
                     showingJPKExport = true
                 } label: {
-                    Label("JPK_V7M — ewidencja VAT", systemImage: "doc.badge.gearshape")
+                    Label("JPK_V7M / V7K — ewidencja VAT", systemImage: "doc.badge.gearshape")
                 }
                 Button {
                     showingVATUEExport = true
@@ -269,7 +269,7 @@ public struct InvoiceListView: View {
             } label: {
                 Label("Ewidencje", systemImage: "doc.badge.gearshape")
             }
-            .help("Eksport ewidencji VAT wybranego miesiąca: JPK_V7M (sprzedaż + zakup, GTU, procedury, deklaracja) lub VAT-UE (WDT, WNT, usługi UE)")
+            .help("Eksport ewidencji VAT wybranego miesiąca: JPK_V7M/V7K (sprzedaż + zakup, GTU, procedury, deklaracja miesięczna lub kwartalna) lub VAT-UE (WDT, WNT, usługi UE)")
         }
         ToolbarItem {
             Button {

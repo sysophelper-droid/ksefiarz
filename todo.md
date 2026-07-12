@@ -19,10 +19,6 @@ kolejność dowolna. ⚠️ operacje modyfikujące KSeF testować wyłącznie na
 
 #### A. Zgodność / KSeF
 
-- [x] A2. Faktury RR (rolnik ryczałtowy) — formularz VAT RR, generator i parser
-  oficjalnej struktury FA_RR(1), właściwy formCode sesji, stawki zwrotu 7%/6,5%,
-  korekty KOR_VAT_RR, tryby offline i osobna numeracja. Uprawnienie
-  `RRInvoicing` było już obsługiwane. XML zweryfikowany z oficjalnym XSD.
 - [ ] A3. Samofakturowanie — wystawianie faktur w imieniu dostawcy
   (uprawnienie `SelfInvoicing` już obsługiwane po stronie nadawania).
 - [ ] A4. Wsadowa wysyłka do KSeF (sesja batch/ZIP) — masowa wysyłka zamiast
@@ -37,9 +33,6 @@ kolejność dowolna. ⚠️ operacje modyfikujące KSeF testować wyłącznie na
 
 #### B. Podatki dochodowe / ewidencje
 
-- [ ] ⭐ B0. JPK_V7K — wariant kwartalny ewidencji VAT (mały podatnik / VAT
-  kwartalny): ewidencja co miesiąc, deklaracja raz na kwartał (część
-  deklaracyjna tylko w 3. miesiącu kwartału). Dziś generujemy tylko V7M.
 - [ ] B1. KPiR (Księga Przychodów i Rozchodów) — ewidencja dla zasad
   ogólnych/podatku liniowego, z eksportem.
 - [ ] B2. Ewidencja przychodów (ryczałt) — z podziałem na stawki ryczałtu.
@@ -104,6 +97,27 @@ kolejność dowolna. ⚠️ operacje modyfikujące KSeF testować wyłącznie na
   (dziś zaszyte PL/EN).
 
 ## Zrealizowane
+
+### JPK_V7K — kwartalny wariant ewidencji VAT (12.07.2026)
+
+- [x] B0. Generator JPK_V7K(2) obok JPK_V7M(2) — wariant kwartalny (mały
+  podatnik / VAT kwartalny): ewidencja składana co miesiąc, część deklaracyjna
+  raz na kwartał, wyłącznie w pliku ostatniego miesiąca kwartału (marzec,
+  czerwiec, wrzesień, grudzień). Wtedy ewidencja obejmuje tylko ten miesiąc,
+  a deklaracja VAT-7K(16) — sumy CAŁEGO kwartału, z elementem `Kwartal` (1–4).
+  V7M i V7K to OSOBNE schematy XSD (V7M `.../11148/`, V7K `.../11149/` — różny
+  namespace, kod formularza, kod i wariant deklaracji, dodatkowy `Kwartal`).
+  Enum `JPKV7Variant` w `JPKV7Generator` (miesięce 1–2 kwartału → sama
+  ewidencja z ostrzeżeniem; okno eksportu dobiera wariant, etykiety i nazwę
+  pliku). Dokumenty (kwartalny z deklaracją oraz miesiąc-w-trakcie)
+  zweryfikowane oficjalną XSD (xmllint). Nowy suite testów JPK_V7K.
+
+### Faktury VAT RR — struktura FA_RR(1) (12.07.2026)
+
+- [x] A2. Faktury RR (rolnik ryczałtowy): formularz VAT RR, generator i parser
+  oficjalnej struktury FA_RR(1), właściwy formCode sesji, stawki zwrotu 7%/6,5%,
+  korekty KOR_VAT_RR, tryby offline i osobna numeracja. Uprawnienie
+  `RRInvoicing` było już obsługiwane. XML zweryfikowany z oficjalnym XSD (PR #18).
 
 ### Informacja podsumowująca VAT-UE (12.07.2026)
 

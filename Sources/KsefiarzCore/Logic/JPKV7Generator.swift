@@ -1,8 +1,68 @@
 import Foundation
 
-/// Parametry generowania pliku JPK_V7M.
+/// Wariant ewidencji VAT: miesięczny (JPK_V7M) albo kwartalny (JPK_V7K —
+/// mały podatnik / VAT kwartalny). W wariancie kwartalnym ewidencję składa
+/// się co miesiąc, a część deklaracyjną raz na kwartał — w pliku ostatniego
+/// miesiąca kwartału (marzec/czerwiec/wrzesień/grudzień). Wtedy ewidencja
+/// obejmuje tylko ten miesiąc, a deklaracja — sumy całego kwartału.
+///
+/// V7M i V7K to OSOBNE schematy XSD (różny namespace, kod formularza,
+/// kod i wariant deklaracji, a V7K ma dodatkowy element `Kwartal`).
+public enum JPKV7Variant: String, Sendable, CaseIterable, Identifiable {
+    case monthly
+    case quarterly
+
+    public var id: String { rawValue }
+
+    /// Etykieta do UI.
+    public var label: String {
+        switch self {
+        case .monthly: return "Miesięczny (JPK_V7M)"
+        case .quarterly: return "Kwartalny (JPK_V7K)"
+        }
+    }
+
+    /// Skrót do nazwy pliku (JPK_V7M / JPK_V7K).
+    public var fileTag: String {
+        switch self {
+        case .monthly: return "JPK_V7M"
+        case .quarterly: return "JPK_V7K"
+        }
+    }
+
+    /// Namespace/XSD schematu.
+    var namespace: String {
+        switch self {
+        case .monthly: return "http://crd.gov.pl/wzor/2021/12/27/11148/"
+        case .quarterly: return "http://crd.gov.pl/wzor/2021/12/27/11149/"
+        }
+    }
+
+    /// Kod formularza JPK (KodFormularza/kodSystemowy).
+    var formCode: String {
+        switch self {
+        case .monthly: return "JPK_V7M (2)"
+        case .quarterly: return "JPK_V7K (2)"
+        }
+    }
+
+    /// Kod deklaracji: systemowy, wartość elementu i wariant (VAT-7 vs VAT-7K).
+    var declaration: (systemowy: String, value: String, variant: Int) {
+        switch self {
+        case .monthly: return ("VAT-7 (22)", "VAT-7", 22)
+        case .quarterly: return ("VAT-7K (16)", "VAT-7K", 16)
+        }
+    }
+}
+
+/// Parametry generowania pliku JPK_V7M (miesięczny) lub JPK_V7K (kwartalny).
 public struct JPKV7Options: Sendable {
+    /// Wariant: miesięczny (V7M) lub kwartalny (V7K).
+    public var variant: JPKV7Variant = .monthly
     public var year: Int
+    /// Miesiąc ewidencji (1–12). W wariancie kwartalnym wskazuje miesiąc,
+    /// którego ewidencja trafia do pliku; deklaracja (jeśli to ostatni
+    /// miesiąc kwartału) obejmuje cały kwartał zawierający ten miesiąc.
     public var month: Int
     /// Dane podatnika (Podmiot1/OsobaNiefizyczna).
     public var sellerNIP: String
@@ -14,11 +74,13 @@ public struct JPKV7Options: Sendable {
     public var purpose: Int = 1
     /// Nadwyżka podatku naliczonego z poprzedniej deklaracji (P_39, całe zł).
     public var previousExcess: Int = 0
-    /// Czy dołączyć część deklaracyjną (VAT-7) — korekta samej ewidencji
-    /// składana jest bez deklaracji.
+    /// Czy dołączyć część deklaracyjną (VAT-7/VAT-7K) — korekta samej
+    /// ewidencji składana jest bez deklaracji. W wariancie kwartalnym
+    /// deklaracja i tak powstaje wyłącznie w pliku ostatniego miesiąca kwartału.
     public var includeDeclaration: Bool = true
 
     public init(
+        variant: JPKV7Variant = .monthly,
         year: Int,
         month: Int,
         sellerNIP: String,
@@ -29,6 +91,7 @@ public struct JPKV7Options: Sendable {
         previousExcess: Int = 0,
         includeDeclaration: Bool = true
     ) {
+        self.variant = variant
         self.year = year
         self.month = month
         self.sellerNIP = sellerNIP
@@ -43,25 +106,43 @@ public struct JPKV7Options: Sendable {
 
 /// Wynik generowania: dokument XML + podsumowanie i ostrzeżenia
 /// (uproszczenia wymagające weryfikacji przed wysyłką do MF).
+///
+/// Pola `salesCount`/`purchaseCount`/`salesNetTotal`/`outputVAT`/`inputVAT`
+/// dotyczą EWIDENCJI (pojedynczego miesiąca). Pola `declaration*` oraz
+/// `amountDue`/`excessCarried` dotyczą CZĘŚCI DEKLARACYJNEJ — dla V7M jest to
+/// ten sam miesiąc, dla V7K cały kwartał (gdy powstała deklaracja).
 public struct JPKV7Result: Sendable {
     public var xml: String
     public var salesCount: Int
     public var purchaseCount: Int
     /// Podstawa opodatkowania łącznie (sprzedaż, PLN).
     public var salesNetTotal: Double
-    /// Podatek należny (SprzedazCtrl/PodatekNalezny).
+    /// Podatek należny (SprzedazCtrl/PodatekNalezny) — ewidencja miesiąca.
     public var outputVAT: Double
-    /// Podatek naliczony (ZakupCtrl/PodatekNaliczony).
+    /// Podatek naliczony (ZakupCtrl/PodatekNaliczony) — ewidencja miesiąca.
     public var inputVAT: Double
+    /// Czy plik zawiera część deklaracyjną (V7M zawsze przy `includeDeclaration`;
+    /// V7K tylko w ostatnim miesiącu kwartału).
+    public var hasDeclaration: Bool
+    /// Podatek należny objęty deklaracją (kwartał dla V7K).
+    public var declarationOutputVAT: Double
+    /// Podatek naliczony objęty deklaracją (kwartał dla V7K).
+    public var declarationInputVAT: Double
     /// Kwota do wpłaty (P_51) / nadwyżka do przeniesienia (P_62) — po zaokrągleniach.
     public var amountDue: Int
     public var excessCarried: Int
     public var warnings: [String]
 }
 
-/// Generator pliku JPK_V7M(2) — ewidencja VAT (sprzedaż + zakup)
-/// z oznaczeniami GTU i procedur oraz częścią deklaracyjną VAT-7(22).
-/// Struktura zgodna z oficjalną XSD `http://crd.gov.pl/wzor/2021/12/27/11148/`.
+/// Generator pliku JPK_V7M(2) / JPK_V7K(2) — ewidencja VAT (sprzedaż + zakup)
+/// z oznaczeniami GTU i procedur oraz częścią deklaracyjną (VAT-7(22) albo
+/// VAT-7K(16)). Struktura zgodna z oficjalnymi XSD `.../11148/` (V7M)
+/// i `.../11149/` (V7K).
+///
+/// Wariant kwartalny (V7K): ewidencja składana co miesiąc, a część
+/// deklaracyjna raz na kwartał — powstaje tylko w pliku ostatniego miesiąca
+/// kwartału (3/6/9/12) i obejmuje sumy całego kwartału, podczas gdy ewidencja
+/// pozostaje danymi wyłącznie tego miesiąca.
 ///
 /// Przyjęte uproszczenia (raportowane w `warnings`):
 /// - przypisanie do okresu po dacie sprzedaży (P_6) lub wystawienia,
@@ -70,6 +151,8 @@ public struct JPKV7Result: Sendable {
 /// - faktury bez pozycji traktowane jak sprzedaż ze stawką podstawową.
 public enum JPKV7Generator {
 
+    /// Namespace wariantu miesięcznego (V7M); wariant kwartalny (V7K) ma własny
+    /// — patrz `JPKV7Variant.namespace`.
     public static let namespace = "http://crd.gov.pl/wzor/2021/12/27/11148/"
 
     /// Sumy sprzedaży jednej faktury per pole ewidencji (w PLN).
@@ -95,7 +178,8 @@ public enum JPKV7Generator {
         "I_42", "I_63", "B_SPV", "B_SPV_DOSTAWA", "B_MPV_PROWIZJA",
     ]
 
-    /// Generuje plik JPK_V7M dla wskazanego miesiąca.
+    /// Generuje plik JPK_V7M/JPK_V7K dla wskazanego miesiąca (ewidencja) —
+    /// w V7K deklaracja doliczana jest do pliku ostatniego miesiąca kwartału.
     /// Faktury ukryte są pomijane; korekty wchodzą kwotami różnicy (ujemne
     /// wartości dozwolone w ewidencji).
     public static func generate(
@@ -142,23 +226,66 @@ public enum JPKV7Generator {
             )
         }
 
-        // Część deklaracyjna (VAT-7) — kwoty w pełnych złotych.
-        let declaration = options.includeDeclaration
-            ? declarationBlock(
-                sales: sales,
-                purchasesNet: purchasesNetTotal,
-                purchasesVAT: purchasesVATTotal,
+        // Część deklaracyjna (VAT-7 / VAT-7K) — kwoty w pełnych złotych.
+        // V7M: deklaracja co miesiąc; V7K: tylko w ostatnim miesiącu kwartału,
+        // a obejmuje sumy CAŁEGO kwartału (nie tylko miesiąca ewidencji).
+        let quarterEnd = isQuarterEnd(options.month)
+        let emitDeclaration = options.includeDeclaration
+            && (options.variant == .monthly || quarterEnd)
+        if options.variant == .quarterly && options.includeDeclaration && !quarterEnd {
+            warnings.append(
+                "JPK_V7K: część deklaracyjna VAT-7K składana jest wyłącznie z ewidencją ostatniego miesiąca kwartału (marzec, czerwiec, wrzesień, grudzień) — dla wskazanego miesiąca plik zawiera samą ewidencję."
+            )
+        }
+
+        // Zakres deklaracji: miesiąc (V7M) albo cały kwartał (V7K).
+        let declaration: DeclarationBlock
+        if emitDeclaration {
+            let declSales: [Invoice]
+            let declPurchasesNet: Double
+            let declPurchasesVAT: Double
+            if options.variant == .quarterly {
+                let months = quarterMonths(options.month)
+                declSales = visible
+                    .filter { $0.kind == .sales && inMonths($0, year: options.year, months: months) }
+                    .sorted { periodDate($0) < periodDate($1) }
+                // Zakupy całego kwartału (dla P_42/P_43) — dublujące ostrzeżenia
+                // o kursie odkładamy na bok (surfaceują przy ewidencji miesiąca).
+                var net = 0.0
+                var vat = 0.0
+                var scratch: [String] = []
+                for invoice in visible where invoice.kind == .purchase
+                    && inMonths(invoice, year: options.year, months: months) {
+                    net += amountInPLN(invoice.netAmount, invoice: invoice, warnings: &scratch)
+                    vat += amountInPLN(invoice.vatAmount, invoice: invoice, warnings: &scratch)
+                }
+                declPurchasesNet = net
+                declPurchasesVAT = vat
+            } else {
+                declSales = sales
+                declPurchasesNet = purchasesNetTotal
+                declPurchasesVAT = purchasesVATTotal
+            }
+            declaration = declarationBlock(
+                sales: declSales,
+                purchasesNet: declPurchasesNet,
+                purchasesVAT: declPurchasesVAT,
                 options: options,
                 warnings: &warnings
             )
-            : (xml: "", due: 0, carried: 0)
+        } else {
+            declaration = DeclarationBlock(
+                xml: "", due: 0, carried: 0,
+                outputVAT: rounded(salesVATTotal), inputVAT: rounded(purchasesVATTotal)
+            )
+        }
 
         let timestamp = ISO8601DateFormatter().string(from: generatedAt)
         let xml = """
         <?xml version="1.0" encoding="UTF-8"?>
-        <JPK xmlns="\(namespace)">
+        <JPK xmlns="\(options.variant.namespace)">
           <Naglowek>
-            <KodFormularza kodSystemowy="JPK_V7M (2)" wersjaSchemy="1-0E">JPK_VAT</KodFormularza>
+            <KodFormularza kodSystemowy="\(options.variant.formCode)" wersjaSchemy="1-0E">JPK_VAT</KodFormularza>
             <WariantFormularza>2</WariantFormularza>
             <DataWytworzeniaJPK>\(timestamp)</DataWytworzeniaJPK>
             <NazwaSystemu>Ksefiarz macOS</NazwaSystemu>
@@ -193,10 +320,32 @@ public enum JPKV7Generator {
             salesNetTotal: rounded(salesNetTotal),
             outputVAT: rounded(salesVATTotal),
             inputVAT: rounded(purchasesVATTotal),
+            hasDeclaration: emitDeclaration,
+            declarationOutputVAT: declaration.outputVAT,
+            declarationInputVAT: declaration.inputVAT,
             amountDue: declaration.due,
             excessCarried: declaration.carried,
             warnings: warnings
         )
+    }
+
+    // MARK: Okresy kwartalne
+
+    /// Numer kwartału (1–4) zawierającego wskazany miesiąc.
+    static func quarter(of month: Int) -> Int { (month - 1) / 3 + 1 }
+
+    /// Trzy miesiące kwartału zawierającego wskazany miesiąc.
+    static func quarterMonths(_ month: Int) -> [Int] {
+        let first = (quarter(of: month) - 1) * 3 + 1
+        return [first, first + 1, first + 2]
+    }
+
+    /// Czy miesiąc jest ostatnim miesiącem kwartału (3, 6, 9, 12).
+    static func isQuarterEnd(_ month: Int) -> Bool { month % 3 == 0 }
+
+    static func inMonths(_ invoice: Invoice, year: Int, months: [Int]) -> Bool {
+        let components = Calendar.current.dateComponents([.year, .month], from: periodDate(invoice))
+        return components.year == year && months.contains(components.month ?? -1)
     }
 
     // MARK: Przypisanie do okresu
@@ -341,16 +490,27 @@ public enum JPKV7Generator {
         return xml
     }
 
-    // MARK: Deklaracja VAT-7
+    // MARK: Deklaracja VAT-7 / VAT-7K
+
+    /// Wynik części deklaracyjnej: XML + kwoty rozliczenia i podatek okresu
+    /// (dla V7K obejmuje cały kwartał).
+    struct DeclarationBlock {
+        var xml: String
+        var due: Int
+        var carried: Int
+        var outputVAT: Double
+        var inputVAT: Double
+    }
 
     /// Część deklaracyjna: kwoty w pełnych złotych (TKwotaC), P_51 nieujemna.
+    /// Nagłówek i element `Kwartal` zależą od wariantu (VAT-7 vs VAT-7K).
     static func declarationBlock(
         sales: [Invoice],
         purchasesNet: Double,
         purchasesVAT: Double,
         options: JPKV7Options,
         warnings: inout [String]
-    ) -> (xml: String, due: Int, carried: Int) {
+    ) -> DeclarationBlock {
         // Sumy pól K całej ewidencji (przed zaokrągleniem do złotych).
         var total = SalesBuckets()
         for invoice in sales {
@@ -404,19 +564,29 @@ public enum JPKV7Generator {
             positions += "        <P_62>\(carried)</P_62>\n"
         }
 
+        // Nagłówek deklaracji zależny od wariantu: kod formularza (VAT-7/VAT-7K),
+        // jego wariant oraz — w V7K — dodatkowy element Kwartal (1–4).
+        let dekl = options.variant.declaration
+        var naglowek = "      <KodFormularzaDekl kodSystemowy=\"\(dekl.systemowy)\" kodPodatku=\"VAT\" rodzajZobowiazania=\"Z\" wersjaSchemy=\"1-0E\">\(dekl.value)</KodFormularzaDekl>\n"
+        naglowek += "      <WariantFormularzaDekl>\(dekl.variant)</WariantFormularzaDekl>\n"
+        if options.variant == .quarterly {
+            naglowek += "      <Kwartal>\(quarter(of: options.month))</Kwartal>\n"
+        }
+
         let xml = """
           <Deklaracja>
             <Naglowek>
-              <KodFormularzaDekl kodSystemowy="VAT-7 (22)" kodPodatku="VAT" rodzajZobowiazania="Z" wersjaSchemy="1-0E">VAT-7</KodFormularzaDekl>
-              <WariantFormularzaDekl>22</WariantFormularzaDekl>
-            </Naglowek>
+        \(naglowek)    </Naglowek>
             <PozycjeSzczegolowe>
         \(positions)    </PozycjeSzczegolowe>
             <Pouczenia>1</Pouczenia>
           </Deklaracja>
 
         """
-        return (xml, due, carried)
+        return DeclarationBlock(
+            xml: xml, due: due, carried: carried,
+            outputVAT: rounded(total.vat), inputVAT: rounded(purchasesVAT)
+        )
     }
 
     // MARK: Pomocnicze
