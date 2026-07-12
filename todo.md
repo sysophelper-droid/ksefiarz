@@ -17,6 +17,21 @@ _(wszystkie zrealizowane — patrz niżej)_
 
 ## Zrealizowane
 
+### Pokrycie testami logiki domenowej (12.07.2026)
+
+- [x] Domknięcie pokrycia testami `Logic/`, `Services/`, `Models/` do ~99%
+  linii testowalnej logiki (Logic 99,72%; Models 100%; Services 92,86% — reszta
+  to granica UI/sieć). 565 testów jednostkowych na zielono. Dopisane m.in.:
+  etykiety/settery enumów, opisy błędów, ścieżki HTTP-error i guardy usług
+  (przez atrapę transportu), błędne struktury krypto (X509/PKCS#8/ASN.1),
+  dyspozytor uprawnień, kopie zapasowe, generatory FA(2)/JPK/PDF, import
+  certyfikatu (PEM + fixture PKCS#12). Skrypt `Scripts/coverage-file.sh`.
+  Świadomie poza testami jednostkowymi (granica UI/AppKit/sieć, jak `Views/`):
+  `MenuBarController` (`NSStatusItem`), panele `FileExportService`,
+  `InvoiceEmailService` (`NSSharingService`), sieciowy happy-path
+  `QuickSyncRunner`; plus obronne guardy platformowych API (SecKey/CCCrypt),
+  które nie zawodzą przy poprawnych danych.
+
 ### Specyfikacja pierwotna (sesja 11.06.2026)
 
 - [x] Stos: Swift 5.10+/SwiftUI/SwiftData, NavigationSplitView, Dark Mode.
