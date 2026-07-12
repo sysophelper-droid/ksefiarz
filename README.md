@@ -51,7 +51,7 @@ Sources/
         ├── InvoiceAutomationView.swift # szablony, cykle i kolejka zatwierdzeń
         ├── HiddenInvoicesView.swift # archiwum „Nieuprawnione / Ukryte”
         └── SettingsView.swift    # NIP, token KSeF, środowisko
-Tests/KsefiarzCoreTests/          # 400 testów (Swift Testing) — model, parser, usługa, kryptografia, logika
+Tests/KsefiarzCoreTests/          # 412 testów (Swift Testing) — model, parser, usługa, kryptografia, logika
 ```
 
 ## Funkcje
@@ -66,6 +66,9 @@ Tests/KsefiarzCoreTests/          # 400 testów (Swift Testing) — model, parse
   Certyfikat typu 1 można uzyskać wprost z aplikacji (wniosek CSR przez API;
   klucz prywatny nigdy nie opuszcza komputera) albo zaimportować z pliku
   `.p12`/PEM (RSA-2048 i EC P-256) — np. pozyskany w Aplikacji Podatnika.
+  Obsługiwany jest też format wydawany przez KSeF: certyfikat `.crt` z osobnym,
+  zaszyfrowanym kluczem prywatnym (PKCS#8 `ENCRYPTED PRIVATE KEY`, PBES2 —
+  PBKDF2 + AES-CBC) — aplikacja prosi wtedy o hasło do klucza.
   Aplikacja pilnuje ważności (ostrzeżenie 30 dni przed wygaśnięciem),
   a przy niepowodzeniu loguje się zapasowo tokenem KSeF (tokeny mają
   przestać działać z końcem 2026 r.).

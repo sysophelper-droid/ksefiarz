@@ -13,6 +13,8 @@ public enum KSeFCertificateImporter {
         case invalidPEM(String)
         case unsupportedKey(String)
         case keyMismatch
+        case encryptedKeyNeedsPassword
+        case keyDecryptionFailed(String)
 
         public var errorDescription: String? {
             switch self {
@@ -24,6 +26,10 @@ public enum KSeFCertificateImporter {
                 return "Nieobsługiwany rodzaj klucza prywatnego: \(details)"
             case .keyMismatch:
                 return "Klucz prywatny nie pasuje do certyfikatu."
+            case .encryptedKeyNeedsPassword:
+                return "Klucz prywatny jest zaszyfrowany — podaj hasło do jego odszyfrowania."
+            case .keyDecryptionFailed(let details):
+                return "Nie udało się odszyfrować klucza prywatnego: \(details)"
             }
         }
     }
@@ -85,7 +91,13 @@ public enum KSeFCertificateImporter {
 
     /// Importuje certyfikat i klucz prywatny z treści plików PEM.
     /// Oba bloki mogą być w jednym pliku — wtedy przekaż tę samą treść dwa razy.
-    public static func importPEM(certificatePEM: String, privateKeyPEM: String) throws -> KSeFCertificate {
+    /// `password` jest wymagane tylko dla zaszyfrowanego klucza
+    /// (`ENCRYPTED PRIVATE KEY`, PKCS#8/PBES2) — np. wydawanego przez KSeF.
+    public static func importPEM(
+        certificatePEM: String,
+        privateKeyPEM: String,
+        password: String? = nil
+    ) throws -> KSeFCertificate {
         guard let certificateDER = pemBlock(named: "CERTIFICATE", in: certificatePEM) else {
             throw ImportError.invalidPEM("brak bloku CERTIFICATE")
         }
@@ -93,7 +105,7 @@ public enum KSeFCertificateImporter {
             throw ImportError.invalidPEM("nieprawidłowa treść certyfikatu")
         }
 
-        let (keyData, keyType) = try decodePrivateKeyPEM(privateKeyPEM)
+        let (keyData, keyType) = try decodePrivateKeyPEM(privateKeyPEM, password: password)
         return try validated(KSeFCertificate(
             certificateDER: certificateDER,
             privateKeyDER: keyData,
@@ -102,8 +114,21 @@ public enum KSeFCertificateImporter {
     }
 
     /// Rozpoznaje i dekoduje klucz prywatny z PEM do postaci akceptowanej
-    /// przez SecKey (RSA: PKCS#1; EC: 04‖X‖Y‖K).
-    static func decodePrivateKeyPEM(_ pem: String) throws -> (Data, KSeFKeyType) {
+    /// przez SecKey (RSA: PKCS#1; EC: 04‖X‖Y‖K). Zaszyfrowany klucz PKCS#8
+    /// (`ENCRYPTED PRIVATE KEY`) jest najpierw odszyfrowywany hasłem.
+    static func decodePrivateKeyPEM(_ pem: String, password: String? = nil) throws -> (Data, KSeFKeyType) {
+        if let encrypted = pemBlock(named: "ENCRYPTED PRIVATE KEY", in: pem) {
+            guard let password, !password.isEmpty else {
+                throw ImportError.encryptedKeyNeedsPassword
+            }
+            let decrypted: Data
+            do {
+                decrypted = try PKCS8EncryptedKey.decrypt(encrypted, password: password)
+            } catch let error as PKCS8EncryptedKey.DecryptError {
+                throw ImportError.keyDecryptionFailed(error.errorDescription ?? "nieznany błąd")
+            }
+            return try decodePKCS8(decrypted)
+        }
         if let rsa = pemBlock(named: "RSA PRIVATE KEY", in: pem) {
             return (rsa, .rsa)
         }

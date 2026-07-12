@@ -31,11 +31,16 @@ Sources/KsefiarzCore/
                BackupService, FileExportService (NSSave/OpenPanel), InvoicePDFGenerator (+ kody QR),
                TokenStore (token w pęku kluczy), ContractorLookupService (Biała
                lista VAT, wl-api.mf.gov.pl — publiczne, bez klucza),
-               kryptografia certyfikatów: ASN1DER (koder/czytnik DER),
+               kryptografia certyfikatów: ASN1DER (koder/czytnik DER —
+               czytnik utwardzony na niezaufane wejście: odrzuca długości
+               przepełniające Int / przekraczające bufor),
                X509Builder (CSR PKCS#10, self-signed, podpisy RSA/EC),
                XAdESSigner (AuthTokenRequest, ręczna kanonikalizacja exc-c14n),
                KSeFCertificateStore (pęk kluczy), KSeFCertificateService
-               (enrollment API), KSeFCertificateImporter (.p12/PEM),
+               (enrollment API), KSeFCertificateImporter (.p12/PEM;
+               certyfikat + klucz jawny lub zaszyfrowany PKCS#8),
+               PKCS8EncryptedKey (odszyfrowanie ENCRYPTED PRIVATE KEY —
+               PBES2: PBKDF2 HMAC-SHA1/224/256/384/512 + AES-128/192/256-CBC),
                KSeFPermissionsService (rozszerzenie KSeFService — nadawanie,
                odbieranie i przegląd uprawnień KSeF; API permissions),
                KSeFQRCode (linki weryfikacyjne KOD I/II + render QR),
@@ -116,7 +121,10 @@ Scripts/build-app.sh                   # składanie bundla .app
 - Certyfikaty KSeF: enrollment WYMAGA auth podpisem XAdES (tokenem się nie
   da — błąd 25002); CSR musi zawierać DOKŁADNIE dane z GET
   `/certificates/enrollments/data` (25003). Typy: `Authentication` (typ 1,
-  logowanie), `Offline` (typ 2, tylko KOD II QR). Ważność 2 lata.
+  logowanie), `Offline` (typ 2, tylko KOD II QR). Ważność 2 lata. Pobrany
+  z KSeF certyfikat to plik `.crt` (PEM, klucz publiczny EC P-256 lub RSA)
+  wraz z OSOBNYM, zaszyfrowanym kluczem prywatnym w PKCS#8
+  (`ENCRYPTED PRIVATE KEY`, PBES2) — import wymaga hasła do klucza.
 - Uprawnienia (API permissions): operacje grant/revoke są ASYNCHRONICZNE —
   zwracają HTTP 202 `{referenceNumber}`, status przez GET
   `/permissions/operations/{ref}` → `status.code == 200` (sukces) lub `400+`

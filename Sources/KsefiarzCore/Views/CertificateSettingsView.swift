@@ -85,7 +85,7 @@ struct CertificateSettingsSection: View {
         } header: {
             Text("Certyfikaty KSeF")
         } footer: {
-            Text("Certyfikat uwierzytelniający (typ 1) to preferowany sposób logowania do KSeF — tokeny API mają przestać działać (zapowiadane: koniec 2026 r.). Aplikacja loguje się certyfikatem, a przy niepowodzeniu wraca do tokenu. Certyfikat offline (typ 2) służy wyłącznie do podpisywania kodu QR „CERTYFIKAT” na dokumentach trybu offline24. Na środowisku produkcyjnym pierwszy certyfikat pozyskasz w Aplikacji Podatnika KSeF 2.0 (wymaga podpisu kwalifikowanego lub Profilu Zaufanego) i zaimportujesz z pliku — kolejne aplikacja odnowi sama. Certyfikaty i klucze prywatne są przechowywane w pęku kluczy, osobno dla każdego środowiska; nie trafiają do kopii zapasowych.")
+            Text("Certyfikat uwierzytelniający (typ 1) to preferowany sposób logowania do KSeF — tokeny API mają przestać działać (zapowiadane: koniec 2026 r.). Aplikacja loguje się certyfikatem, a przy niepowodzeniu wraca do tokenu. Certyfikat offline (typ 2) służy wyłącznie do podpisywania kodu QR „CERTYFIKAT” na dokumentach trybu offline24. Na środowisku produkcyjnym pierwszy certyfikat pozyskasz w Aplikacji Podatnika KSeF 2.0 (wymaga podpisu kwalifikowanego lub Profilu Zaufanego) i zaimportujesz z pliku — kolejne aplikacja odnowi sama. KSeF wydaje certyfikat jako plik .crt wraz z osobnym, zaszyfrowanym kluczem prywatnym — wskaż oba, a aplikacja zapyta o hasło do klucza. Obsługiwane są też pliki .p12/.pfx oraz PEM z kluczem jawnym. Certyfikaty i klucze prywatne są przechowywane w pęku kluczy, osobno dla każdego środowiska; nie trafiają do kopii zapasowych.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
@@ -197,10 +197,13 @@ struct CertificateSettingsSection: View {
 
     /// Importuje certyfikat z pliku .p12/.pfx (z hasłem) albo PEM
     /// (certyfikat + klucz — w jednym lub dwóch plikach).
+    /// Sygnał anulowania importu przez użytkownika — nie pokazujemy błędu.
+    private struct ImportCancelled: Error {}
+
     @MainActor
     private func importFromFile(type: KSeFCertificateType) async {
         let panel = NSOpenPanel()
-        panel.message = "Wybierz plik certyfikatu (.p12/.pfx albo PEM)"
+        panel.message = "Wybierz plik certyfikatu (.crt/.pem albo .p12/.pfx)"
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = false
         guard panel.runModal() == .OK, let url = panel.url,
@@ -211,7 +214,10 @@ struct CertificateSettingsSection: View {
             if let text = String(data: data, encoding: .utf8), text.contains("-----BEGIN") {
                 certificate = try importPEM(text)
             } else {
-                guard let password = askPassword(fileName: url.lastPathComponent) else { return }
+                guard let password = askPassword(
+                    title: "Hasło pliku \(url.lastPathComponent)",
+                    info: "Podaj hasło zabezpieczające plik PKCS#12."
+                ) else { return }
                 certificate = try KSeFCertificateImporter.importPKCS12(data: data, password: password)
             }
             guard let info = certificate.info else {
@@ -223,34 +229,58 @@ struct CertificateSettingsSection: View {
                 "Zaimportowano: \(info.subjectSummary), ważny do \(info.validTo.formatted(date: .abbreviated, time: .omitted)).",
                 isError: false
             )
+        } catch is ImportCancelled {
+            // Użytkownik anulował podanie hasła lub wybór pliku — bez komunikatu.
         } catch {
             showStatus(error.localizedDescription, isError: true)
         }
     }
 
-    /// Import PEM — gdy w pliku brak klucza prywatnego, prosi o drugi plik.
+    /// Import PEM — gdy w pliku brak klucza prywatnego, prosi o drugi plik
+    /// (typowo certyfikat `.crt` + osobny plik klucza z KSeF). Zaszyfrowany
+    /// klucz (`ENCRYPTED PRIVATE KEY`) wymaga hasła — pytamy o nie.
     @MainActor
     private func importPEM(_ text: String) throws -> KSeFCertificate {
         if text.contains("PRIVATE KEY-----") {
-            return try KSeFCertificateImporter.importPEM(certificatePEM: text, privateKeyPEM: text)
+            let password = try passwordIfEncrypted(text, fileName: "certyfikat")
+            return try KSeFCertificateImporter.importPEM(
+                certificatePEM: text, privateKeyPEM: text, password: password
+            )
         }
         let panel = NSOpenPanel()
-        panel.message = "Wybierz plik klucza prywatnego (PEM)"
+        panel.message = "Wybierz plik klucza prywatnego (.key/.pem)"
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = false
         guard panel.runModal() == .OK, let url = panel.url,
               let keyText = try? String(contentsOf: url, encoding: .utf8) else {
-            throw KSeFCertificateImporter.ImportError.invalidPEM("nie wybrano pliku klucza prywatnego")
+            throw ImportCancelled()
         }
-        return try KSeFCertificateImporter.importPEM(certificatePEM: text, privateKeyPEM: keyText)
+        let password = try passwordIfEncrypted(keyText, fileName: url.lastPathComponent)
+        return try KSeFCertificateImporter.importPEM(
+            certificatePEM: text, privateKeyPEM: keyText, password: password
+        )
     }
 
-    /// Modalne pytanie o hasło pliku PKCS#12.
+    /// Jeśli klucz PEM jest zaszyfrowany, pyta o hasło; `nil` = klucz jawny.
+    /// Anulowanie okna hasła zgłasza `ImportCancelled`.
     @MainActor
-    private func askPassword(fileName: String) -> String? {
+    private func passwordIfEncrypted(_ keyPEM: String, fileName: String) throws -> String? {
+        guard keyPEM.contains("ENCRYPTED PRIVATE KEY-----") else { return nil }
+        guard let password = askPassword(
+            title: "Hasło klucza prywatnego",
+            info: "Klucz prywatny (\(fileName)) jest zaszyfrowany. Podaj hasło, którym go zabezpieczono."
+        ) else {
+            throw ImportCancelled()
+        }
+        return password
+    }
+
+    /// Modalne pytanie o hasło (PKCS#12 albo zaszyfrowany klucz PEM).
+    @MainActor
+    private func askPassword(title: String, info: String) -> String? {
         let alert = NSAlert()
-        alert.messageText = "Hasło pliku \(fileName)"
-        alert.informativeText = "Podaj hasło zabezpieczające plik PKCS#12."
+        alert.messageText = title
+        alert.informativeText = info
         alert.addButton(withTitle: "Importuj")
         alert.addButton(withTitle: "Anuluj")
         let field = NSSecureTextField(frame: NSRect(x: 0, y: 0, width: 260, height: 24))
