@@ -242,6 +242,11 @@ public enum JPKV7Generator {
             case .reducedSecond: buckets.k15 += net; buckets.k16 += vat
             case .reducedFirst: buckets.k17 += net; buckets.k18 += vat
             case .standard: buckets.k19 += net; buckets.k20 += vat
+            case .rr, .rrHistorical:
+                buckets.k19 += net; buckets.k20 += vat
+                warnings.append(
+                    "Faktura \(invoice.invoiceNumber): stawka VAT RR na dokumencie sprzedażowym wykazana jako podstawowa."
+                )
             case nil:
                 buckets.k19 += net; buckets.k20 += vat
                 warnings.append(

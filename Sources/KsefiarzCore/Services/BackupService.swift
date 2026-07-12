@@ -19,6 +19,8 @@ public struct BackupLine: Codable, Equatable, Sendable {
     public var procedure: String?
     /// Pole od wersji 5 — stawka OSS pozycji (P_12_XII).
     public var ossRate: Double?
+    /// Pole od wersji 6 — klasa/jakość pozycji VAT RR (P_6C).
+    public var rrQuality: String?
 }
 
 /// Faktura w kopii zapasowej — pełne odwzorowanie modelu SwiftData.
@@ -199,9 +201,9 @@ public struct BackupFile: Codable, Sendable {
 /// pobierania wszystkiego z KSeF.
 public enum BackupService {
 
-    /// Bieżąca wersja formatu pliku (6: + kategoria kosztu i dokumenty
-    /// dwujęzyczne kontrahenta). Starsze pliki są nadal poprawnie importowane.
-    public static let currentVersion = 6
+    /// Bieżąca wersja formatu pliku (7: + klasa/jakość pozycji VAT RR).
+    /// Starsze pliki są nadal poprawnie importowane.
+    public static let currentVersion = 7
 
     /// Klucze ustawień obejmowane kopią zapasową.
     /// Tokenu KSeF celowo tu nie ma — sekret żyje w pęku kluczy i nie może
@@ -214,6 +216,11 @@ public enum BackupService {
         AppSettingsKeys.bankAccount,
         AppSettingsKeys.environment,
         AppSettingsKeys.numberPattern,
+        AppSettingsKeys.numberPatternZAL,
+        AppSettingsKeys.numberPatternROZ,
+        AppSettingsKeys.numberPatternUPR,
+        AppSettingsKeys.numberPatternKOR,
+        AppSettingsKeys.numberPatternRR,
         AppSettingsKeys.rangeMode,
     ]
 
@@ -393,7 +400,8 @@ public enum BackupService {
                 cnPkwiu: line.cnPkwiu ?? "",
                 gtu: line.gtu ?? "",
                 procedure: line.procedure ?? "",
-                ossRate: line.ossRate
+                ossRate: line.ossRate,
+                rrQuality: line.rrQuality ?? ""
             )
         }
     }
@@ -573,7 +581,8 @@ public enum BackupService {
                     cnPkwiu: line.cnPkwiu.isEmpty ? nil : line.cnPkwiu,
                     gtu: line.gtu.isEmpty ? nil : line.gtu,
                     procedure: line.procedure.isEmpty ? nil : line.procedure,
-                    ossRate: line.ossRate
+                    ossRate: line.ossRate,
+                    rrQuality: line.rrQuality.isEmpty ? nil : line.rrQuality
                 )
             },
             notes: invoice.notes.isEmpty ? nil : invoice.notes,

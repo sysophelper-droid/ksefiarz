@@ -249,7 +249,7 @@ struct InvoicePrintPageView: View {
     private var fullHeader: some View {
         HStack(alignment: .top) {
             VStack(alignment: .leading, spacing: 4) {
-                Text(labels.text("Faktura VAT", "VAT Invoice"))
+                Text(documentTitle)
                     .font(.system(size: 22, weight: .bold))
                 Text("\(labels.text("Nr", "No")) \(invoice.invoiceNumber)")
                     .font(.system(size: 14, weight: .semibold))
@@ -269,7 +269,7 @@ struct InvoicePrintPageView: View {
     /// Skrócony nagłówek stron kontynuacji.
     private var continuationHeader: some View {
         HStack {
-            Text("\(labels.text("Faktura VAT", "VAT Invoice")) \(labels.text("nr", "no")) \(invoice.invoiceNumber) — \(labels.text("ciąg dalszy", "continued"))")
+            Text("\(documentTitle) \(labels.text("nr", "no")) \(invoice.invoiceNumber) — \(labels.text("ciąg dalszy", "continued"))")
                 .font(.system(size: 11, weight: .semibold))
             Spacer()
             Text("\(labels.text("Data wystawienia", "Issue date")): \(dateText)")
@@ -291,7 +291,7 @@ struct InvoicePrintPageView: View {
                     Text(invoice.netAmount, format: .currency(code: invoice.currency))
                 }
                 GridRow {
-                    Text("\(labels.text("Razem VAT", "Total VAT")):")
+                    Text("\(invoice.isRR ? labels.text("Zryczałtowany zwrot podatku", "Flat-rate tax refund") : labels.text("Razem VAT", "Total VAT")):")
                     Text(invoice.vatAmount, format: .currency(code: invoice.currency))
                 }
                 GridRow {
@@ -304,7 +304,7 @@ struct InvoicePrintPageView: View {
 
         // Kwota słownie — standardowy element polskiej faktury
         // (słowa po polsku również w wariancie dwujęzycznym).
-        Text("\(labels.text("Słownie", "In words")): \(AmountInWords.polishCurrency(invoice.grossAmount))")
+        Text("\(labels.text("Słownie", "In words")): \(AmountInWords.polishAmount(invoice.grossAmount, currencyCode: invoice.currency))")
             .font(.system(size: 9))
             .foregroundStyle(.secondary)
 
@@ -387,9 +387,12 @@ struct InvoicePrintPageView: View {
     }
 
     private var linesTable: some View {
-        let columns = [
+        var columns = [
             labels.text("Lp.", "No."),
             labels.text("Nazwa", "Description"),
+        ]
+        if invoice.isRR { columns.append(labels.text("Klasa / jakość", "Class / quality")) }
+        columns += [
             labels.text("Ilość", "Qty"),
             labels.text("J.m.", "Unit"),
             labels.text("Cena netto", "Net price"),
@@ -413,6 +416,7 @@ struct InvoicePrintPageView: View {
                             .gridColumnAlignment(.leading)
                             .fixedSize(horizontal: false, vertical: true)
                             .frame(maxWidth: .infinity, alignment: .leading)
+                        if invoice.isRR { Text(line.rrQuality) }
                         Text(FA2Format.quantity(line.quantity))
                         Text(line.unit)
                         Text(FA2Format.amount(line.unitNetPrice))
@@ -425,5 +429,14 @@ struct InvoicePrintPageView: View {
         }
         .padding(8)
         .overlay(Rectangle().strokeBorder(.gray.opacity(0.4), lineWidth: 0.5))
+    }
+
+    private var documentTitle: String {
+        switch invoice.documentTypeRaw {
+        case "VAT_RR": return labels.text("Faktura VAT RR", "VAT RR Invoice")
+        case "KOR_VAT_RR": return labels.text("Korekta faktury VAT RR", "VAT RR Correction")
+        case "KOR", "KOR_ZAL", "KOR_ROZ": return labels.text("Faktura korygująca", "Correction Invoice")
+        default: return labels.text("Faktura VAT", "VAT Invoice")
+        }
     }
 }

@@ -19,8 +19,10 @@ kolejność dowolna. ⚠️ operacje modyfikujące KSeF testować wyłącznie na
 
 #### A. Zgodność / KSeF
 
-- [ ] A2. Faktury RR (rolnik ryczałtowy) — generowanie RR (uprawnienie
-  `RRInvoicing` już nadajemy; brak samego wystawiania). Niszowe.
+- [x] A2. Faktury RR (rolnik ryczałtowy) — formularz VAT RR, generator i parser
+  oficjalnej struktury FA_RR(1), właściwy formCode sesji, stawki zwrotu 7%/6,5%,
+  korekty KOR_VAT_RR, tryby offline i osobna numeracja. Uprawnienie
+  `RRInvoicing` było już obsługiwane. XML zweryfikowany z oficjalnym XSD.
 - [ ] A3. Samofakturowanie — wystawianie faktur w imieniu dostawcy
   (uprawnienie `SelfInvoicing` już obsługiwane po stronie nadawania).
 - [ ] A4. Wsadowa wysyłka do KSeF (sesja batch/ZIP) — masowa wysyłka zamiast
@@ -45,6 +47,13 @@ kolejność dowolna. ⚠️ operacje modyfikujące KSeF testować wyłącznie na
   zaliczka PIT, ZUS) + szacunek kwot VAT/PIT do zapłaty za bieżący okres.
 - [ ] B4. JPK_FA na żądanie — pełny JPK faktur (nie ewidencja), format dla
   kontroli US. Rzadkie.
+- [ ] B5. Ewidencja JPK_V7 dla VAT RR — ujęcie zryczałtowanego zwrotu po
+  stronie podatku naliczonego nabywcy (art. 116). Faktury VAT RR są zapisywane
+  jako `kind == .purchase`, a w `salesBuckets` jest dziś jedynie defensywne
+  ostrzeżenie dla stawek RR (ścieżka praktycznie nieosiągalna dla dokumentów
+  RR). Wymaga własnej specyfikacji podatkowej i testów — świadomie poza
+  zakresem A2 (który obejmował strukturę FA_RR(1), formularz, generator/parser
+  i wysyłkę).
 
 #### C. Płatności i windykacja
 

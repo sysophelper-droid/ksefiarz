@@ -16,7 +16,7 @@ public final class InvoiceLine {
     public var unitNetPrice: Double
     /// Wartość netto pozycji (P_11).
     public var netAmount: Double
-    /// Stawka VAT (P_12): "23", "8", "5", "0" lub "zw".
+    /// Stawka VAT (P_12) albo zryczałtowanego zwrotu podatku VAT RR (P_9).
     public var vatRate: String
     /// Kwota VAT pozycji (wyliczana ze stawki — nie występuje wprost w XML).
     public var vatAmount: Double
@@ -31,6 +31,9 @@ public final class InvoiceLine {
     /// Stawka podatku od wartości dodanej dla procedury OSS (P_12_XII) —
     /// nil = pozycja z polską stawką (P_12). Wartość domyślna (migracja bazy).
     public var ossRate: Double? = nil
+    /// Klasa lub jakość produktu/usługi rolniczej (P_6C w FA_RR).
+    /// Puste dla zwykłych faktur; wartość domyślna umożliwia lekką migrację.
+    public var rrQuality: String = ""
 
     /// Faktura, do której należy pozycja.
     public var invoice: Invoice?
@@ -47,7 +50,8 @@ public final class InvoiceLine {
         cnPkwiu: String = "",
         gtu: String = "",
         procedure: String = "",
-        ossRate: Double? = nil
+        ossRate: Double? = nil,
+        rrQuality: String = ""
     ) {
         self.index = index
         self.name = name
@@ -61,6 +65,7 @@ public final class InvoiceLine {
         self.gtu = gtu
         self.procedure = procedure
         self.ossRate = ossRate
+        self.rrQuality = rrQuality
     }
 }
 
@@ -71,6 +76,9 @@ public enum VATRate: String, CaseIterable, Identifiable, Sendable {
     case standard = "23"
     case reducedFirst = "8"
     case reducedSecond = "5"
+    /// Stawki zryczałtowanego zwrotu podatku dopuszczone przez FA_RR(1).
+    case rr = "7"
+    case rrHistorical = "6.5"
     case zero = "0"
     case exempt = "zw"
 
@@ -89,6 +97,8 @@ public enum VATRate: String, CaseIterable, Identifiable, Sendable {
         case .standard: return 0.23
         case .reducedFirst: return 0.08
         case .reducedSecond: return 0.05
+        case .rr: return 0.07
+        case .rrHistorical: return 0.065
         case .zero, .exempt: return 0
         }
     }
@@ -118,6 +128,8 @@ public struct InvoiceLineDraft: Identifiable, Equatable, Sendable {
     /// Towar/usługa z załącznika 15 (ze słownika) — podpowiada włączenie
     /// mechanizmu podzielonej płatności na fakturze; nie trafia do XML pozycji.
     public var isAttachment15: Bool = false
+    /// Klasa lub jakość produktu rolnego / usługi rolniczej (P_6C FA_RR).
+    public var rrQuality: String = ""
 
     /// Dopuszczalne oznaczenia procedur (enum TOznaczenieProcedury z XSD FA(3)).
     public static let procedures = [
@@ -135,7 +147,8 @@ public struct InvoiceLineDraft: Identifiable, Equatable, Sendable {
         cnPkwiu: String = "",
         gtu: String = "",
         procedure: String = "",
-        ossRate: Double? = nil
+        ossRate: Double? = nil,
+        rrQuality: String = ""
     ) {
         self.id = id
         self.name = name
@@ -147,6 +160,7 @@ public struct InvoiceLineDraft: Identifiable, Equatable, Sendable {
         self.gtu = gtu
         self.procedure = procedure
         self.ossRate = ossRate
+        self.rrQuality = rrQuality
     }
 
     /// Wypełnia pola pozycji danymi towaru/usługi ze słownika.

@@ -21,7 +21,7 @@ struct BackupServiceTests {
         invoice.ksefEnvironmentRaw = KSeFEnvironment.test.rawValue
         invoice.upoXmlContent = "<UPO/>"
         invoice.lines = [
-            InvoiceLine(index: 1, name: "Usługa", unit: "godz.", quantity: 2, unitNetPrice: 50, netAmount: 100, vatRate: "23", vatAmount: 23),
+            InvoiceLine(index: 1, name: "Usługa", unit: "godz.", quantity: 2, unitNetPrice: 50, netAmount: 100, vatRate: "23", vatAmount: 23, rrQuality: "klasa I"),
         ]
         return invoice
     }
@@ -55,6 +55,7 @@ struct BackupServiceTests {
         #expect(entry.upoXmlContent == "<UPO/>")
         #expect(entry.lines.count == 1)
         #expect(entry.lines.first?.name == "Usługa")
+        #expect(entry.lines.first?.rrQuality == "klasa I")
 
         // Odtworzony model ma te same wartości.
         let restored = BackupService.makeInvoice(from: entry)
@@ -69,6 +70,7 @@ struct BackupServiceTests {
         let restoredLines = BackupService.makeLines(for: entry)
         #expect(restoredLines.count == 1)
         #expect(restoredLines.first?.netAmount == 100)
+        #expect(restoredLines.first?.rrQuality == "klasa I")
     }
 
     @Test("Import pomija duplikaty po id oraz po numerze KSeF")

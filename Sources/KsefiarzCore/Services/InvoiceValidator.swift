@@ -5,6 +5,7 @@ public enum InvoiceValidationError: LocalizedError, Equatable, Hashable, Sendabl
     case emptyInvoiceNumber
     case emptySellerName
     case emptySellerAddress
+    case emptyRRBuyerAddress
     case emptyBuyerName
     case invalidSellerNIP
     case invalidBuyerNIP
@@ -22,12 +23,17 @@ public enum InvoiceValidationError: LocalizedError, Equatable, Hashable, Sendabl
     case attachmentMissingMetadata(Int)
     case attachmentTooManyParagraphs(Int)
     case attachmentInvalidTable(Int)
+    case invalidRRRate(Int)
+    case invalidStandardInvoiceRate(Int)
+    case emptyRRQuality(Int)
+    case unsupportedRRAttachment
 
     public var errorDescription: String? {
         switch self {
         case .emptyInvoiceNumber: return "Numer faktury nie może być pusty."
         case .emptySellerName: return "Nazwa sprzedawcy nie może być pusta."
-        case .emptySellerAddress: return "Adres sprzedawcy jest wymagany przez schemę FA(2) — uzupełnij go w Ustawieniach."
+        case .emptySellerAddress: return "Adres sprzedawcy jest wymagany przez strukturę faktury."
+        case .emptyRRBuyerAddress: return "Adres nabywcy jest wymagany przez strukturę FA_RR(1) — uzupełnij dane firmy w Ustawieniach."
         case .emptyBuyerName: return "Nazwa nabywcy nie może być pusta."
         case .invalidSellerNIP: return "NIP sprzedawcy jest nieprawidłowy."
         case .invalidBuyerNIP: return "NIP nabywcy jest nieprawidłowy."
@@ -45,6 +51,10 @@ public enum InvoiceValidationError: LocalizedError, Equatable, Hashable, Sendabl
         case .attachmentMissingMetadata(let index): return "Załącznik, blok \(index): wymagana jest co najmniej jedna para metadanych (klucz i wartość) — wymóg schematu FA(3)."
         case .attachmentTooManyParagraphs(let index): return "Załącznik, blok \(index): część tekstowa może mieć najwyżej 10 akapitów."
         case .attachmentInvalidTable(let index): return "Załącznik, blok \(index): tabela musi mieć od 1 do 20 kolumn i co najmniej jeden wiersz."
+        case .invalidRRRate(let index): return "Pozycja \(index): faktura VAT RR dopuszcza wyłącznie stawkę zryczałtowanego zwrotu 7% lub 6,5%."
+        case .invalidStandardInvoiceRate(let index): return "Pozycja \(index): stawki 7% i 6,5% są przeznaczone wyłącznie dla faktur VAT RR."
+        case .emptyRRQuality(let index): return "Pozycja \(index): klasa lub jakość produktu/usługi rolniczej jest wymagana (P_6C)."
+        case .unsupportedRRAttachment: return "Struktura FA_RR(1) nie obsługuje załączników FA(3)."
         }
     }
 }
@@ -82,6 +92,10 @@ public enum InvoiceValidator {
         }
         if draft.sellerAddress.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             errors.append(.emptySellerAddress)
+        }
+        if draft.isRR,
+           draft.buyerAddress.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            errors.append(.emptyRRBuyerAddress)
         }
         // Korekta wyraża różnicę — kwoty mogą być ujemne; zwykła faktura nie.
         let isCorrection = draft.correction != nil
@@ -122,6 +136,15 @@ public enum InvoiceValidator {
             if let ossRate = line.ossRate, !(0...100).contains(ossRate) {
                 errors.append(.invalidLineOSSRate(number))
             }
+            let isRRRate = line.vatRate == .rr || line.vatRate == .rrHistorical
+            if draft.isRR {
+                if !isRRRate || line.ossRate != nil { errors.append(.invalidRRRate(number)) }
+                if line.rrQuality.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    errors.append(.emptyRRQuality(number))
+                }
+            } else if isRRRate {
+                errors.append(.invalidStandardInvoiceRate(number))
+            }
         }
         // Walidacja załącznika FA(3) — ograniczenia z XSD.
         for (offset, block) in draft.attachments.enumerated() {
@@ -145,6 +168,9 @@ public enum InvoiceValidator {
                     break
                 }
             }
+        }
+        if draft.isRR, !draft.attachments.isEmpty {
+            errors.append(.unsupportedRRAttachment)
         }
         return errors
     }

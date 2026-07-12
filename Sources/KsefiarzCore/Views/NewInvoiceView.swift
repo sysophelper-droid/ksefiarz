@@ -1,7 +1,8 @@
 import SwiftUI
 import SwiftData
 
-/// Formularz wystawiania nowej faktury sprzedażowej (lub korygującej)
+/// Formularz wystawiania nowej faktury sprzedażowej, VAT RR (zakupowej)
+/// lub korygującej
 /// z walidacją pól, pozycjami (FaWiersz), adresami stron i danymi płatności.
 /// Pozwala wysłać fakturę do KSeF lub zapisać ją tylko lokalnie.
 public struct NewInvoiceView: View {
@@ -68,6 +69,7 @@ public struct NewInvoiceView: View {
     @AppStorage(AppSettingsKeys.numberPatternROZ) private var numberPatternROZ = ""
     @AppStorage(AppSettingsKeys.numberPatternUPR) private var numberPatternUPR = ""
     @AppStorage(AppSettingsKeys.numberPatternKOR) private var numberPatternKOR = ""
+    @AppStorage(AppSettingsKeys.numberPatternRR) private var numberPatternRR = ""
 
     /// Rodzaje dokumentów dostępne przy wystawianiu (korekta ma własny przepływ).
     private static let invoiceTypes: [(raw: String, label: String)] = [
@@ -75,6 +77,7 @@ public struct NewInvoiceView: View {
         ("ZAL", "Faktura zaliczkowa (ZAL)"),
         ("ROZ", "Faktura rozliczeniowa (ROZ)"),
         ("UPR", "Faktura uproszczona (UPR)"),
+        ("VAT_RR", "Faktura VAT RR (rolnik ryczałtowy)"),
     ]
 
     /// Procedury marży (Adnotacje/PMarzy w FA(3)).
@@ -169,6 +172,7 @@ public struct NewInvoiceView: View {
     private var totalNet: Double { lines.reduce(0) { $0 + $1.netAmount } }
     private var totalVat: Double { lines.reduce(0) { $0 + $1.vatAmount } }
     private var totalGross: Double { totalNet + totalVat }
+    private var isRR: Bool { invoiceType == "VAT_RR" }
 
     /// Dane korekty zbudowane z faktury korygowanej (nowa korekta)
     /// lub z pól edytowanej korekty.
@@ -197,12 +201,12 @@ public struct NewInvoiceView: View {
         InvoiceDraft(
             invoiceNumber: invoiceNumber,
             issueDate: issueDate,
-            sellerName: sellerName,
-            sellerNIP: sellerNIP,
-            sellerAddress: sellerAddress,
-            buyerName: buyerName,
-            buyerNIP: buyerNIP,
-            buyerAddress: buyerAddress,
+            sellerName: isRR ? buyerName : sellerName,
+            sellerNIP: isRR ? buyerNIP : sellerNIP,
+            sellerAddress: isRR ? buyerAddress : sellerAddress,
+            buyerName: isRR ? sellerName : buyerName,
+            buyerNIP: isRR ? sellerNIP : buyerNIP,
+            buyerAddress: isRR ? sellerAddress : buyerAddress,
             lines: lines,
             paymentDueDate: hasDueDate ? dueDate : nil,
             paymentForm: paymentForm,
@@ -271,7 +275,7 @@ public struct NewInvoiceView: View {
                         }
                     }
                     Toggle(
-                        invoiceType == "ZAL"
+                        isRR ? "Wspólna data nabycia (P_4A)" : invoiceType == "ZAL"
                             ? "Data otrzymania zaliczki (P_6)"
                             : "Data sprzedaży / dostawy (P_6)",
                         isOn: $hasSaleDate
@@ -317,22 +321,24 @@ public struct NewInvoiceView: View {
                                 .foregroundStyle(.secondary)
                         }
                     }
-                    Picker("Procedura marży", selection: $marginProcedure) {
-                        ForEach(Self.marginProcedures, id: \.raw) { procedure in
-                            Text(procedure.label).tag(procedure.raw)
+                    if !isRR {
+                        Picker("Procedura marży", selection: $marginProcedure) {
+                            ForEach(Self.marginProcedures, id: \.raw) { procedure in
+                                Text(procedure.label).tag(procedure.raw)
+                            }
                         }
                     }
                 }
 
-                Section("Sprzedawca (Twoja firma)") {
+                Section(isRR ? "Nabywca (Twoja firma)" : "Sprzedawca (Twoja firma)") {
                     TextField("Nazwa firmy", text: $sellerName)
                     TextField("NIP", text: $sellerNIP)
                     TextField("Adres", text: $sellerAddress, prompt: Text("ul. Przykładowa 1, 00-001 Warszawa"))
                 }
 
-                Section("Nabywca") {
-                    // Podstawienie danych ze słownika kontrahentów (odbiorcy).
-                    let recipients = dictionaryContractors.filter(\.isRecipient)
+                Section(isRR ? "Dostawca — rolnik ryczałtowy" : "Nabywca") {
+                    // Dla RR wybieramy dostawcę; dla zwykłej faktury odbiorcę.
+                    let recipients = dictionaryContractors.filter { isRR ? $0.isSupplier : $0.isRecipient }
                     if !recipients.isEmpty {
                         Menu {
                             ForEach(recipients) { contractor in
@@ -360,9 +366,9 @@ public struct NewInvoiceView: View {
                             Label("Wybierz kontrahenta z historii", systemImage: "person.crop.rectangle.stack")
                         }
                     }
-                    TextField("Nazwa nabywcy", text: $buyerName)
-                    TextField("NIP nabywcy", text: $buyerNIP)
-                    TextField("Adres nabywcy", text: $buyerAddress, prompt: Text("opcjonalnie"))
+                    TextField(isRR ? "Imię i nazwisko / nazwa rolnika" : "Nazwa nabywcy", text: $buyerName)
+                    TextField(isRR ? "NIP rolnika" : "NIP nabywcy", text: $buyerNIP)
+                    TextField(isRR ? "Adres rolnika" : "Adres nabywcy", text: $buyerAddress, prompt: Text(isRR ? "wymagany" : "opcjonalnie"))
                 }
 
                 Section("Pozycje") {
@@ -371,13 +377,14 @@ public struct NewInvoiceView: View {
                             line: $line,
                             products: dictionaryProducts,
                             currencyCode: currency,
+                            isRR: isRR,
                             canDelete: lines.count > 1
                         ) {
                             lines.removeAll { $0.id == line.id }
                         }
                     }
                     Button {
-                        lines.append(InvoiceLineDraft())
+                        lines.append(InvoiceLineDraft(vatRate: isRR ? .rr : .standard))
                     } label: {
                         Label("Dodaj pozycję", systemImage: "plus.circle")
                     }
@@ -392,21 +399,23 @@ public struct NewInvoiceView: View {
                         .foregroundStyle(.secondary)
                 }
 
-                Section("Załącznik do faktury (FA(3))") {
-                    ForEach($attachments) { $block in
-                        AttachmentBlockEditor(block: $block) {
-                            attachments.removeAll { $0.id == block.id }
+                if !isRR {
+                    Section("Załącznik do faktury (FA(3))") {
+                        ForEach($attachments) { $block in
+                            AttachmentBlockEditor(block: $block) {
+                                attachments.removeAll { $0.id == block.id }
+                            }
                         }
-                    }
-                    Button {
-                        attachments.append(FA3AttachmentBlock())
-                    } label: {
-                        Label("Dodaj blok załącznika", systemImage: "paperclip")
-                    }
-                    if !attachments.isEmpty {
-                        Text("⚠️ Wystawianie faktur z załącznikiem wymaga wcześniejszego zgłoszenia w e-Urzędzie Skarbowym (wymóg KSeF 2.0). Każdy blok musi mieć co najmniej jedną parę metadanych.")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                        Button {
+                            attachments.append(FA3AttachmentBlock())
+                        } label: {
+                            Label("Dodaj blok załącznika", systemImage: "paperclip")
+                        }
+                        if !attachments.isEmpty {
+                            Text("⚠️ Wystawianie faktur z załącznikiem wymaga wcześniejszego zgłoszenia w e-Urzędzie Skarbowym (wymóg KSeF 2.0). Każdy blok musi mieć co najmniej jedną parę metadanych.")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
                     }
                 }
 
@@ -414,7 +423,7 @@ public struct NewInvoiceView: View {
                     LabeledContent("Razem netto") {
                         Text(totalNet, format: .currency(code: currency)).monospacedDigit()
                     }
-                    LabeledContent("Razem VAT") {
+                    LabeledContent(isRR ? "Zryczałtowany zwrot podatku" : "Razem VAT") {
                         Text(totalVat, format: .currency(code: currency)).monospacedDigit()
                     }
                     LabeledContent("Do zapłaty (brutto)") {
@@ -437,8 +446,8 @@ public struct NewInvoiceView: View {
                         }
                     }
                     HStack {
-                        TextField("Numer rachunku bankowego", text: $paymentBankAccount, prompt: Text("26 cyfr (NRB)"))
-                        if !dictionaryAccounts.isEmpty {
+                        TextField(isRR ? "Rachunek rolnika" : "Numer rachunku bankowego", text: $paymentBankAccount, prompt: Text("26 cyfr (NRB)"))
+                        if !isRR, !dictionaryAccounts.isEmpty {
                             Menu {
                                 ForEach(dictionaryAccounts) { account in
                                     Button(account.displayName) {
@@ -457,8 +466,10 @@ public struct NewInvoiceView: View {
                     if hasDueDate {
                         DatePicker("Termin", selection: $dueDate, displayedComponents: .date)
                     }
-                    Toggle("Mechanizm podzielonej płatności (MPP)", isOn: $splitPayment)
-                    if lines.contains(where: \.isAttachment15) {
+                    if !isRR {
+                        Toggle("Mechanizm podzielonej płatności (MPP)", isOn: $splitPayment)
+                    }
+                    if !isRR, lines.contains(where: \.isAttachment15) {
                         Text("Pozycje z załącznika 15 — MPP jest obowiązkowy, gdy kwota brutto przekracza 15 000 zł.")
                             .font(.caption)
                             .foregroundStyle(.orange)
@@ -537,6 +548,22 @@ public struct NewInvoiceView: View {
         // Zmiana rodzaju dokumentu przegenerowuje numer (każdy rodzaj ma
         // własną serię), ale nie nadpisuje numeru wpisanego ręcznie.
         .onChange(of: invoiceType) { _, _ in
+            if isRR {
+                paymentForm = .transfer
+                paymentBankAccount = ""
+                attachments = []
+                splitPayment = false
+                marginProcedure = ""
+                for index in lines.indices {
+                    lines[index].vatRate = .rr
+                    lines[index].ossRate = nil
+                }
+            } else {
+                for index in lines.indices where lines[index].vatRate == .rr || lines[index].vatRate == .rrHistorical {
+                    lines[index].vatRate = .standard
+                }
+            }
+            loadContractors()
             guard editingInvoice == nil else { return }
             prefillInvoiceNumber(force: true)
         }
@@ -544,7 +571,7 @@ public struct NewInvoiceView: View {
             prefillFromEditedInvoice()
             prefillFromCorrectedInvoice()
             prefillFromInitialDraft()
-            if paymentBankAccount.isEmpty { paymentBankAccount = defaultBankAccount }
+            if paymentBankAccount.isEmpty, !isRR { paymentBankAccount = defaultBankAccount }
             prefillInvoiceNumber()
             loadContractors()
         }
@@ -583,8 +610,9 @@ public struct NewInvoiceView: View {
     // MARK: Akcje
 
     private var formTitle: String {
-        if editingInvoice != nil { return "Edycja faktury" }
+        if editingInvoice != nil { return isRR ? "Edycja faktury VAT RR" : "Edycja faktury" }
         if let sourceTitle { return sourceTitle }
+        if isRR { return isCorrectionDocument ? "Korekta faktury VAT RR" : "Nowa faktura VAT RR" }
         return isCorrectionDocument ? "Faktura korygująca" : "Nowa faktura"
     }
 
@@ -592,17 +620,25 @@ public struct NewInvoiceView: View {
         guard let initial = initialDraft, buyerName.isEmpty else { return }
         invoiceNumber = initial.invoiceNumber
         issueDate = initial.issueDate
-        sellerName = initial.sellerName
-        sellerNIP = initial.sellerNIP
-        sellerAddress = initial.sellerAddress
-        buyerName = initial.buyerName
-        buyerNIP = initial.buyerNIP
-        buyerAddress = initial.buyerAddress
-        lines = initial.lines.isEmpty ? [InvoiceLineDraft()] : initial.lines
+        invoiceType = initial.invoiceType
+        if initial.isRR {
+            buyerName = initial.sellerName
+            buyerNIP = initial.sellerNIP
+            buyerAddress = initial.sellerAddress
+        } else {
+            sellerName = initial.sellerName
+            sellerNIP = initial.sellerNIP
+            sellerAddress = initial.sellerAddress
+            buyerName = initial.buyerName
+            buyerNIP = initial.buyerNIP
+            buyerAddress = initial.buyerAddress
+        }
+        lines = initial.lines.isEmpty
+            ? [InvoiceLineDraft(vatRate: initial.isRR ? .rr : .standard)]
+            : initial.lines
         paymentForm = initial.paymentForm ?? .transfer
         paymentBankAccount = initial.paymentBankAccount
         notes = initial.notes
-        invoiceType = initial.invoiceType
         currency = initial.currency
         exchangeRate = initial.exchangeRate
         splitPayment = initial.splitPayment
@@ -625,11 +661,12 @@ public struct NewInvoiceView: View {
         guard let editing = editingInvoice, invoiceNumber.isEmpty else { return }
         invoiceNumber = editing.invoiceNumber
         issueDate = editing.issueDate
-        buyerName = editing.buyerName
-        buyerNIP = editing.buyerNIP
-        buyerAddress = editing.buyerAddress
+        invoiceType = InvoiceDraft.baseType(for: editing.documentTypeRaw)
+        buyerName = editing.isRR ? editing.sellerName : editing.buyerName
+        buyerNIP = editing.isRR ? editing.sellerNIP : editing.buyerNIP
+        buyerAddress = editing.isRR ? editing.sellerAddress : editing.buyerAddress
         paymentForm = editing.paymentForm ?? .transfer
-        paymentBankAccount = editing.paymentBankAccount ?? defaultBankAccount
+        paymentBankAccount = editing.paymentBankAccount ?? (editing.isRR ? "" : defaultBankAccount)
         correctionReason = editing.correctionReason ?? ""
         if let due = editing.paymentDueDate {
             hasDueDate = true
@@ -638,7 +675,6 @@ public struct NewInvoiceView: View {
             hasDueDate = false
         }
         notes = editing.notes
-        invoiceType = InvoiceDraft.baseType(for: editing.documentTypeRaw)
         marginProcedure = editing.marginProcedureRaw
         currency = editing.currency
         exchangeRate = editing.exchangeRate
@@ -659,7 +695,8 @@ public struct NewInvoiceView: View {
                 cnPkwiu: line.cnPkwiu,
                 gtu: line.gtu,
                 procedure: line.procedure,
-                ossRate: line.ossRate
+                ossRate: line.ossRate,
+                rrQuality: line.rrQuality
             )
         }
         if !storedLines.isEmpty {
@@ -671,12 +708,12 @@ public struct NewInvoiceView: View {
     /// Typ oryginału decyduje o rodzaju korekty (ZAL→KOR_ZAL, ROZ→KOR_ROZ).
     private func prefillFromCorrectedInvoice() {
         guard let original = correctingInvoice, buyerName.isEmpty else { return }
-        buyerName = original.buyerName
-        buyerNIP = original.buyerNIP
-        buyerAddress = original.buyerAddress
-        paymentForm = original.paymentForm ?? .transfer
-        paymentBankAccount = original.paymentBankAccount ?? defaultBankAccount
         invoiceType = InvoiceDraft.baseType(for: original.documentTypeRaw)
+        buyerName = original.isRR ? original.sellerName : original.buyerName
+        buyerNIP = original.isRR ? original.sellerNIP : original.buyerNIP
+        buyerAddress = original.isRR ? original.sellerAddress : original.buyerAddress
+        paymentForm = original.paymentForm ?? .transfer
+        paymentBankAccount = original.paymentBankAccount ?? (original.isRR ? "" : defaultBankAccount)
         marginProcedure = original.marginProcedureRaw
         currency = original.currency
         exchangeRate = original.exchangeRate
@@ -692,7 +729,8 @@ public struct NewInvoiceView: View {
                 cnPkwiu: line.cnPkwiu,
                 gtu: line.gtu,
                 procedure: line.procedure,
-                ossRate: line.ossRate
+                ossRate: line.ossRate,
+                rrQuality: line.rrQuality
             )
         }
         if !originalLines.isEmpty {
@@ -711,6 +749,7 @@ public struct NewInvoiceView: View {
             case "ZAL": specific = numberPatternZAL
             case "ROZ": specific = numberPatternROZ
             case "UPR": specific = numberPatternUPR
+            case "VAT_RR": specific = numberPatternRR
             default: specific = ""
             }
         }
@@ -728,11 +767,9 @@ public struct NewInvoiceView: View {
         } else {
             guard invoiceNumber.isEmpty else { return }
         }
-        let salesRaw = Invoice.Kind.sales.rawValue
-        let descriptor = FetchDescriptor<Invoice>(
-            predicate: #Predicate { $0.kindRaw == salesRaw }
-        )
-        let existing = (try? modelContext.fetch(descriptor))?.map(\.invoiceNumber) ?? []
+        let existing = (try? modelContext.fetch(FetchDescriptor<Invoice>()))?
+            .filter { isRR ? $0.isRR : $0.kind == .sales }
+            .map(\.invoiceNumber) ?? []
         invoiceNumber = InvoiceNumberGenerator.nextNumber(
             pattern: patternForCurrentType,
             existing: existing,
@@ -743,21 +780,22 @@ public struct NewInvoiceView: View {
 
     /// Buduje listę kontrahentów z historii faktur sprzedażowych (unikalnie po NIP).
     private func loadContractors() {
-        let salesRaw = Invoice.Kind.sales.rawValue
         let descriptor = FetchDescriptor<Invoice>(
-            predicate: #Predicate { $0.kindRaw == salesRaw },
             sortBy: [SortDescriptor(\Invoice.issueDate, order: .reverse)]
         )
-        let salesInvoices = (try? modelContext.fetch(descriptor)) ?? []
+        let salesInvoices = ((try? modelContext.fetch(descriptor)) ?? []).filter {
+            isRR ? $0.isRR : $0.kind == .sales
+        }
         var seen = Set<String>()
         contractors = salesInvoices.compactMap { invoice in
-            guard !invoice.buyerNIP.isEmpty, !seen.contains(invoice.buyerNIP) else { return nil }
-            seen.insert(invoice.buyerNIP)
+            let nip = isRR ? invoice.sellerNIP : invoice.buyerNIP
+            guard !nip.isEmpty, !seen.contains(nip) else { return nil }
+            seen.insert(nip)
             return HistoryContractor(
-                id: invoice.buyerNIP,
-                name: invoice.buyerName,
-                nip: invoice.buyerNIP,
-                address: invoice.buyerAddress
+                id: nip,
+                name: isRR ? invoice.sellerName : invoice.buyerName,
+                nip: nip,
+                address: isRR ? invoice.sellerAddress : invoice.buyerAddress
             )
         }
     }
@@ -771,14 +809,12 @@ public struct NewInvoiceView: View {
         return validationErrors.isEmpty
     }
 
-    /// Znormalizowane numery wszystkich faktur sprzedażowych w bazie,
+    /// Znormalizowane numery dokumentów z tej samej serii w bazie,
     /// z wyłączeniem dokumentu właśnie edytowanego.
     private func existingNumbers() -> Set<String> {
-        let salesRaw = Invoice.Kind.sales.rawValue
-        let descriptor = FetchDescriptor<Invoice>(
-            predicate: #Predicate { $0.kindRaw == salesRaw }
-        )
-        let all = (try? modelContext.fetch(descriptor)) ?? []
+        let all = ((try? modelContext.fetch(FetchDescriptor<Invoice>())) ?? []).filter {
+            isRR ? $0.isRR : $0.kind == .sales
+        }
         return Set(
             all.filter { $0.id != editingInvoice?.id }
                 .map { InvoiceValidator.normalizedNumber($0.invoiceNumber) }
@@ -977,7 +1013,8 @@ public struct NewInvoiceView: View {
                 cnPkwiu: line.cnPkwiu,
                 gtu: line.gtu,
                 procedure: line.procedure,
-                ossRate: line.ossRate
+                ossRate: line.ossRate,
+                rrQuality: line.rrQuality
             )
         }
         PaymentFormPolicy.apply(to: invoice, prepaidForms: PaymentFormPolicy.decode(prepaidFormsRaw))
@@ -1025,7 +1062,7 @@ public struct NewInvoiceView: View {
             saleDate: draft.saleDate,
             advanceInvoiceRefs: draft.advanceInvoiceRefs,
             marginProcedure: draft.marginProcedure,
-            kind: .sales
+            kind: draft.isRR ? .purchase : .sales
         )
         invoice.attachmentJSON = draft.attachments.encodedJSON()
         modelContext.insert(invoice)
@@ -1043,7 +1080,8 @@ public struct NewInvoiceView: View {
                 cnPkwiu: line.cnPkwiu,
                 gtu: line.gtu,
                 procedure: line.procedure,
-                ossRate: line.ossRate
+                ossRate: line.ossRate,
+                rrQuality: line.rrQuality
             )
         }
         // Forma płatności „z góry” (np. gotówka) → faktura od razu opłacona.
@@ -1060,6 +1098,8 @@ struct InvoiceLineEditor: View {
     var products: [Product] = []
     /// Waluta faktury — kwota brutto pozycji jest w tej walucie.
     var currencyCode: String = "PLN"
+    /// VAT RR ma osobne stawki i wymagane pole klasy/jakości (P_6C).
+    var isRR: Bool = false
     let canDelete: Bool
     let onDelete: () -> Void
 
@@ -1076,6 +1116,10 @@ struct InvoiceLineEditor: View {
                         ForEach(products) { product in
                             Button("\(product.name) — \(product.basePriceNet.formatted(.currency(code: "PLN"))) netto") {
                                 line.apply(product: product)
+                                if isRR {
+                                    line.vatRate = .rr
+                                    line.ossRate = nil
+                                }
                             }
                         }
                     } label: {
@@ -1102,40 +1146,51 @@ struct InvoiceLineEditor: View {
                 TextField("Cena netto", value: $line.unitNetPrice, format: .number.precision(.fractionLength(2)))
                     .textFieldStyle(.roundedBorder)
                     .frame(width: 100)
-                Picker("VAT", selection: $line.vatRate) {
-                    ForEach(VATRate.allCases) { rate in
+                Picker(isRR ? "Zwrot" : "VAT", selection: $line.vatRate) {
+                    ForEach(VATRate.allCases.filter { rate in
+                        isRR ? (rate == .rr || rate == .rrHistorical) : (rate != .rr && rate != .rrHistorical)
+                    }) { rate in
                         Text(rate.displayName).tag(rate)
                     }
                 }
                 .frame(width: 110)
                 .disabled(line.ossRate != nil)
-                TextField("OSS %", value: $line.ossRate, format: .number)
+                if !isRR {
+                    TextField("OSS %", value: $line.ossRate, format: .number)
                     .textFieldStyle(.roundedBorder)
                     .frame(width: 70)
                     .help("Procedura OSS (dział XII rozdz. 6a): stawka VAT państwa konsumpcji (P_12_XII). Wypełnienie zastępuje polską stawkę VAT; puste pole = zwykła pozycja.")
+                }
                 Spacer()
                 Text(line.grossAmount, format: .currency(code: currencyCode))
                     .monospacedDigit()
                     .foregroundStyle(.secondary)
             }
             HStack(spacing: 8) {
+                if isRR {
+                    TextField("Klasa / jakość", text: $line.rrQuality, prompt: Text("np. klasa I"))
+                        .textFieldStyle(.roundedBorder)
+                        .frame(width: 150)
+                }
                 TextField("CN / PKWiU", text: $line.cnPkwiu, prompt: Text("CN / PKWiU"))
                     .textFieldStyle(.roundedBorder)
                     .frame(width: 140)
                     .help("Kod CN (towary, same cyfry) lub PKWiU (format z kropkami)")
-                TextField("GTU", text: $line.gtu, prompt: Text("GTU"))
-                    .textFieldStyle(.roundedBorder)
-                    .frame(width: 90)
-                    .help("Kod GTU pozycji, np. GTU_12")
-                Picker("", selection: $line.procedure) {
-                    Text("(procedura)").tag("")
-                    ForEach(InvoiceLineDraft.procedures, id: \.self) { code in
-                        Text(code).tag(code)
+                if !isRR {
+                    TextField("GTU", text: $line.gtu, prompt: Text("GTU"))
+                        .textFieldStyle(.roundedBorder)
+                        .frame(width: 90)
+                        .help("Kod GTU pozycji, np. GTU_12")
+                    Picker("", selection: $line.procedure) {
+                        Text("(procedura)").tag("")
+                        ForEach(InvoiceLineDraft.procedures, id: \.self) { code in
+                            Text(code).tag(code)
+                        }
                     }
+                    .labelsHidden()
+                    .frame(width: 150)
+                    .help("Oznaczenie procedury pozycji (np. WSTO_EE — sprzedaż wysyłkowa OSS, IED — interfejs elektroniczny)")
                 }
-                .labelsHidden()
-                .frame(width: 150)
-                .help("Oznaczenie procedury pozycji (np. WSTO_EE — sprzedaż wysyłkowa OSS, IED — interfejs elektroniczny)")
                 Spacer()
             }
         }

@@ -31,6 +31,7 @@ public enum AppSettingsKeys {
     public static let numberPatternROZ = "ksef.numberPattern.ROZ"
     public static let numberPatternUPR = "ksef.numberPattern.UPR"
     public static let numberPatternKOR = "ksef.numberPattern.KOR"
+    public static let numberPatternRR = "ksef.numberPattern.RR"
     /// Formy płatności traktowane jako opłacone z góry (kody rozdzielone przecinkami).
     public static let prepaidForms = "ksef.prepaidForms"
     /// Horyzont (w dniach) widgetu „Płatności w najbliższych dniach” na Kokpicie.

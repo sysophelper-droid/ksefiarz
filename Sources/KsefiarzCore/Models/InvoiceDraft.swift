@@ -1,7 +1,7 @@
 import Foundation
 
 /// Szkic faktury sprzedażowej — dane wprowadzane w formularzu,
-/// walidowane przed wygenerowaniem XML FA(2) i wysyłką do KSeF.
+/// walidowane przed wygenerowaniem XML FA(3) lub FA_RR(1) i wysyłką do KSeF.
 public struct InvoiceDraft: Equatable, Sendable {
     public var invoiceNumber: String
     public var issueDate: Date
@@ -22,7 +22,7 @@ public struct InvoiceDraft: Equatable, Sendable {
     public var paymentBankAccount: String
     /// Uwagi (dopisek na fakturze) — Stopka/Informacje/StopkaFaktury w XML.
     public var notes: String = ""
-    /// Rodzaj faktury: "VAT", "ZAL" (zaliczkowa) lub "ROZ" (rozliczeniowa);
+    /// Rodzaj faktury: "VAT", "ZAL", "ROZ", "UPR" lub "VAT_RR";
     /// korekta (`correction != nil`) ma pierwszeństwo i daje "KOR".
     public var invoiceType: String = "VAT"
     /// Waluta faktury (KodWaluty).
@@ -45,12 +45,15 @@ public struct InvoiceDraft: Equatable, Sendable {
     /// to KOR_ZAL, rozliczeniowej KOR_ROZ.
     public var documentType: String {
         guard correction != nil else { return invoiceType }
+        if invoiceType == "VAT_RR" { return "KOR_VAT_RR" }
         switch invoiceType {
         case "ZAL": return "KOR_ZAL"
         case "ROZ": return "KOR_ROZ"
         default: return "KOR"
         }
     }
+    /// Dokument korzysta z osobnej struktury logicznej FA_RR(1).
+    public var isRR: Bool { invoiceType == "VAT_RR" }
     /// Dane faktury korygowanej — gdy ustawione, dokument jest korektą (KOR),
     /// a kwoty wyrażają różnicę względem faktury pierwotnej (mogą być ujemne).
     public var correction: InvoiceCorrectionInfo?
@@ -145,7 +148,8 @@ public extension InvoiceDraft {
                 cnPkwiu: line.cnPkwiu,
                 gtu: line.gtu,
                 procedure: line.procedure,
-                ossRate: line.ossRate
+                ossRate: line.ossRate,
+                rrQuality: line.rrQuality
             )
         }
 
@@ -183,6 +187,7 @@ public extension InvoiceDraft {
     static func baseType(for documentType: String) -> String {
         switch documentType {
         case "KOR": return "VAT"
+        case "KOR_VAT_RR": return "VAT_RR"
         case "KOR_ZAL": return "ZAL"
         case "KOR_ROZ": return "ROZ"
         default: return documentType
@@ -205,6 +210,8 @@ public struct InvoicePreset: Codable, Equatable, Sendable {
         /// Stawka OSS (P_12_XII) — opcjonalna, aby szablony zapisane przed
         /// jej wprowadzeniem dekodowały się bez zmian.
         public var ossRate: Double?
+        /// Opcjonalne dla zgodności z szablonami zapisanymi przed obsługą RR.
+        public var rrQuality: String?
     }
 
     public var sellerName: String
@@ -238,7 +245,7 @@ public struct InvoicePreset: Codable, Equatable, Sendable {
             Line(name: $0.name, unit: $0.unit, quantity: $0.quantity,
                  unitNetPrice: $0.unitNetPrice, vatRate: $0.vatRate.rawValue,
                  cnPkwiu: $0.cnPkwiu, gtu: $0.gtu, procedure: $0.procedure,
-                 ossRate: $0.ossRate)
+                 ossRate: $0.ossRate, rrQuality: $0.rrQuality)
         }
         paymentFormRaw = draft.paymentForm?.rawValue
         paymentBankAccount = draft.paymentBankAccount
@@ -272,7 +279,7 @@ public struct InvoicePreset: Codable, Equatable, Sendable {
                     unitNetPrice: $0.unitNetPrice,
                     vatRate: VATRate(rawValue: $0.vatRate) ?? .standard,
                     cnPkwiu: $0.cnPkwiu, gtu: $0.gtu, procedure: $0.procedure,
-                    ossRate: $0.ossRate)
+                    ossRate: $0.ossRate, rrQuality: $0.rrQuality ?? "")
             },
             paymentDueDate: Calendar.current.date(byAdding: .day, value: dueDays, to: issueDate),
             paymentForm: paymentFormRaw.flatMap(PaymentForm.init(rawValue:)),

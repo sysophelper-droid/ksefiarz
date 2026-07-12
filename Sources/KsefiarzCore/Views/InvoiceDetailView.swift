@@ -40,10 +40,10 @@ public struct InvoiceDetailView: View {
         self.invoice = invoice
     }
 
-    /// Faktura sprzedażowa zapisana tylko lokalnie — można ją edytować,
-    /// usunąć lub wysłać do KSeF.
+    /// Wystawiany przez nas dokument zapisany tylko lokalnie — zwykła
+    /// sprzedaż lub zakupowa VAT RR.
     private var isEditableLocal: Bool {
-        invoice.kind == .sales && invoice.isLocalOnly
+        (invoice.kind == .sales || invoice.isRR) && invoice.isLocalOnly
     }
 
     public var body: some View {
@@ -165,13 +165,17 @@ public struct InvoiceDetailView: View {
                     LabeledContent("Rodzaj dokumentu", value: "Faktura zaliczkowa (ZAL)")
                 case "ROZ":
                     LabeledContent("Rodzaj dokumentu", value: "Faktura rozliczeniowa (ROZ)")
+                case "VAT_RR":
+                    LabeledContent("Rodzaj dokumentu", value: "Faktura VAT RR")
+                case "KOR_VAT_RR":
+                    LabeledContent("Rodzaj dokumentu", value: "Korekta faktury VAT RR")
                 default:
                     EmptyView()
                 }
                 if let saleDate = invoice.saleDate {
                     LabeledContent(
-                        invoice.documentTypeRaw == "ZAL"
-                            ? "Data otrzymania zaliczki" : "Data sprzedaży / dostawy"
+                        invoice.documentTypeRaw == "ZAL" ? "Data otrzymania zaliczki"
+                            : invoice.isRR ? "Data nabycia" : "Data sprzedaży / dostawy"
                     ) {
                         Text(saleDate, style: .date)
                     }
@@ -430,7 +434,7 @@ public struct InvoiceDetailView: View {
                         )
                     }
 
-                    if invoice.kind == .sales, !invoice.isCorrection {
+                    if (invoice.kind == .sales || invoice.isRR), !invoice.isCorrection {
                         Button {
                             showingCorrectionForm = true
                         } label: {

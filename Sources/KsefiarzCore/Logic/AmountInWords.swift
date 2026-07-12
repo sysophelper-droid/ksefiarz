@@ -40,6 +40,18 @@ public enum AmountInWords {
         return "\(sign)\(words) \(currency) \(String(format: "%02d", grosze))/100"
     }
 
+    /// Kwota słownie do pola tekstowego schemy FA_RR. Dla PLN zachowuje
+    /// pełną odmianę, dla innych walut dopisuje kod ISO 4217.
+    public static func polishAmount(_ amount: Double, currencyCode: String) -> String {
+        guard currencyCode != "PLN" else { return polishCurrency(amount) }
+        let totalMinorUnits = Int((abs(amount) * 100).rounded())
+        let whole = totalMinorUnits / 100
+        let fraction = totalMinorUnits % 100
+        let sign = amount < 0 ? "minus " : ""
+        let words = whole == 0 ? "zero" : numberInWords(whole)
+        return "\(sign)\(words) \(currencyCode) \(String(format: "%02d", fraction))/100"
+    }
+
     /// Liczba całkowita słownie (do miliardów).
     static func numberInWords(_ number: Int) -> String {
         guard number != 0 else { return "zero" }
