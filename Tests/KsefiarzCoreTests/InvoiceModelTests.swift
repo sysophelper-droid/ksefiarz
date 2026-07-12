@@ -51,6 +51,11 @@ struct InvoiceModelTests {
         #expect(invoice.isPaid == false)
         #expect(invoice.isArchivedOrHidden == false)
         #expect(invoice.ksefId == nil)
+        #expect(invoice.isExcludedFromKPiR == false)
+        #expect(invoice.kpirColumnRaw.isEmpty)
+        #expect(invoice.kpirEventDate == nil)
+        #expect(invoice.kpirAmountOverride == nil)
+        #expect(invoice.kpirResearchDevelopmentCost == 0)
     }
 
     @Test("Zapis i odczyt faktury z bazy zachowuje wszystkie pola")
@@ -64,6 +69,13 @@ struct InvoiceModelTests {
         invoice.ksefStatusDescription = "Przyjęta"
         invoice.ksefEnvironmentRaw = KSeFEnvironment.production.rawValue
         invoice.upoXmlContent = "<UPO/>"
+        invoice.kpirColumnRaw = KPiRColumn.goodsAndMaterials.rawValue
+        invoice.isExcludedFromKPiR = true
+        invoice.kpirEventDate = Date(timeIntervalSince1970: 1_800_100_000)
+        invoice.kpirDescription = "Zakup materiałów"
+        invoice.kpirNotes = "KPiR"
+        invoice.kpirAmountOverride = 90
+        invoice.kpirResearchDevelopmentCost = 25
         context.insert(invoice)
         try context.save()
 
@@ -77,6 +89,13 @@ struct InvoiceModelTests {
         #expect(saved.ksefStatusCode == 200)
         #expect(saved.ksefEnvironmentRaw == KSeFEnvironment.production.rawValue)
         #expect(saved.upoXmlContent == "<UPO/>")
+        #expect(saved.kpirColumnRaw == KPiRColumn.goodsAndMaterials.rawValue)
+        #expect(saved.isExcludedFromKPiR)
+        #expect(saved.kpirEventDate == invoice.kpirEventDate)
+        #expect(saved.kpirDescription == "Zakup materiałów")
+        #expect(saved.kpirNotes == "KPiR")
+        #expect(saved.kpirAmountOverride == 90)
+        #expect(saved.kpirResearchDevelopmentCost == 25)
         #expect(saved.sellerNIP == "5260250274")
         #expect(abs(saved.grossAmount - 123.0) < 0.001)
     }

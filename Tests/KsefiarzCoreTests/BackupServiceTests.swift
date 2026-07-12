@@ -23,6 +23,13 @@ struct BackupServiceTests {
         invoice.lines = [
             InvoiceLine(index: 1, name: "Usługa", unit: "godz.", quantity: 2, unitNetPrice: 50, netAmount: 100, vatRate: "23", vatAmount: 23, rrQuality: "klasa I"),
         ]
+        invoice.isExcludedFromKPiR = true
+        invoice.kpirColumnRaw = KPiRColumn.otherRevenue.rawValue
+        invoice.kpirEventDate = Date(timeIntervalSince1970: 1_799_000_000)
+        invoice.kpirDescription = "Pozostały przychód"
+        invoice.kpirNotes = "Do sprawdzenia"
+        invoice.kpirAmountOverride = 88.12
+        invoice.kpirResearchDevelopmentCost = 20
         return invoice
     }
 
@@ -56,6 +63,11 @@ struct BackupServiceTests {
         #expect(entry.lines.count == 1)
         #expect(entry.lines.first?.name == "Usługa")
         #expect(entry.lines.first?.rrQuality == "klasa I")
+        #expect(entry.isExcludedFromKPiR == true)
+        #expect(entry.kpirColumnRaw == KPiRColumn.otherRevenue.rawValue)
+        #expect(entry.kpirDescription == "Pozostały przychód")
+        #expect(entry.kpirAmountOverride == 88.12)
+        #expect(entry.kpirResearchDevelopmentCost == 20)
 
         // Odtworzony model ma te same wartości.
         let restored = BackupService.makeInvoice(from: entry)
@@ -67,6 +79,13 @@ struct BackupServiceTests {
         #expect(restored.ksefSubmissionStatus == .accepted)
         #expect(restored.ksefStatusCode == 200)
         #expect(restored.upoXmlContent == "<UPO/>")
+        #expect(restored.isExcludedFromKPiR)
+        #expect(restored.kpirColumnRaw == KPiRColumn.otherRevenue.rawValue)
+        #expect(restored.kpirEventDate == invoice.kpirEventDate)
+        #expect(restored.kpirDescription == "Pozostały przychód")
+        #expect(restored.kpirNotes == "Do sprawdzenia")
+        #expect(restored.kpirAmountOverride == 88.12)
+        #expect(restored.kpirResearchDevelopmentCost == 20)
         let restoredLines = BackupService.makeLines(for: entry)
         #expect(restoredLines.count == 1)
         #expect(restoredLines.first?.netAmount == 100)

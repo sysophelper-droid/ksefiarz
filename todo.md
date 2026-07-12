@@ -33,8 +33,6 @@ kolejność dowolna. ⚠️ operacje modyfikujące KSeF testować wyłącznie na
 
 #### B. Podatki dochodowe / ewidencje
 
-- [ ] B1. KPiR (Księga Przychodów i Rozchodów) — ewidencja dla zasad
-  ogólnych/podatku liniowego, z eksportem.
 - [ ] B2. Ewidencja przychodów (ryczałt) — z podziałem na stawki ryczałtu.
 - [ ] ⭐ B3. Kalendarz i prognoza podatkowa — terminarz (JPK do 25., VAT,
   zaliczka PIT, ZUS) + szacunek kwot VAT/PIT do zapłaty za bieżący okres.
@@ -94,6 +92,17 @@ kolejność dowolna. ⚠️ operacje modyfikujące KSeF testować wyłącznie na
   (dziś zaszyte PL/EN).
 
 ## Zrealizowane
+
+### KPiR — Księga Przychodów i Rozchodów (13.07.2026)
+
+- [x] B1. Ewidencja KPiR dla zasad ogólnych i podatku liniowego według
+  19-kolumnowego wzoru obowiązującego od 2026 r. Faktury są automatycznie
+  ujmowane jako sprzedaż albo pozostałe wydatki; użytkownik może zmienić
+  datę zdarzenia, opis, kolumnę 9/10/12–15, kwotę podatkową, koszt B+R,
+  uwagi lub wykluczyć dokument. Widok pokazuje podsumowanie okresu, ostrzega
+  o brakującym kursie waluty i eksportuje pełny układ księgi do CSV.
+  Faktury ukryte pozostają poza ewidencją, a lokalna klasyfikacja KPiR
+  wchodzi do kopii zapasowej.
 
 ### Logo i branding wydruków PDF (13.07.2026)
 
