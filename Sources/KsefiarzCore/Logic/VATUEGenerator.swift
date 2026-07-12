@@ -72,7 +72,8 @@ public struct VATUEResult: Sendable {
 ///   dla sprzedaży, sellerNIP dla zakupu); numery bez prefiksu = krajowe,
 ///   spoza UE = pomijane;
 /// - towar vs usługa z kodu pozycji (CN — same cyfry → towar; PKWiU
-///   z kropkami → usługa; brak kodu → domyślnie towar z ostrzeżeniem);
+///   z kropkami → usługa); pozycje sprzedaży muszą dodatkowo mieć stawkę 0%,
+///   a brak kodu jest pomijany jako nierozstrzygalny;
 /// - kwoty w pełnych złotych (TKwotaC), sumowane per kontrahent.
 ///
 /// Świadome uproszczenia i wyłączenia (raportowane w `warnings`):
@@ -89,12 +90,13 @@ public enum VATUEGenerator {
     public static let etdNamespace =
         "http://crd.gov.pl/xml/schematy/dziedzinowe/mf/2020/03/11/eD/DefinicjeTypy/"
 
-    /// Kody krajów UE dla wymiany TOWARÓW (TKodKrajuUE). Zawiera XI (Irlandia
-    /// Płn., wyłącznie towary) oraz — zgodnie z wciąż obowiązującym słownikiem
-    /// MF — GB. Bez PL (podatnik nie wykazuje transakcji z samym sobą).
+    /// Kody krajów UE dla wymiany TOWARÓW. Zawiera XI (Irlandia Płn.,
+    /// wyłącznie towary). Stary słownik XSD nadal technicznie dopuszcza GB,
+    /// ale po Brexicie Wielka Brytania nie jest państwem UE, więc jej nie
+    /// kwalifikujemy. Bez PL (podatnik nie wykazuje transakcji z samym sobą).
     static let goodsCountries: Set<String> = [
         "AT", "BE", "BG", "CY", "CZ", "DK", "DE", "EE", "EL", "ES", "FI", "FR",
-        "GB", "HR", "HU", "IE", "IT", "LV", "LT", "LU", "MT", "NL", "PT", "RO",
+        "HR", "HU", "IE", "IT", "LV", "LT", "LU", "MT", "NL", "PT", "RO",
         "SE", "SI", "SK", "XI",
     ]
 
@@ -131,7 +133,7 @@ public enum VATUEGenerator {
             if invoice.isCorrection { hasCorrection = true }
             let key = cp.country + "|" + cp.vat
             meta[key] = cp
-            let split = splitNet(invoice, warnings: &warnings)
+            let split = splitNet(invoice, requireZeroVAT: true, warnings: &warnings)
             if split.goods != 0 {
                 wdtSums[key, default: 0] += split.goods
             }
@@ -153,7 +155,7 @@ public enum VATUEGenerator {
             if invoice.isCorrection { hasCorrection = true }
             let key = cp.country + "|" + cp.vat
             meta[key] = cp
-            let split = splitNet(invoice, warnings: &warnings)
+            let split = splitNet(invoice, requireZeroVAT: false, warnings: &warnings)
             if split.goods != 0 {
                 wntSums[key, default: 0] += split.goods
             }
@@ -170,7 +172,7 @@ public enum VATUEGenerator {
 
         if hasCorrection {
             warnings.append(
-                "Okres zawiera faktury korygujące — VAT-UE koryguje się przez ponowne złożenie całej informacji za okres; zweryfikuj wartości."
+                "Okres zawiera faktury korygujące. Jeżeli informacja za ten okres została już złożona, zmiany wykazuje się na formularzu VAT-UEK — ten eksport tworzy wyłącznie pierwsze złożenie VAT-UE."
             )
         }
 
@@ -190,7 +192,9 @@ public enum VATUEGenerator {
         guard prefix.allSatisfy(\.isLetter) else { return nil }
         let country = prefix == "GR" ? "EL" : prefix
         let vat = String(cleaned.dropFirst(2))
-        guard !vat.isEmpty else { return nil }
+        guard !vat.isEmpty, vat.unicodeScalars.allSatisfy({ scalar in
+            (48...57).contains(scalar.value) || (65...90).contains(scalar.value)
+        }) else { return nil }
         return (country, vat)
     }
 
@@ -204,30 +208,42 @@ public enum VATUEGenerator {
     static func classify(_ code: String) -> LineKind {
         let trimmed = code.trimmingCharacters(in: .whitespaces)
         if trimmed.isEmpty { return .unknown }
-        if trimmed.contains(".") { return .service }
-        if trimmed.contains(where: \.isNumber) { return .goods }
+        if trimmed.contains("."), trimmed.allSatisfy({ $0.isNumber || $0 == "." }) {
+            return .service
+        }
+        if trimmed.allSatisfy(\.isNumber) { return .goods }
         return .unknown
     }
 
     /// Rozkłada wartość netto faktury (w PLN) na towary i usługi. Pozycje OSS
-    /// są pomijane (procedura OSS poza VAT-UE); brak pozycji lub brak kodu
-    /// CN/PKWiU → wartość jako towary z ostrzeżeniem.
-    static func splitNet(_ invoice: Invoice, warnings: inout [String]) -> (goods: Double, services: Double) {
+    /// są pomijane (procedura OSS poza VAT-UE). Dla sprzedaży stawka 0% jest
+    /// koniecznym, choć niewystarczającym sygnałem WDT/usługi art. 28b;
+    /// pozycje z inną stawką oraz pozycje bez jednoznacznego CN/PKWiU są
+    /// pomijane, aby nie tworzyć fałszywych wpisów podatkowych.
+    static func splitNet(
+        _ invoice: Invoice,
+        requireZeroVAT: Bool,
+        warnings: inout [String]
+    ) -> (goods: Double, services: Double) {
         let lines = invoice.sortedLines
         if lines.isEmpty {
-            let net = JPKV7Generator.amountInPLN(invoice.netAmount, invoice: invoice, warnings: &warnings)
             warnings.append(
-                "Faktura \(invoice.invoiceNumber): brak pozycji — całość wykazana jako towary; zweryfikuj, czy nie są to usługi (część E)."
+                "Faktura \(invoice.invoiceNumber): brak pozycji z kodem CN/PKWiU — nie można bezpiecznie rozpoznać WDT, WNT ani usługi UE; pominięto."
             )
-            return (net, 0)
+            return (0, 0)
         }
         var goods = 0.0
         var services = 0.0
         var sawUnknown = false
         var sawOSS = false
+        var sawNonZeroVAT = false
         for line in lines {
             if line.ossRate != nil {
                 sawOSS = true
+                continue
+            }
+            if requireZeroVAT, line.vatRate != VATRate.zero.rawValue {
+                sawNonZeroVAT = true
                 continue
             }
             let net = JPKV7Generator.amountInPLN(line.netAmount, invoice: invoice, warnings: &warnings)
@@ -235,7 +251,6 @@ public enum VATUEGenerator {
             case .goods: goods += net
             case .service: services += net
             case .unknown:
-                goods += net
                 sawUnknown = true
             }
         }
@@ -246,7 +261,12 @@ public enum VATUEGenerator {
         }
         if sawUnknown {
             warnings.append(
-                "Faktura \(invoice.invoiceNumber): pozycja bez kodu CN/PKWiU — zakwalifikowana jako towary; zweryfikuj, czy nie jest to usługa (część E)."
+                "Faktura \(invoice.invoiceNumber): pozycja bez jednoznacznego kodu CN/PKWiU — nie można bezpiecznie rozpoznać towaru ani usługi; pominięto."
+            )
+        }
+        if sawNonZeroVAT {
+            warnings.append(
+                "Faktura \(invoice.invoiceNumber): pozycja sprzedaży z polską stawką inną niż 0% nie potwierdza WDT ani usługi z art. 28b — pominięto."
             )
         }
         return (goods, services)
@@ -265,17 +285,25 @@ public enum VATUEGenerator {
         var result: [VATUEEntry] = []
         for (key, value) in sums {
             guard let cp = meta[key] else { continue }
-            let zl = Int(value.rounded())
+            let rounded = value.rounded()
+            guard rounded.isFinite, abs(rounded) < 1_000_000_000_000 else {
+                warnings.append(
+                    "\(section): wartość dla \(cp.country)\(cp.vat) przekracza 12 cyfr dopuszczonych przez XSD — wpis pominięto."
+                )
+                continue
+            }
+            let zl = Int(rounded)
             if zl == 0 { continue }
             if zl < 0 {
                 warnings.append(
-                    "\(section): kontrahent \(cp.country)\(cp.vat) ma ujemną wartość (\(zl) zł) — VAT-UE nie przyjmuje kwot ujemnych; skoryguj ręcznie."
+                    "\(section): kontrahent \(cp.country)\(cp.vat) ma ujemną wartość (\(zl) zł) — zweryfikuj korekty; po wcześniejszym złożeniu VAT-UE użyj VAT-UEK."
                 )
             }
-            if cp.vat.count > 12 {
+            guard cp.vat.count <= 12 else {
                 warnings.append(
-                    "\(section): numer VAT \(cp.country)\(cp.vat) przekracza 12 znaków — zweryfikuj poprawność."
+                    "\(section): numer VAT \(cp.country)\(cp.vat) przekracza 12 znaków dopuszczonych przez XSD — wpis pominięto."
                 )
+                continue
             }
             result.append(VATUEEntry(countryCode: cp.country, vatNumber: cp.vat, amountPLN: zl))
         }

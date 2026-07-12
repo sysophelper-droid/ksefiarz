@@ -39,7 +39,9 @@ public struct VATUEExportView: View {
     }
 
     private var isReady: Bool {
-        !sellerNIP.isEmpty && !sellerName.isEmpty
+        let normalizedName = sellerName.trimmingCharacters(in: .whitespacesAndNewlines)
+        return InvoiceValidator.isValidNIP(sellerNIP)
+            && !normalizedName.isEmpty && normalizedName.count <= 240
             && taxOfficeCode.filter(\.isNumber).count == 4
     }
 
@@ -100,7 +102,7 @@ public struct VATUEExportView: View {
 
             Divider()
             HStack {
-                Text("Plik zweryfikuj przed wysyłką (bramka e-Deklaracje). Kontrahent UE rozpoznawany po prefiksie kraju w numerze VAT; towar/usługa z kodu CN/PKWiU; import usług i procedura OSS poza VAT-UE.")
+                Text("Plik zweryfikuj przed wysyłką (bramka e-Deklaracje). Eksport tworzy kandydatów na podstawie numeru VAT UE, kodu CN/PKWiU i — dla sprzedaży — stawki 0%. Potwierdź warunki WDT/WNT lub art. 28b; import usług i OSS pozostają poza VAT-UE.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 Spacer()
@@ -116,7 +118,7 @@ public struct VATUEExportView: View {
                 }
                 .keyboardShortcut(.defaultAction)
                 .disabled(!isReady || result.isEmpty)
-                .help(isReady ? "Zapisuje plik XML VAT-UE(5)" : "Uzupełnij dane podmiotu (nazwa i NIP w Ustawieniach, kod urzędu powyżej)")
+                .help(isReady ? "Zapisuje plik XML VAT-UE(5)" : "Uzupełnij dane podmiotu (prawidłowa nazwa i NIP w Ustawieniach, kod urzędu powyżej)")
             }
             .padding()
         }

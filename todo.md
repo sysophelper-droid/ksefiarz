@@ -101,12 +101,13 @@ kolejność dowolna. ⚠️ operacje modyfikujące KSeF testować wyłącznie na
 - [x] A1. Generator VAT-UE(5) obok JPK_V7M: WDT (część C), WNT (część D)
   i świadczenie usług UE (część E) z danych faktur. Kontrahent UE
   rozpoznawany po prefiksie kraju w numerze VAT (buyerNIP sprzedaż /
-  sellerNIP zakup; GR→EL; XI tylko dla towarów; PL i spoza UE pomijane),
-  towar vs usługa z kodu CN/PKWiU pozycji, kwoty w pełnych złotych sumowane
+  sellerNIP zakup; GR→EL; XI tylko dla towarów; PL, GB i spoza UE pomijane),
+  towar vs usługa z kodu CN/PKWiU pozycji, sprzedaż dodatkowo po stawce 0%,
+  dane niejednoznaczne pomijane z ostrzeżeniem, kwoty w pełnych złotych sumowane
   per kontrahent. Import usług i procedura OSS świadomie poza VAT-UE
   (z ostrzeżeniami). Dokument zgodny z oficjalną XSD (crd.gov.pl/wzor/2021/
   01/12/10293) — zweryfikowany xmllintem. VATUEGenerator (czysta logika,
-  pokrycie 99,6% linii, 22 testy) + VATUEExportView (menu „Ewidencje” na
+  pokrycie 99,6% linii, 23 testy) + VATUEExportView (menu „Ewidencje” na
   listach faktur). Cel złożenia na stałe = 1 (schema nie zna wariantu
   korekty); część F (call-off stock) poza zakresem.
 

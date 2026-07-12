@@ -228,11 +228,13 @@ unikalności = kraj+numer+flaga): **Grupa1** WDT/część C
 {P_Na, P_Nb, P_Nc, **P_Nd=1**}; **Grupa3** usługi/część E {P_Ua, P_Ub, P_Uc —
 bez flagi}; Grupa4 (call-off stock) NIE generowana (brak modelu danych).
 Kody krajów: `TKodKrajuUE` (towary) i `TKodKrajuUEUslugi` (usługi, bez XI);
-Grecja = **EL**, Irlandia Płn. **XI tylko dla towarów**, PL wykluczone,
-GB nadal w słowniku. Numer VAT bez prefiksu kraju (TNrVatUE, 1–12 znaków).
+Grecja = **EL**, Irlandia Płn. **XI tylko dla towarów**, PL wykluczone.
+Stary słownik XSD nadal technicznie zawiera GB, ale generator pomija Wielką
+Brytanię po Brexicie. Numer VAT bez prefiksu kraju (TNrVatUE, 1–12 znaków).
 Kwalifikacja z faktury: kontrahent UE po prefiksie kraju (buyerNIP sprzedaż /
 sellerNIP zakup; same cyfry = krajowy, GR→EL); towar vs usługa po kodzie
-pozycji (CN=towar, PKWiU z kropkami=usługa, brak→towar z ostrzeżeniem);
+pozycji (CN=towar, PKWiU z kropkami=usługa), a dla sprzedaży dodatkowo po
+stawce 0%. Brak kodu i sprzedaż z inną stawką są pomijane z ostrzeżeniem;
 kwoty per kontrahent, zaokrąglenie do złotych. **Import usług** (zakup usług
 z UE) i **procedura OSS** świadomie POZA VAT-UE (tylko JPK_V7 / procedura
 unijna). Wygenerowany dokument (WDT+WNT+usługi, EL, XI) zweryfikowany

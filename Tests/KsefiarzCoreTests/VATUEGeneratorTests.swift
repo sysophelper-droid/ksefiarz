@@ -133,11 +133,12 @@ struct VATUEGeneratorTests {
         #expect(result.warnings.contains { $0.contains("import usług") })
     }
 
-    @Test("Kontrahent krajowy (same cyfry) i spoza UE (np. CH) są pomijani")
+    @Test("Kontrahent krajowy i spoza UE, w tym GB po Brexicie, są pomijani")
     func domesticAndNonEUExcluded() {
         let domestic = euSale(number: "A", buyerNIP: "1111111111", lines: [goods(1, net: 100)])
         let swiss = euSale(number: "B", buyerNIP: "CHE123456789", lines: [goods(1, net: 200)])
-        let result = VATUEGenerator.generate(invoices: [domestic, swiss], options: makeOptions())
+        let british = euSale(number: "C", buyerNIP: "GB123456789", lines: [goods(1, net: 300)])
+        let result = VATUEGenerator.generate(invoices: [domestic, swiss, british], options: makeOptions())
         #expect(result.isEmpty)
     }
 
@@ -196,20 +197,30 @@ struct VATUEGeneratorTests {
         #expect(result.wdt.first(where: { $0.vatNumber == "222222222" })?.amountPLN == 101)
     }
 
-    @Test("Brak pozycji → całość jako towary (WDT) z ostrzeżeniem")
+    @Test("Brak pozycji → pominięcie, bo nie można rozpoznać towaru lub usługi")
     func noLinesFallback() {
         let invoice = euSale(buyerNIP: "DE123456789", lines: [], net: 4200)
         let result = VATUEGenerator.generate(invoices: [invoice], options: makeOptions())
-        #expect(result.wdt.first?.amountPLN == 4200)
+        #expect(result.isEmpty)
         #expect(result.warnings.contains { $0.contains("brak pozycji") })
     }
 
-    @Test("Pozycja bez kodu CN/PKWiU → towary z ostrzeżeniem")
+    @Test("Pozycja bez kodu CN/PKWiU → pominięcie z ostrzeżeniem")
     func unknownCodeFallback() {
         let invoice = euSale(buyerNIP: "DE123456789", lines: [line(1, net: 900, code: "")])
         let result = VATUEGenerator.generate(invoices: [invoice], options: makeOptions())
-        #expect(result.wdt.first?.amountPLN == 900)
-        #expect(result.warnings.contains { $0.contains("bez kodu CN/PKWiU") })
+        #expect(result.isEmpty)
+        #expect(result.warnings.contains { $0.contains("jednoznacznego kodu CN/PKWiU") })
+    }
+
+    @Test("Sprzedaż z polską stawką inną niż 0% nie jest automatycznie WDT")
+    func domesticVATRateExcluded() {
+        let taxableGoods = line(1, net: 900, code: "85234910")
+        taxableGoods.vatRate = "23"
+        let invoice = euSale(buyerNIP: "DE123456789", lines: [taxableGoods])
+        let result = VATUEGenerator.generate(invoices: [invoice], options: makeOptions())
+        #expect(result.isEmpty)
+        #expect(result.warnings.contains { $0.contains("stawką inną niż 0%") })
     }
 
     @Test("Pozycje OSS pominięte z ostrzeżeniem (procedura OSS poza VAT-UE)")
@@ -264,10 +275,12 @@ struct VATUEGeneratorTests {
         #expect(!result.xml.contains("<Grupa1>"))
     }
 
-    @Test("Numer VAT dłuższy niż 12 znaków → ostrzeżenie")
+    @Test("Numer VAT dłuższy niż 12 znaków → wpis pominięty, aby XML był zgodny z XSD")
     func tooLongVATNumber() {
         let invoice = euSale(buyerNIP: "DE1234567890123", lines: [goods(1, net: 100)])
         let result = VATUEGenerator.generate(invoices: [invoice], options: makeOptions())
+        #expect(result.isEmpty)
+        #expect(!result.xml.contains("1234567890123"))
         #expect(result.warnings.contains { $0.contains("12 znaków") })
     }
 
@@ -307,6 +320,7 @@ struct VATUEGeneratorTests {
         #expect(VATUEGenerator.parseCounterparty("5260250274") == nil)          // krajowy
         #expect(VATUEGenerator.parseCounterparty("DE") == nil)                   // za krótki
         #expect(VATUEGenerator.parseCounterparty("D1234") == nil)               // prefiks nie-literowy
+        #expect(VATUEGenerator.parseCounterparty("DE12Ł34") == nil)              // poza alfabetem XSD
         let de = VATUEGenerator.parseCounterparty("de 123-456-789")
         #expect(de?.country == "DE")
         #expect(de?.vat == "123456789")
@@ -319,5 +333,6 @@ struct VATUEGeneratorTests {
         #expect(VATUEGenerator.classify("") == .unknown)
         #expect(VATUEGenerator.classify("   ") == .unknown)
         #expect(VATUEGenerator.classify("USLUGA") == .unknown) // bez kropki i bez cyfr
+        #expect(VATUEGenerator.classify("ABC1") == .unknown)
     }
 }

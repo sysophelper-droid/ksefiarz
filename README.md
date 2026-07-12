@@ -264,7 +264,9 @@ Tests/KsefiarzCoreTests/          # 412 testów (Swift Testing) — model, parse
   (WDT, część C), nabycia towarów (WNT, część D) i świadczenie usług UE
   (część E) na podstawie faktur. Kontrahent UE rozpoznawany po prefiksie
   kraju w numerze VAT (Grecja jako „EL”, Irlandia Płn. „XI” tylko dla
-  towarów), towar vs usługa z kodu CN/PKWiU pozycji, kwoty w pełnych
+  towarów; GB pomijane po Brexicie), towar vs usługa z kodu CN/PKWiU
+  pozycji, a sprzedaż dodatkowo po stawce 0%; dane niejednoznaczne są
+  pomijane z ostrzeżeniem. Kwoty w pełnych
   złotych sumowane per kontrahent. Plik zgodny z oficjalną XSD VAT-UE(5)
   (zweryfikowany xmllint); arkusz pokazuje zestawienia i ostrzeżenia
   (import usług i procedura OSS pozostają poza VAT-UE).
