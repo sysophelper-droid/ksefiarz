@@ -52,7 +52,7 @@ Sources/
         ├── InvoiceAutomationView.swift # szablony, cykle i kolejka zatwierdzeń
         ├── HiddenInvoicesView.swift # archiwum „Nieuprawnione / Ukryte”
         └── SettingsView.swift    # NIP, token KSeF, środowisko
-Tests/KsefiarzCoreTests/          # 597 testów (Swift Testing) — model, parser, usługa, kryptografia, logika
+Tests/KsefiarzCoreTests/          # 608 testów (Swift Testing) — model, parser, usługa, kryptografia, logika
 ```
 
 ## Funkcje
@@ -271,7 +271,10 @@ Tests/KsefiarzCoreTests/          # 597 testów (Swift Testing) — model, parse
   **miesięczny** (JPK_V7M) albo **kwartalny** (JPK_V7K — mały podatnik / VAT
   kwartalny), gdzie ewidencję składa się co miesiąc, a deklarację raz na
   kwartał — powstaje ona tylko w pliku ostatniego miesiąca kwartału i obejmuje
-  sumy całego kwartału. Pliki zgodne z oficjalnymi XSD JPK_V7M(2)/JPK_V7K(2);
+  sumy całego kwartału. Dla okresów od lutego 2026 r. generator stosuje
+  aktualne schemy JPK_V7M(3)/JPK_V7K(3), w tym numer KSeF albo wymagany
+  znacznik OFF/BFK/DI; dla wcześniejszych okresów od 2022 r. zachowuje
+  historyczne schemy (2). Pliki są zgodne z oficjalnymi XSD;
   arkusz pokazuje podsumowanie i listę pozycji do ręcznej weryfikacji
   (m.in. pozycje OSS rozliczane poza JPK, procedura marży, brak kursu).
 - **Eksport VAT-UE** — informacja podsumowująca za wybrany miesiąc

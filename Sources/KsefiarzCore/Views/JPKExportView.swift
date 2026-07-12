@@ -37,6 +37,9 @@ public struct JPKExportView: View {
     private var isQuarterEndMonth: Bool { month % 3 == 0 }
     private var quarterNumber: Int { (month - 1) / 3 + 1 }
     private var declarationApplies: Bool { variant == .monthly || isQuarterEndMonth }
+    private var schemaVersion: Int {
+        variant.schema(year: year, month: month).formVariant
+    }
 
     private var options: JPKV7Options {
         JPKV7Options(
@@ -188,7 +191,7 @@ public struct JPKExportView: View {
                 }
                 .keyboardShortcut(.defaultAction)
                 .disabled(!isReady || (result.salesCount == 0 && result.purchaseCount == 0))
-                .help(isReady ? "Zapisuje plik XML \(variant.fileTag)(2)" : "Uzupełnij dane podmiotu (nazwa i NIP w Ustawieniach, kod urzędu i e-mail powyżej)")
+                .help(isReady ? "Zapisuje plik XML \(variant.fileTag)(\(schemaVersion))" : "Uzupełnij dane podmiotu (nazwa i NIP w Ustawieniach, kod urzędu i e-mail powyżej)")
             }
             .padding()
         }

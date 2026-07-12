@@ -100,17 +100,18 @@ kolejność dowolna. ⚠️ operacje modyfikujące KSeF testować wyłącznie na
 
 ### JPK_V7K — kwartalny wariant ewidencji VAT (12.07.2026)
 
-- [x] B0. Generator JPK_V7K(2) obok JPK_V7M(2) — wariant kwartalny (mały
+- [x] B0. Generator JPK_V7K obok JPK_V7M — wariant kwartalny (mały
   podatnik / VAT kwartalny): ewidencja składana co miesiąc, część deklaracyjna
   raz na kwartał, wyłącznie w pliku ostatniego miesiąca kwartału (marzec,
   czerwiec, wrzesień, grudzień). Wtedy ewidencja obejmuje tylko ten miesiąc,
-  a deklaracja VAT-7K(16) — sumy CAŁEGO kwartału, z elementem `Kwartal` (1–4).
-  V7M i V7K to OSOBNE schematy XSD (V7M `.../11148/`, V7K `.../11149/` — różny
-  namespace, kod formularza, kod i wariant deklaracji, dodatkowy `Kwartal`).
+  a deklaracja VAT-7K — sumy CAŁEGO kwartału, z elementem `Kwartal` (1–4).
+  Generator dobiera wydanie XSD do okresu: aktualne V7M(3)/V7K(3) od lutego
+  2026 r. (w tym obowiązkowy `NrKSeF` albo OFF/BFK/DI) oraz historyczne wydanie
+  (2) dla okresów od 2022 r. do stycznia 2026 r.
   Enum `JPKV7Variant` w `JPKV7Generator` (miesięce 1–2 kwartału → sama
   ewidencja z ostrzeżeniem; okno eksportu dobiera wariant, etykiety i nazwę
   pliku). Dokumenty (kwartalny z deklaracją oraz miesiąc-w-trakcie)
-  zweryfikowane oficjalną XSD (xmllint). Nowy suite testów JPK_V7K.
+  zweryfikowane oficjalnymi XSD (xmllint). Nowy suite testów JPK_V7K.
 
 ### Faktury VAT RR — struktura FA_RR(1) (12.07.2026)
 

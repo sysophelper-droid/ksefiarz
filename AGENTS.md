@@ -5,6 +5,10 @@ fakturami z pełną integracją z **KSeF 2.0** (produkcyjne API, prawdziwa
 kryptografia). Język projektu: **polski** — UI, komentarze, komunikaty błędów,
 nazwy testów. Kod w trybie języka Swift 5 (`.swiftLanguageMode(.v5)`).
 
+Ten plik zawiera **zasady pracy i decyzje projektowe**. Wiedza referencyjna
+(mapa modułów, fakty o API, zasady schemy FA(3), lokalizacje danych) jest
+w **`ARCHITECTURE.md`**; zadania i backlog w **`todo.md`**.
+
 ## Komendy
 
 ```bash
@@ -27,9 +31,8 @@ swift test --filter LiveKSeFIntegrationTests
 
 ⚠️ Środowisko użytkownika to **production** — testy na żywo mogą tylko czytać
 (auth, query metadanych, pobieranie XML/UPO). **Nigdy nie wysyłaj faktur na
-produkcję**; wysyłkę testuj na mockach albo na środowisku `test`.
-
-Podgląd bazy (tylko odczyt): `sqlite3 -readonly ~/Library/Application\ Support/Ksefiarz/Ksefiarz.store`.
+produkcję i nie modyfikuj tam uprawnień**; takie operacje testuj na mockach
+albo na środowisku `test`.
 
 Token dla środowiska testowego (self-signed XAdES, działa wyłącznie na `test`;
 wymaga venv z `signxml requests cryptography lxml`):
@@ -45,72 +48,26 @@ KSEF_LIVE_SEND=1 KSEF_LIVE_ENV=test KSEF_LIVE_NIP=<NIP> \
 KSEF_LIVE_TOKEN=<token testowy> swift test --filter LiveSendTests
 ```
 
-Tokeny per środowisko w pęku kluczy: produkcja `ksef.token`,
-pozostałe `ksef.token.<env>` (patrz `TokenStore.account(forEnvironment:)`).
+Test na żywo uwierzytelnienia certyfikatem (self-signed, tylko `test`;
+wykonuje też pełny wniosek o certyfikat KSeF):
 
-## Architektura
-
-```
-Sources/KsefiarzApp/InvoiceApp.swift   # @main, ModelContainer, AppDelegate (ikona, migracja defaults)
-Sources/KsefiarzCore/
-  Models/      Invoice (@Model) + InvoiceLine (relacja), InvoiceDraft (+ init(from: Invoice)),
-               słowniki: Contractor, Product, BankAccount (@Model, dane tylko
-               PODSTAWIANE do faktur — pola faktury zawsze edytowalne ręcznie)
-  Services/    KSeFService (API 2.0), KSeFCrypto, FA2XML (generator+parser), InvoiceValidator,
-               BackupService, FileExportService (NSSave/OpenPanel), InvoicePDFGenerator,
-               TokenStore (token w pęku kluczy), ContractorLookupService (Biała
-               lista VAT, wl-api.mf.gov.pl — publiczne, bez klucza)
-  Logic/       InvoiceFilter, KSeFSyncFilter, DashboardMetrics, DateRangeResolver,
-               DisplayDateFilter, InvoiceNumberGenerator, AmountInWords, InvoiceCSVExporter,
-               PaymentFormPolicy, InvoiceSyncEngine (wspólny sync: ręczny,
-               przy starcie i cykliczny — automatyka w MainContentView)
-  Views/       MainContentView (NavigationSplitView), InvoiceListView, InvoiceDetailView,
-               NewInvoiceView (nowa/edycja/korekta), DashboardView, SettingsView, HiddenInvoicesView,
-               DictionariesView (+ ContractorsView/ProductsView/BankAccountsView)
-Tests/KsefiarzCoreTests/               # Swift Testing (#expect/#require), nazwy PO POLSKU
-Scripts/build-app.sh                   # składanie bundla .app
+```bash
+KSEF_LIVE_NIP=<NIP> KSEF_LIVE_ENV=test swift test --filter LiveCertificateAuthTests
 ```
 
-Zasada: **logika domenowa w Logic/Services jako czyste funkcje/typy z testami**;
-widoki tylko spinają logikę z SwiftUI. Klucze ustawień wyłącznie przez
-`AppSettingsKeys` (@AppStorage).
+Weryfikacja kodów QR e2e na bramce qr-test (wysyła dokument offline na
+środowisko testowe; NIP może być fikcyjny, np. 9999999999):
 
-## API KSeF 2.0 — fakty krytyczne
+```bash
+KSEF_LIVE_SEND=1 KSEF_LIVE_ENV=test KSEF_LIVE_NIP=9999999999 \
+  swift test --filter LiveQRVerificationTests
+```
 
-- Hosty: `https://api{-test,-demo,}.ksef.mf.gov.pl/api/v2` (enum `KSeFEnvironment`).
-- Auth tokenem: challenge → RSA-OAEP(SHA-256) na `token|timestampMs` kluczem
-  publicznym MF (z `/security/public-key-certificates`, usage `KsefTokenEncryption`)
-  → `/auth/ksef-token` → polling `/auth/{ref}` do `status.code == 200` →
-  `/auth/token/redeem` → Bearer JWT.
-- Wysyłka: sesja interaktywna z obowiązkowym szyfrowaniem — AES-256-CBC (PKCS7),
-  klucz AES zaszyfrowany RSA-OAEP (usage `SymmetricKeyEncryption`), skróty SHA-256.
-- **Limity**: 8 żądań/s oraz **16 pobrań dokumentów faktur/min**. `perform()`
-  ponawia 429 z wykładniczym backoffem; synchronizacja przekazuje
-  `skipDocumentsFor:` (numery KSeF z kompletem danych lokalnie), żeby nie
-  marnować limitu. Zapytanie o metadane: maks. zakres 3 miesiące.
-- Transport za protokołem `HTTPTransport` — testy wstrzykują `MockTransport`;
-  klucz publiczny przez `publicKeyResolver` (testy generują własną parę RSA
-  i ODSZYFROWUJĄ to, co wysłała usługa — utrzymuj ten wzorzec).
-- UPO: `sessions/{sessionRef}/invoices/ksef/{ksefNumber}/upo` — wymaga
-  `ksefSessionReference` zapisanego przy wysyłce.
+## Zasada architektury
 
-## FA(3) — zasady generowania XML
-
-Generator emituje **FA(3)** (namespace `http://crd.gov.pl/wzor/2025/06/25/13775/`,
-kodSystemowy "FA (3)", wariant 3; sesja interaktywna otwierana z formCode
-"FA (3)"). Źródło prawdy: oficjalna XSD (CIRFMF/ksef-api). **Kolejność
-elementów musi odpowiadać sekwencji XSD** — Fa: KodWaluty, P_1, P_2, P_6?,
-P_13_x/P_14_x (+P_14_xW dla waluty obcej), P_15, Adnotacje (obowiązkowe!,
-P_18A: 1=MPP/2=brak), RodzajFaktury (VAT/KOR/ZAL/ROZ), [korekta:
-PrzyczynaKorekty?, TypKorekty, DaneFaKorygowanej], FakturaZaliczkowa* (ROZ),
-FaWiersz*, Platnosc. Podmiot1 wymaga Adres; **Podmiot2 wymaga JST i GV**
-(dla zwykłych faktur oba = 2) — to nowość FA(3), wykryta na żywym API.
-Stawki → pola: 23→P_13_1, 8→P_13_2, 5→P_13_3, 0→P_13_6_1, zw→P_13_7.
-Pozycja: kod z kropkami→PKWiU, same cyfry→CN (między P_7 a P_8A); GTU po P_12.
-Uwagi faktury → Stopka/Informacje/StopkaFaktury (po elemencie Fa).
-Korekty (KOR): kwoty to RÓŻNICA (mogą być ujemne); wybór NrKSeF=1 +
-NrKSeFFaKorygowanej albo NrKSeFN=1. Parser jest odporny na przestrzenie nazw
-(wyszukiwanie po nazwach lokalnych) — czyta FA(2) i FA(3).
+**Logika domenowa w `Logic/` i `Services/` jako czyste funkcje/typy z testami**;
+widoki (`Views/`) tylko spinają logikę z SwiftUI. Klucze ustawień wyłącznie
+przez `AppSettingsKeys` (@AppStorage). Pełna mapa modułów → `ARCHITECTURE.md`.
 
 ## Niezmienniki domenowe (nie łamać!)
 
@@ -131,40 +88,36 @@ NrKSeFFaKorygowanej albo NrKSeFN=1. Parser jest odporny na przestrzenie nazw
    zbiorczymi. Ten sam wzorzec obowiązuje w widgecie płatności Kokpitu
    (tam ręcznie: podświetlenie + `onTapGesture(count: 2)`).
 
+## Decyzje projektowe (krytyczne)
+
+- **Dedykowany plik bazy** `Ksefiarz/Ksefiarz.store`, NIGDY domyślny
+  `default.store` — plik współdzielony między procesami; obcy proces
+  (`com.apple.icloudmailagent`) skasował w nim kiedyś wszystkie faktury
+  (12.06.2026). Szczegóły lokalizacji danych → `ARCHITECTURE.md`.
+- **Ikona w pasku menu przez AppKit `NSStatusItem`**, NIE scena SwiftUI
+  `MenuBarExtra` — na macOS 26 współistnienie `MenuBarExtra`
+  z `NavigationSplitView` wpada w nieskończoną pętlę renderowania (100% CPU,
+  zawieszenie). `NSStatusItem` nie dotyka grafu scen SwiftUI. Kontroler
+  startuje z `InvoiceApp.init()` ORAZ `MainContentView.onAppear` (idempotentnie,
+  bo `applicationDidFinishLaunching` przy `@NSApplicationDelegateAdaptor` bywa
+  pomijany, a `onAppear` na `NavigationSplitView` nie jest niezawodny).
+- **Sekrety w pęku kluczy, nie w UserDefaults ani kopiach** — token KSeF
+  (usługa `pl.itkrak.ksefiarz`, konto `ksef.token`, dostęp przez
+  `TokenStore`/`KeychainSecretStorage`); NIE loguj go i nie commituj. Bundle
+  ad-hoc zmienia sygnaturę przy każdym wydaniu — pierwszy dostęp do tokenu po
+  aktualizacji może wywołać systemowe okno „Zezwól”.
+- **Automatyczna synchronizacja tylko na produkcji** — bezpiecznik przed
+  zaśmieceniem bazy fakturami z testowego KSeF; na test/demo synchronizuj
+  ręcznie z listy.
+
 ## Proces pracy
 
 1. Każda zmiana logiki = testy (Swift Testing, polskie nazwy `@Test("...")`).
    Po zmianach: `swift test` — komplet na zielono.
-2. Fakty o API/schemie weryfikuj u źródła (OpenAPI `https://api-test.ksef.mf.gov.pl/docs/v2/openapi.json`,
-   XSD z CIRFMF/ksef-api, docs CIRFMF/ksef-docs) — nie zgaduj pól.
+2. Fakty o API/schemie weryfikuj u źródła (OpenAPI, XSD z CIRFMF/ksef-api,
+   docs CIRFMF/ksef-docs) — nie zgaduj pól. Szczegóły w `ARCHITECTURE.md`.
 3. Po zmianach widocznych dla użytkownika: `./Scripts/build-app.sh`,
    `pkill -x Ksefiarz; open dist/Ksefiarz.app` (użytkownik pracuje na bundlu).
-4. Aktualizuj README.md (funkcje, lokalizacje danych) przy zmianach funkcjonalnych.
-5. Sekrety: token KSeF leży w pęku kluczy (usługa `pl.itkrak.ksefiarz`,
-   konto `ksef.token`, dostęp przez `TokenStore`/`KeychainSecretStorage`) —
-   NIE loguj go, nie commituj i nie zapisuj do UserDefaults ani kopii
-   zapasowych. Bundle ad-hoc zmienia sygnaturę przy każdym wydaniu — pierwszy
-   dostęp do tokenu po aktualizacji może wywołać systemowe okno „Zezwól".
-
-## Dane użytkownika
-
-- Baza: `~/Library/Application Support/Ksefiarz/Ksefiarz.store` (SQLite/SwiftData).
-  ⚠️ Nigdy nie używaj domyślnej ścieżki SwiftData (`default.store`) — to plik
-  współdzielony między procesami; 12.06.2026 migracja schematu wykonana przez
-  `com.apple.icloudmailagent` skasowała w nim wszystkie faktury.
-- Ustawienia: `~/Library/Preferences/pl.itkrak.ksefiarz.plist`.
-- Token KSeF: pęk kluczy (generic password `pl.itkrak.ksefiarz` / `ksef.token`).
-- Kopia zapasowa/eksporty: pliki wybierane przez użytkownika (bez tokenu).
-
-## Znane ograniczenia
-
-- Wysyłka faktury przeszła e2e na środowisku `test` w schemie FA(3)
-  (LiveSendTests, 12.06.2026: numer KSeF + UPO); na produkcji jeszcze
-  nigdy nie wykonana.
-- FA(3): poza zakresem pozostają faktury OSS w pełnym wymiarze (jest tylko
-  oznaczenie procedury pozycji, np. WSTO_EE/IED) oraz załączniki do faktur.
-- Bundle podpisany ad-hoc (dystrybucja wymaga Developer ID + notaryzacji).
-
-Zadania i backlog: **`todo.md`** (zrealizowane `[x]`, otwarte `[ ]`) —
-aktualizuj go przy domykaniu/dodawaniu zadań; AGENTS.md służy wyłącznie
-wiedzy o projekcie i zasadom pracy.
+4. Aktualizuj `README.md` (funkcje, lokalizacje danych) przy zmianach
+   funkcjonalnych, a `todo.md` przy domykaniu/dodawaniu zadań. Nową wiedzę
+   o module/API dopisuj do `ARCHITECTURE.md`, a nie do tego pliku.

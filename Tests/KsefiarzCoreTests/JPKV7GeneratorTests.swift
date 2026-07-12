@@ -198,14 +198,51 @@ struct JPKV7GeneratorTests {
         let result = JPKV7Generator.generate(
             invoices: [makeSale(), makePurchase()], options: makeOptions()
         )
-        #expect(result.xml.contains(#"kodSystemowy="JPK_V7M (2)""#))
-        #expect(result.xml.contains("<WariantFormularza>2</WariantFormularza>"))
+        #expect(result.xml.contains(#"kodSystemowy="JPK_V7M (3)""#))
+        #expect(result.xml.contains("http://crd.gov.pl/wzor/2025/12/19/14090/"))
+        #expect(result.xml.contains("<WariantFormularza>3</WariantFormularza>"))
         #expect(result.xml.contains("<KodUrzedu>1219</KodUrzedu>"))
         #expect(result.xml.contains("<Rok>2026</Rok>"))
         #expect(result.xml.contains("<Miesiac>6</Miesiac>"))
         #expect(result.xml.contains("<NIP>5260250274</NIP>"))
-        #expect(result.xml.contains(#"kodSystemowy="VAT-7 (22)""#))
+        #expect(result.xml.contains(#"kodSystemowy="VAT-7 (23)""#))
+        #expect(result.xml.contains("<WariantFormularzaDekl>23</WariantFormularzaDekl>"))
+        #expect(result.xml.contains("<BFK>1</BFK>"))
         #expect((try? XMLDocument(data: Data(result.xml.utf8), options: [])) != nil)
+    }
+
+    @Test("Okres do stycznia 2026 zachowuje historyczną schemę JPK_V7M(2)")
+    func historicalMonthlySchema() {
+        let invoice = makeSale(number: "FV/1/2026", issue: "2026-01-10")
+        let result = JPKV7Generator.generate(
+            invoices: [invoice], options: makeOptions(year: 2026, month: 1)
+        )
+        #expect(result.xml.contains(#"kodSystemowy="JPK_V7M (2)""#))
+        #expect(result.xml.contains("http://crd.gov.pl/wzor/2021/12/27/11148/"))
+        #expect(result.xml.contains(#"kodSystemowy="VAT-7 (22)""#))
+        #expect(!result.xml.contains("<BFK>"))
+    }
+
+    @Test("Schemat (3) wskazuje numer KSeF albo właściwy znacznik dokumentu")
+    func ksefMarkers() {
+        let accepted = makeSale(number: "KSEF", issue: "2026-06-01")
+        accepted.ksefId = "5260250274-20260601-ABCDEF-ABCDEF-12"
+        let offline24 = makeSale(number: "OFFLINE24", issue: "2026-06-02")
+        offline24.isOfflineMode = true
+        offline24.offlineReason = .offline24
+        let failure = makeSale(number: "AWARIA", issue: "2026-06-03")
+        failure.isOfflineMode = true
+        failure.offlineReason = .failure
+        let regular = makePurchase(number: "PAPIER", issue: "2026-06-04")
+
+        let result = JPKV7Generator.generate(
+            invoices: [accepted, offline24, failure, regular], options: makeOptions()
+        )
+
+        #expect(result.xml.contains("<NrKSeF>5260250274-20260601-ABCDEF-ABCDEF-12</NrKSeF>"))
+        #expect(result.xml.contains("<DI>1</DI>"))
+        #expect(result.xml.contains("<OFF>1</OFF>"))
+        #expect(result.xml.contains("<BFK>1</BFK>"))
     }
 
     @Test("Korekta samej ewidencji — bez części deklaracyjnej")
@@ -234,18 +271,18 @@ struct JPKV7GeneratorTests {
 @Suite("JPK_V7K — wariant kwartalny (ewidencja co miesiąc, deklaracja za kwartał)")
 struct JPKV7KGeneratorTests {
 
-    @Test("Ostatni miesiąc kwartału: nagłówek V7K, deklaracja VAT-7K(16) z elementem Kwartal")
+    @Test("Ostatni miesiąc kwartału: nagłówek V7K(3), deklaracja VAT-7K(17) z elementem Kwartal")
     func quarterEndHeader() {
         // Czerwiec = ostatni miesiąc II kwartału.
         let result = JPKV7Generator.generate(
             invoices: [makeSale(lines: [line("Usługa", net: 1000, rate: "23", vat: 230)])],
             options: makeOptions(variant: .quarterly, month: 6)
         )
-        #expect(result.xml.contains(#"kodSystemowy="JPK_V7K (2)""#))
-        #expect(result.xml.contains("http://crd.gov.pl/wzor/2021/12/27/11149/"))
-        #expect(result.xml.contains(#"kodSystemowy="VAT-7K (16)""#))
+        #expect(result.xml.contains(#"kodSystemowy="JPK_V7K (3)""#))
+        #expect(result.xml.contains("http://crd.gov.pl/wzor/2025/12/19/14089/"))
+        #expect(result.xml.contains(#"kodSystemowy="VAT-7K (17)""#))
         #expect(result.xml.contains(">VAT-7K</KodFormularzaDekl>"))
-        #expect(result.xml.contains("<WariantFormularzaDekl>16</WariantFormularzaDekl>"))
+        #expect(result.xml.contains("<WariantFormularzaDekl>17</WariantFormularzaDekl>"))
         #expect(result.xml.contains("<Kwartal>2</Kwartal>"))
         #expect(result.xml.contains("<Miesiac>6</Miesiac>"))
         #expect(result.hasDeclaration)
@@ -265,7 +302,7 @@ struct JPKV7KGeneratorTests {
         #expect(!result.xml.contains("<Deklaracja>"))
         #expect(!result.xml.contains("<Kwartal>"))
         #expect(result.hasDeclaration == false)
-        #expect(result.xml.contains(#"kodSystemowy="JPK_V7K (2)""#))
+        #expect(result.xml.contains(#"kodSystemowy="JPK_V7K (3)""#))
         #expect(result.warnings.contains { $0.contains("ostatniego miesiąca kwartału") })
     }
 
@@ -338,6 +375,20 @@ struct JPKV7KGeneratorTests {
         )
         #expect(result.xml.contains("<Kwartal>4</Kwartal>"))
         #expect(result.xml.contains("<Miesiac>12</Miesiac>"))
+    }
+
+    @Test("Historyczny kwartał zachowuje schemę JPK_V7K(2)")
+    func historicalQuarterlySchema() {
+        let invoice = makeSale(number: "FV/12/2025", issue: "2025-12-10")
+        let result = JPKV7Generator.generate(
+            invoices: [invoice],
+            options: makeOptions(variant: .quarterly, year: 2025, month: 12)
+        )
+        #expect(result.xml.contains(#"kodSystemowy="JPK_V7K (2)""#))
+        #expect(result.xml.contains("http://crd.gov.pl/wzor/2021/12/27/11149/"))
+        #expect(result.xml.contains(#"kodSystemowy="VAT-7K (16)""#))
+        #expect(result.xml.contains("<WariantFormularzaDekl>16</WariantFormularzaDekl>"))
+        #expect(!result.xml.contains("<BFK>"))
     }
 
     @Test("Etykiety wariantu")

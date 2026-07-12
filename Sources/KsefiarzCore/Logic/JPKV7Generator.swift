@@ -7,7 +7,9 @@ import Foundation
 /// obejmuje tylko ten miesiąc, a deklaracja — sumy całego kwartału.
 ///
 /// V7M i V7K to OSOBNE schematy XSD (różny namespace, kod formularza,
-/// kod i wariant deklaracji, a V7K ma dodatkowy element `Kwartal`).
+/// kod i wariant deklaracji, a V7K ma dodatkowy element `Kwartal`). Generator
+/// dobiera też wydanie schemy do okresu: (2) do stycznia 2026 r. oraz
+/// obowiązujące od lutego 2026 r. wydanie (3).
 public enum JPKV7Variant: String, Sendable, CaseIterable, Identifiable {
     case monthly
     case quarterly
@@ -30,29 +32,50 @@ public enum JPKV7Variant: String, Sendable, CaseIterable, Identifiable {
         }
     }
 
-    /// Namespace/XSD schematu.
-    var namespace: String {
-        switch self {
-        case .monthly: return "http://crd.gov.pl/wzor/2021/12/27/11148/"
-        case .quarterly: return "http://crd.gov.pl/wzor/2021/12/27/11149/"
+    /// Parametry oficjalnej schemy właściwej dla wariantu i okresu.
+    func schema(year: Int, month: Int) -> JPKV7Schema {
+        let version = year > 2026 || (year == 2026 && month >= 2) ? 3 : 2
+        switch (self, version) {
+        case (.monthly, 3):
+            return JPKV7Schema(
+                namespace: "http://crd.gov.pl/wzor/2025/12/19/14090/",
+                formCode: "JPK_V7M (3)", formVariant: 3,
+                declarationSystemCode: "VAT-7 (23)", declarationValue: "VAT-7",
+                declarationVariant: 23, requiresKSeFMarker: true
+            )
+        case (.quarterly, 3):
+            return JPKV7Schema(
+                namespace: "http://crd.gov.pl/wzor/2025/12/19/14089/",
+                formCode: "JPK_V7K (3)", formVariant: 3,
+                declarationSystemCode: "VAT-7K (17)", declarationValue: "VAT-7K",
+                declarationVariant: 17, requiresKSeFMarker: true
+            )
+        case (.monthly, _):
+            return JPKV7Schema(
+                namespace: "http://crd.gov.pl/wzor/2021/12/27/11148/",
+                formCode: "JPK_V7M (2)", formVariant: 2,
+                declarationSystemCode: "VAT-7 (22)", declarationValue: "VAT-7",
+                declarationVariant: 22, requiresKSeFMarker: false
+            )
+        case (.quarterly, _):
+            return JPKV7Schema(
+                namespace: "http://crd.gov.pl/wzor/2021/12/27/11149/",
+                formCode: "JPK_V7K (2)", formVariant: 2,
+                declarationSystemCode: "VAT-7K (16)", declarationValue: "VAT-7K",
+                declarationVariant: 16, requiresKSeFMarker: false
+            )
         }
     }
+}
 
-    /// Kod formularza JPK (KodFormularza/kodSystemowy).
-    var formCode: String {
-        switch self {
-        case .monthly: return "JPK_V7M (2)"
-        case .quarterly: return "JPK_V7K (2)"
-        }
-    }
-
-    /// Kod deklaracji: systemowy, wartość elementu i wariant (VAT-7 vs VAT-7K).
-    var declaration: (systemowy: String, value: String, variant: Int) {
-        switch self {
-        case .monthly: return ("VAT-7 (22)", "VAT-7", 22)
-        case .quarterly: return ("VAT-7K (16)", "VAT-7K", 16)
-        }
-    }
+struct JPKV7Schema: Sendable {
+    var namespace: String
+    var formCode: String
+    var formVariant: Int
+    var declarationSystemCode: String
+    var declarationValue: String
+    var declarationVariant: Int
+    var requiresKSeFMarker: Bool
 }
 
 /// Parametry generowania pliku JPK_V7M (miesięczny) lub JPK_V7K (kwartalny).
@@ -134,10 +157,10 @@ public struct JPKV7Result: Sendable {
     public var warnings: [String]
 }
 
-/// Generator pliku JPK_V7M(2) / JPK_V7K(2) — ewidencja VAT (sprzedaż + zakup)
-/// z oznaczeniami GTU i procedur oraz częścią deklaracyjną (VAT-7(22) albo
-/// VAT-7K(16)). Struktura zgodna z oficjalnymi XSD `.../11148/` (V7M)
-/// i `.../11149/` (V7K).
+/// Generator pliku JPK_V7M / JPK_V7K — ewidencja VAT (sprzedaż + zakup)
+/// z oznaczeniami GTU i procedur oraz częścią deklaracyjną VAT-7/VAT-7K.
+/// Dla okresów od lutego 2026 r. emituje obowiązujące wydanie (3),
+/// a dla wcześniejszych okresów od 2022 r. historyczne wydanie (2).
 ///
 /// Wariant kwartalny (V7K): ewidencja składana co miesiąc, a część
 /// deklaracyjna raz na kwartał — powstaje tylko w pliku ostatniego miesiąca
@@ -151,9 +174,8 @@ public struct JPKV7Result: Sendable {
 /// - faktury bez pozycji traktowane jak sprzedaż ze stawką podstawową.
 public enum JPKV7Generator {
 
-    /// Namespace wariantu miesięcznego (V7M); wariant kwartalny (V7K) ma własny
-    /// — patrz `JPKV7Variant.namespace`.
-    public static let namespace = "http://crd.gov.pl/wzor/2021/12/27/11148/"
+    /// Aktualny namespace wariantu miesięcznego (V7M(3)).
+    public static let namespace = "http://crd.gov.pl/wzor/2025/12/19/14090/"
 
     /// Sumy sprzedaży jednej faktury per pole ewidencji (w PLN).
     struct SalesBuckets {
@@ -188,6 +210,7 @@ public enum JPKV7Generator {
         generatedAt: Date = .now
     ) -> JPKV7Result {
         var warnings: [String] = []
+        let schema = options.variant.schema(year: options.year, month: options.month)
         let visible = invoices.filter { !$0.isArchivedOrHidden }
         let sales = visible
             .filter { $0.kind == .sales && inPeriod($0, options: options) }
@@ -209,7 +232,10 @@ public enum JPKV7Generator {
             }
             salesVATTotal += buckets.vat
             salesNetTotal += buckets.net
-            salesRows += salesRow(invoice: invoice, buckets: buckets, index: offset + 1, warnings: &warnings)
+            salesRows += salesRow(
+                invoice: invoice, buckets: buckets, index: offset + 1,
+                includeKSeFMarker: schema.requiresKSeFMarker, warnings: &warnings
+            )
         }
 
         // Ewidencja zakupów — całość jako pozostałe nabycia (K_42/K_43).
@@ -222,7 +248,8 @@ public enum JPKV7Generator {
             purchasesNetTotal += net
             purchasesVATTotal += vat
             purchaseRows += purchaseRow(
-                invoice: invoice, net: net, vat: vat, index: offset + 1, warnings: &warnings
+                invoice: invoice, net: net, vat: vat, index: offset + 1,
+                includeKSeFMarker: schema.requiresKSeFMarker, warnings: &warnings
             )
         }
 
@@ -271,6 +298,7 @@ public enum JPKV7Generator {
                 purchasesNet: declPurchasesNet,
                 purchasesVAT: declPurchasesVAT,
                 options: options,
+                schema: schema,
                 warnings: &warnings
             )
         } else {
@@ -283,10 +311,10 @@ public enum JPKV7Generator {
         let timestamp = ISO8601DateFormatter().string(from: generatedAt)
         let xml = """
         <?xml version="1.0" encoding="UTF-8"?>
-        <JPK xmlns="\(options.variant.namespace)">
+        <JPK xmlns="\(schema.namespace)">
           <Naglowek>
-            <KodFormularza kodSystemowy="\(options.variant.formCode)" wersjaSchemy="1-0E">JPK_VAT</KodFormularza>
-            <WariantFormularza>2</WariantFormularza>
+            <KodFormularza kodSystemowy="\(schema.formCode)" wersjaSchemy="1-0E">JPK_VAT</KodFormularza>
+            <WariantFormularza>\(schema.formVariant)</WariantFormularza>
             <DataWytworzeniaJPK>\(timestamp)</DataWytworzeniaJPK>
             <NazwaSystemu>Ksefiarz macOS</NazwaSystemu>
             <CelZlozenia poz="P_7">\(options.purpose)</CelZlozenia>
@@ -424,6 +452,7 @@ public enum JPKV7Generator {
         invoice: Invoice,
         buckets: SalesBuckets,
         index: Int,
+        includeKSeFMarker: Bool,
         warnings: inout [String]
     ) -> String {
         var xml = "    <SprzedazWiersz>\n"
@@ -435,6 +464,9 @@ public enum JPKV7Generator {
         if let saleDate = invoice.saleDate,
            !Calendar.current.isDate(saleDate, inSameDayAs: invoice.issueDate) {
             xml += "      <DataSprzedazy>\(day(saleDate))</DataSprzedazy>\n"
+        }
+        if includeKSeFMarker {
+            xml += ksefMarker(for: invoice)
         }
         // Znaczniki GTU i procedur — kolejność sekwencji XSD.
         for code in gtuCodes where buckets.gtu.contains(code) {
@@ -476,6 +508,7 @@ public enum JPKV7Generator {
         net: Double,
         vat: Double,
         index: Int,
+        includeKSeFMarker: Bool,
         warnings: inout [String]
     ) -> String {
         var xml = "    <ZakupWiersz>\n"
@@ -484,6 +517,9 @@ public enum JPKV7Generator {
         xml += "      <NazwaDostawcy>\(escape(invoice.sellerName))</NazwaDostawcy>\n"
         xml += "      <DowodZakupu>\(escape(invoice.invoiceNumber))</DowodZakupu>\n"
         xml += "      <DataZakupu>\(day(invoice.issueDate))</DataZakupu>\n"
+        if includeKSeFMarker {
+            xml += ksefMarker(for: invoice)
+        }
         xml += "      <K_42>\(amount(net))</K_42>\n"
         xml += "      <K_43>\(amount(vat))</K_43>\n"
         xml += "    </ZakupWiersz>\n"
@@ -509,6 +545,7 @@ public enum JPKV7Generator {
         purchasesNet: Double,
         purchasesVAT: Double,
         options: JPKV7Options,
+        schema: JPKV7Schema,
         warnings: inout [String]
     ) -> DeclarationBlock {
         // Sumy pól K całej ewidencji (przed zaokrągleniem do złotych).
@@ -566,9 +603,8 @@ public enum JPKV7Generator {
 
         // Nagłówek deklaracji zależny od wariantu: kod formularza (VAT-7/VAT-7K),
         // jego wariant oraz — w V7K — dodatkowy element Kwartal (1–4).
-        let dekl = options.variant.declaration
-        var naglowek = "      <KodFormularzaDekl kodSystemowy=\"\(dekl.systemowy)\" kodPodatku=\"VAT\" rodzajZobowiazania=\"Z\" wersjaSchemy=\"1-0E\">\(dekl.value)</KodFormularzaDekl>\n"
-        naglowek += "      <WariantFormularzaDekl>\(dekl.variant)</WariantFormularzaDekl>\n"
+        var naglowek = "      <KodFormularzaDekl kodSystemowy=\"\(schema.declarationSystemCode)\" kodPodatku=\"VAT\" rodzajZobowiazania=\"Z\" wersjaSchemy=\"1-0E\">\(schema.declarationValue)</KodFormularzaDekl>\n"
+        naglowek += "      <WariantFormularzaDekl>\(schema.declarationVariant)</WariantFormularzaDekl>\n"
         if options.variant == .quarterly {
             naglowek += "      <Kwartal>\(quarter(of: options.month))</Kwartal>\n"
         }
@@ -590,6 +626,22 @@ public enum JPKV7Generator {
     }
 
     // MARK: Pomocnicze
+
+    /// Obowiązkowy od wydania (3) wybór identyfikatora KSeF albo znacznika.
+    /// OFF dotyczy wyłącznie awarii KSeF; offline24 i niedostępność oznacza DI.
+    /// Pozostałe faktury wystawione poza KSeF oznaczamy jako BFK.
+    static func ksefMarker(for invoice: Invoice) -> String {
+        if let ksefId = invoice.ksefId?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !ksefId.isEmpty {
+            return "      <NrKSeF>\(escape(ksefId))</NrKSeF>\n"
+        }
+        if invoice.isOfflineMode {
+            return invoice.offlineReason == .failure
+                ? "      <OFF>1</OFF>\n"
+                : "      <DI>1</DI>\n"
+        }
+        return "      <BFK>1</BFK>\n"
+    }
 
     /// Kwota w PLN — faktury walutowe po kursie z faktury.
     static func amountInPLN(_ value: Double, invoice: Invoice, warnings: inout [String]) -> Double {
