@@ -79,6 +79,12 @@ kolejność dowolna. ⚠️ operacje modyfikujące KSeF testować wyłącznie na
   koszt, formaty zamknięte.
 - [ ] E4. Wydruk wielu faktur naraz (batch PDF/druk) — jeden PDF/wydruk
   z zaznaczonych.
+- [ ] E5. Kosmetyka brandingu: na stronach kontynuacji wielostronicowej
+  faktury (tryb z brandingiem) numer strony i notka „ciąg dalszy" zawisają
+  pośrodku między dwoma rozpychanymi `Spacer`-ami. Stopka marki jest na dole
+  poprawnie — chodzi tylko o dosunięcie tych podpisów do dołu (jeden wspólny
+  `Spacer` nad blokiem „ciąg dalszy + numer strony + stopka"). Ujawnione
+  w review PR #20.
 
 #### F. Skala / wielofirmowość / UX
 
