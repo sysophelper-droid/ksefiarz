@@ -29,6 +29,42 @@ public enum KSeFSubmissionStatus: String, Codable, CaseIterable, Sendable {
 @Model
 public final class Invoice {
 
+    /// Powód wystawienia dokumentu w trybie offline — od niego zależy
+    /// termin dosłania do KSeF (tabela trybów w docs CIRFMF: tryby-offline).
+    public enum OfflineReason: String, Codable, CaseIterable, Sendable {
+        /// Świadomy wybór podatnika (art. 106nda) — dosłanie do następnego
+        /// dnia roboczego po dacie wystawienia. RawValue "" obsługuje
+        /// dokumenty zapisane przed wprowadzeniem pola.
+        case offline24 = ""
+        /// Niedostępność KSeF ogłoszona komunikatem (art. 106nh) —
+        /// dosłanie do następnego dnia roboczego po jej zakończeniu.
+        case unavailability = "niedostepnosc"
+        /// Awaria KSeF ogłoszona komunikatem (art. 106nf) — dosłanie
+        /// do 7 dni roboczych od jej zakończenia.
+        case failure = "awaria"
+
+        public var displayName: String {
+            switch self {
+            case .offline24: return "Offline24"
+            case .unavailability: return "Offline — niedostępność KSeF"
+            case .failure: return "Tryb awaryjny — awaria KSeF"
+            }
+        }
+
+        /// Opis terminu dosłania (do prezentacji przy braku znanej daty
+        /// zakończenia zdarzenia).
+        public var deadlineDescription: String {
+            switch self {
+            case .offline24:
+                return "następny dzień roboczy po dacie wystawienia"
+            case .unavailability:
+                return "następny dzień roboczy po zakończeniu niedostępności"
+            case .failure:
+                return "7 dni roboczych od zakończenia awarii"
+            }
+        }
+    }
+
     /// Rodzaj faktury — sprzedażowa lub zakupowa.
     public enum Kind: String, Codable, CaseIterable, Sendable {
         case sales = "sprzedaz"
@@ -156,13 +192,19 @@ public final class Invoice {
     /// Adres, na który przekazano fakturę e-mailem.
     public var emailSentTo: String = ""
 
-    /// Dokument wystawiony w trybie offline24 (art. 106nda ustawy o VAT).
-    /// Przy dosyłaniu do KSeF wysyłany jest DOKŁADNIE zapisany XML
+    /// Dokument wystawiony w trybie offline (offline24 / niedostępność /
+    /// awaria). Przy dosyłaniu do KSeF wysyłany jest DOKŁADNIE zapisany XML
     /// (`rawXmlContent`) — jego skrót jest częścią kodów QR na wydruku.
     public var isOfflineMode: Bool = false
     /// Skrót SHA-256 zapisanego XML (Base64) — utrwalony w chwili wystawienia
     /// offline; wchodzi do kodów QR i pola invoiceHash przy dosyłaniu.
     public var offlineHashBase64: String = ""
+    /// Powód trybu offline (rawValue `OfflineReason`); "" = offline24
+    /// (dokumenty sprzed migracji i domyślny wybór podatnika).
+    public var offlineReasonRaw: String = ""
+    /// Data zakończenia niedostępności/awarii KSeF (komunikat MF) — od niej
+    /// liczy się termin dosłania; nil = zdarzenie trwa albo nie dotyczy.
+    public var offlineEventEndedAt: Date? = nil
 
     /// Czy dokument jest fakturą korygującą.
     public var isCorrection: Bool { documentTypeRaw == "KOR" }
@@ -201,11 +243,30 @@ public final class Invoice {
             || (ksefSubmissionStatus == .accepted && (upoXmlContent ?? "").isEmpty)
     }
 
-    /// Termin dosłania dokumentu offline24 do KSeF — koniec następnego dnia
-    /// roboczego po dacie wystawienia. `nil`, gdy dokument nie czeka w kolejce.
+    /// Powód wystawienia w trybie offline — decyduje o terminie dosłania.
+    public var offlineReason: OfflineReason {
+        get { OfflineReason(rawValue: offlineReasonRaw) ?? .offline24 }
+        set { offlineReasonRaw = newValue.rawValue }
+    }
+
+    /// Termin dosłania dokumentu offline do KSeF (koniec dnia, 23:59:59):
+    /// - offline24 — następny dzień roboczy po dacie wystawienia,
+    /// - niedostępność KSeF — następny dzień roboczy po jej zakończeniu,
+    /// - awaria KSeF — 7. dzień roboczy po jej zakończeniu.
+    /// `nil`, gdy dokument nie czeka w kolejce albo zdarzenie jeszcze trwa
+    /// (termin nieznany do czasu komunikatu MF o zakończeniu).
     public var offlineSendDeadline: Date? {
         guard isOfflineMode, ksefSubmissionStatus == .offlinePending else { return nil }
-        return PolishBusinessCalendar.endOfNextBusinessDay(after: issueDate)
+        switch offlineReason {
+        case .offline24:
+            return PolishBusinessCalendar.endOfNextBusinessDay(after: issueDate)
+        case .unavailability:
+            guard let eventEnd = offlineEventEndedAt else { return nil }
+            return PolishBusinessCalendar.endOfNextBusinessDay(after: eventEnd)
+        case .failure:
+            guard let eventEnd = offlineEventEndedAt else { return nil }
+            return PolishBusinessCalendar.endOfBusinessDay(after: eventEnd, businessDays: 7)
+        }
     }
 
     /// Pozycje faktury (FaWiersz).

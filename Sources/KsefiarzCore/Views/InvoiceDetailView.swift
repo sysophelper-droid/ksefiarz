@@ -53,7 +53,7 @@ public struct InvoiceDetailView: View {
                         Text("Oczekuje na nadanie")
                             .foregroundStyle(.orange)
                     } else if invoice.ksefSubmissionStatus == .offlinePending {
-                        Text("Offline24 — zostanie nadany po dosłaniu")
+                        Text("\(invoice.offlineReason.displayName) — zostanie nadany po dosłaniu")
                             .foregroundStyle(.blue)
                     } else if invoice.ksefSubmissionStatus == .rejected {
                         Text("Nie nadano — dokument odrzucony")
@@ -63,15 +63,63 @@ public struct InvoiceDetailView: View {
                             .foregroundStyle(.secondary)
                     }
                 }
-                if let deadline = invoice.offlineSendDeadline {
+                if invoice.ksefSubmissionStatus == .offlinePending {
+                    // Tryb offline można doprecyzować do czasu dosłania —
+                    // gdy MF ogłosiło awarię/niedostępność, termin liczy
+                    // się od jej zakończenia (dokument XML bez zmian).
+                    LabeledContent("Tryb offline") {
+                        Picker("", selection: Binding(
+                            get: { invoice.offlineReason },
+                            set: { invoice.offlineReason = $0 }
+                        )) {
+                            ForEach(Invoice.OfflineReason.allCases, id: \.self) { reason in
+                                Text(reason.displayName).tag(reason)
+                            }
+                        }
+                        .labelsHidden()
+                        .fixedSize()
+                        .help("Powód wystawienia offline — decyduje o terminie dosłania (offline24: następny dzień roboczy; niedostępność: następny dzień roboczy po zakończeniu; awaria: 7 dni roboczych od zakończenia).")
+                    }
+                    if invoice.offlineReason != .offline24 {
+                        LabeledContent(
+                            invoice.offlineReason == .failure
+                                ? "Zakończenie awarii (komunikat MF)"
+                                : "Zakończenie niedostępności (komunikat MF)"
+                        ) {
+                            HStack(spacing: 8) {
+                                if let ended = invoice.offlineEventEndedAt {
+                                    DatePicker("", selection: Binding(
+                                        get: { ended },
+                                        set: { invoice.offlineEventEndedAt = $0 }
+                                    ), displayedComponents: .date)
+                                    .labelsHidden()
+                                    Button("Wyczyść") { invoice.offlineEventEndedAt = nil }
+                                        .buttonStyle(.borderless)
+                                        .font(.caption)
+                                } else {
+                                    Text("zdarzenie trwa")
+                                        .foregroundStyle(.secondary)
+                                    Button("Wpisz datę zakończenia") {
+                                        invoice.offlineEventEndedAt = Calendar.current.startOfDay(for: .now)
+                                    }
+                                    .buttonStyle(.borderless)
+                                }
+                            }
+                        }
+                    }
                     LabeledContent("Termin dosłania do KSeF") {
                         HStack(spacing: 8) {
-                            Text(deadline, style: .date)
-                                .foregroundStyle(deadline < .now ? .red : .primary)
-                            if deadline < .now {
-                                Label("po terminie", systemImage: "exclamationmark.triangle.fill")
-                                    .font(.caption)
-                                    .foregroundStyle(.red)
+                            if let deadline = invoice.offlineSendDeadline {
+                                Text(deadline, style: .date)
+                                    .foregroundStyle(deadline < .now ? .red : .primary)
+                                if deadline < .now {
+                                    Label("po terminie", systemImage: "exclamationmark.triangle.fill")
+                                        .font(.caption)
+                                        .foregroundStyle(.red)
+                                }
+                            } else {
+                                Text(invoice.offlineReason.deadlineDescription)
+                                    .foregroundStyle(.secondary)
                             }
                             Button {
                                 Task { await sendOfflineNow() }

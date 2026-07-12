@@ -54,4 +54,8 @@ public enum AppSettingsKeys {
     public static let autoBackupKeepDays = "backup.keepDays"
     /// Powiadomienia systemowe o nowych fakturach zakupowych z synchronizacji.
     public static let notifyNewPurchases = "ksef.notifyNewPurchases"
+    /// Powiadomienia o terminach: płatności (dziś/jutro) i dosłań offline.
+    public static let notifyDeadlines = "ksef.notifyDeadlines"
+    /// Pamięć doręczonych powiadomień o terminach (klucze z datą — dedup).
+    public static let deadlineNotifiedKeys = "ksef.deadlineNotifiedKeys"
 }

@@ -86,4 +86,15 @@ public enum PolishBusinessCalendar {
         let day = nextBusinessDay(after: date)
         return Self.calendar.date(bySettingHour: 23, minute: 59, second: 59, of: day)!
     }
+
+    /// Koniec (23:59:59) N-tego dnia roboczego PO wskazanej dacie —
+    /// np. termin dosłania po awarii KSeF to 7. dzień roboczy od jej
+    /// zakończenia (art. 106nf ustawy o VAT).
+    public static func endOfBusinessDay(after date: Date, businessDays: Int) -> Date {
+        var day = calendar.startOfDay(for: date)
+        for _ in 0..<max(1, businessDays) {
+            day = nextBusinessDay(after: day)
+        }
+        return Self.calendar.date(bySettingHour: 23, minute: 59, second: 59, of: day)!
+    }
 }

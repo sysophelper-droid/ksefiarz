@@ -22,6 +22,7 @@ public struct SettingsView: View {
     @AppStorage(AppSettingsKeys.autoBackupKeepCount) private var backupKeepCount = 14
     @AppStorage(AppSettingsKeys.autoBackupKeepDays) private var backupKeepDays = 30
     @AppStorage(AppSettingsKeys.notifyNewPurchases) private var notifyNewPurchases = true
+    @AppStorage(AppSettingsKeys.notifyDeadlines) private var notifyDeadlines = true
 
     /// Dostępne interwały automatycznego pobierania.
     static let autoSyncIntervals: [(minutes: Int, label: String)] = [
@@ -92,6 +93,7 @@ public struct SettingsView: View {
         ("Zakres importu z KSeF", .sync), ("Pobierz faktury przy starcie", .sync),
         ("Pobieraj faktury automatycznie", .sync), ("Interwał pobierania", .sync),
         ("Powiadomienia o nowych fakturach zakupowych", .sync),
+        ("Powiadomienia o terminach płatności i dosłań", .sync),
         ("Numeracja faktur (wzorzec numeru)", .invoices),
         ("Formy płatności opłacone z góry", .invoices),
         ("Płatności w najbliższych dniach (widget)", .dashboard),
@@ -334,6 +336,9 @@ public struct SettingsView: View {
                 .disabled(!autoSync)
                 Toggle("Powiadamiaj o nowych fakturach zakupowych", isOn: $notifyNewPurchases)
                 .listRowBackground(highlight("Powiadomienia o nowych fakturach zakupowych"))
+                Toggle("Powiadamiaj o terminach (płatności i dosłania offline)", isOn: $notifyDeadlines)
+                .listRowBackground(highlight("Powiadomienia o terminach płatności i dosłań"))
+                .help("Powiadomienie, gdy termin płatności wypada dziś lub jutro oraz gdy mija termin dosłania dokumentu offline do KSeF — raz dziennie na fakturę.")
             } header: {
                 Text("Synchronizacja automatyczna")
             } footer: {

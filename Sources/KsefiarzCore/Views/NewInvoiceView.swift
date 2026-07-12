@@ -98,9 +98,39 @@ public struct NewInvoiceView: View {
     @State private var validationErrors: [InvoiceValidationError] = []
     @State private var isSending = false
     @State private var errorMessage: String?
-    /// Świadomy wybór trybu offline24 (art. 106nda): dokument zostaje
-    /// wystawiony lokalnie z kodami QR i trafia do kolejki dosłania.
-    @State private var offlineMode = false
+    /// Tryb wystawienia dokumentu: online albo jeden z trybów offline
+    /// (offline24 — wybór podatnika; niedostępność/awaria — komunikat MF).
+    enum IssueMode: String, CaseIterable, Identifiable {
+        case online
+        case offline24
+        case unavailability
+        case failure
+
+        var id: String { rawValue }
+
+        var displayName: String {
+            switch self {
+            case .online: return "Online (wyślij od razu)"
+            case .offline24: return "Offline24 (wybór podatnika)"
+            case .unavailability: return "Offline — niedostępność KSeF"
+            case .failure: return "Tryb awaryjny — awaria KSeF"
+            }
+        }
+
+        /// Powód offline zapisywany na fakturze (nil dla trybu online).
+        var offlineReason: Invoice.OfflineReason? {
+            switch self {
+            case .online: return nil
+            case .offline24: return .offline24
+            case .unavailability: return .unavailability
+            case .failure: return .failure
+            }
+        }
+    }
+
+    /// Wybrany tryb wystawienia — tryby offline tworzą dokument lokalnie
+    /// z kodami QR i kolejką dosłania (termin zależny od trybu).
+    @State private var issueMode: IssueMode = .online
     /// Komunikat po automatycznym przejściu w tryb offline24 (brak sieci).
     @State private var offlineInfoMessage: String?
     @State private var showingTemplateName = false
@@ -462,15 +492,19 @@ public struct NewInvoiceView: View {
                     .disabled(isSending)
                 }
                 Spacer()
-                Toggle("Offline24", isOn: $offlineMode)
-                    .toggleStyle(.checkbox)
-                    .disabled(isSending)
-                    .help("Wystawia dokument w trybie offline24: faktura powstaje od razu (z kodami QR na wydruku), a do KSeF zostanie dosłana automatycznie — najpóźniej następnego dnia roboczego.")
+                Picker("Tryb", selection: $issueMode) {
+                    ForEach(IssueMode.allCases) { mode in
+                        Text(mode.displayName).tag(mode)
+                    }
+                }
+                .fixedSize()
+                .disabled(isSending)
+                .help("Tryby offline tworzą dokument od razu (z kodami QR na wydruku) i dosyłają go automatycznie. Termin dosłania: offline24 — następny dzień roboczy; niedostępność KSeF — następny dzień roboczy po jej zakończeniu; awaria KSeF — 7 dni roboczych od jej zakończenia (komunikaty MF w BIP).")
                 Button("Zapisz lokalnie") { saveLocally() }
                     .disabled(isSending)
                 Button {
-                    if offlineMode {
-                        issueOffline()
+                    if let reason = issueMode.offlineReason {
+                        issueOffline(reason: reason)
                     } else {
                         Task { await sendToKSeF() }
                     }
@@ -478,7 +512,7 @@ public struct NewInvoiceView: View {
                     if isSending {
                         ProgressView().controlSize(.small)
                     } else {
-                        Text(offlineMode ? "Wystaw offline (doślij później)" : "Wystaw i wyślij do KSeF")
+                        Text(issueMode == .online ? "Wystaw i wyślij do KSeF" : "Wystaw offline (doślij później)")
                     }
                 }
                 .keyboardShortcut(.defaultAction)
@@ -754,13 +788,16 @@ public struct NewInvoiceView: View {
         dismiss()
     }
 
-    /// Wystawia dokument w trybie offline24: XML i jego skrót powstają teraz
+    /// Wystawia dokument w trybie offline: XML i jego skrót powstają teraz
     /// (są podstawą kodów QR na wydruku), a dosłanie do KSeF wykona się
     /// automatycznie. Dosyłany jest DOKŁADNIE ten zapisany XML.
-    /// - Parameter automatic: true, gdy tryb offline włączył się sam po
-    ///   nieudanej wysyłce online (brak sieci) — pokazuje komunikat
-    ///   informacyjny zamiast natychmiastowego zamknięcia formularza.
-    private func issueOffline(automatic: Bool = false) {
+    /// - Parameters:
+    ///   - reason: powód offline (offline24 / niedostępność / awaria) —
+    ///     decyduje o terminie dosłania,
+    ///   - automatic: true, gdy tryb offline włączył się sam po nieudanej
+    ///     wysyłce online (brak sieci) — pokazuje komunikat informacyjny
+    ///     zamiast natychmiastowego zamknięcia formularza.
+    private func issueOffline(reason: Invoice.OfflineReason, automatic: Bool = false) {
         guard validate() else { return }
         let xml = FA2XMLGenerator.generateXML(for: draft)
         let environment = KSeFEnvironment(rawValue: environmentRaw) ?? .test
@@ -772,13 +809,14 @@ public struct NewInvoiceView: View {
             xml: xml
         )
         invoice.isOfflineMode = true
+        invoice.offlineReason = reason
         invoice.offlineHashBase64 = KSeFCrypto.sha256Base64(Data(xml.utf8))
         try? modelContext.save()
 
         let deadline = invoice.offlineSendDeadline
-            .map { FA2Format.dateFormatter.string(from: $0) } ?? "następny dzień roboczy"
+            .map { FA2Format.dateFormatter.string(from: $0) } ?? reason.deadlineDescription
         if automatic {
-            offlineInfoMessage = "Wysyłka online nie powiodła się (brak połączenia z KSeF), więc dokument został wystawiony w trybie offline24. Zostanie dosłany automatycznie — termin: \(deadline). Na wydruku znajdą się wymagane kody QR."
+            offlineInfoMessage = "Wysyłka online nie powiodła się (brak połączenia z KSeF), więc dokument został wystawiony w trybie offline24. Zostanie dosłany automatycznie — termin: \(deadline). Na wydruku znajdą się wymagane kody QR. Jeżeli Ministerstwo Finansów ogłosiło awarię albo niedostępność KSeF, zmień tryb offline w szczegółach faktury — termin dosłania liczy się wtedy inaczej."
         } else {
             onCompleted?()
             dismiss()
@@ -834,7 +872,7 @@ public struct NewInvoiceView: View {
             // Brak łączności z KSeF nie blokuje wystawienia: dokument
             // przechodzi w tryb offline24 i trafia do kolejki dosłania.
             if isConnectivityError(error) {
-                issueOffline(automatic: true)
+                issueOffline(reason: .offline24, automatic: true)
             } else {
                 errorMessage = error.localizedDescription
             }

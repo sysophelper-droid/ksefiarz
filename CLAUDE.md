@@ -95,8 +95,10 @@ Sources/KsefiarzCore/
                DisplayDateFilter, InvoiceNumberGenerator, AmountInWords, InvoiceCSVExporter,
                PaymentFormPolicy, InvoiceSyncEngine (wspólny sync: ręczny,
                przy starcie i cykliczny — automatyka w MainContentView),
-               PolishBusinessCalendar (dni robocze/święta — terminy offline24),
-               OfflineQueueEngine (kolejka dosłań offline24),
+               PolishBusinessCalendar (dni robocze/święta — terminy trybów
+               offline), OfflineQueueEngine (kolejka dosłań offline),
+               DeadlineNotificationEngine (powiadomienia o terminach
+               płatności i dosłań; dedup po kluczach z datą w UserDefaults),
                SyncCenter (rejestracja przebiegów SyncRun, stany operacji,
                wspólne domykanie wysyłek: kolejka offline + statusy + UPO),
                PaymentLedger (wpłaty częściowe/saldo — jedyne miejsce zmian
@@ -136,11 +138,17 @@ widoki tylko spinają logikę z SwiftUI. Klucze ustawień wyłącznie przez
   da — błąd 25002); CSR musi zawierać DOKŁADNIE dane z GET
   `/certificates/enrollments/data` (25003). Typy: `Authentication` (typ 1,
   logowanie), `Offline` (typ 2, tylko KOD II QR). Ważność 2 lata.
-- Offline24: zwykła sesja interaktywna z `offlineMode: true` w żądaniu
-  wysyłki; dosyłany XML musi być BAJT W BAJT tym, z którego policzono skrót
+- Tryby offline: zwykła sesja interaktywna z `offlineMode: true` w żądaniu
+  wysyłki (WSPÓLNA flaga dla wszystkich trybów — API nie rozróżnia);
+  dosyłany XML musi być BAJT W BAJT tym, z którego policzono skrót
   do kodów QR (stąd `Invoice.offlineHashBase64` + wysyłka `rawXmlContent`
-  przez `sendInvoiceXML`, nigdy ponowna generacja). Termin dosłania:
-  następny dzień roboczy po dacie wystawienia (PolishBusinessCalendar).
+  przez `sendInvoiceXML`, nigdy ponowna generacja). Terminy dosłania
+  (`Invoice.OfflineReason`, tabela w docs CIRFMF tryby-offline.md):
+  offline24 (art. 106nda) — następny dzień roboczy po dacie wystawienia;
+  niedostępność (art. 106nh) — następny dzień roboczy po jej zakończeniu;
+  awaria (art. 106nf) — 7 dni roboczych od jej zakończenia. Daty końca
+  zdarzenia NIE ma w API (komunikaty w BIP MF) — wpisuje ją użytkownik
+  (`offlineEventEndedAt`); do tego czasu termin jest nieznany (nil).
 - Kody QR: hosty `qr{-test,-demo,}.ksef.mf.gov.pl`; KOD I
   `/invoice/{NIP}/{DD-MM-RRRR}/{skrót SHA-256 Base64URL bez dopełnienia}`;
   KOD II `/certificate/Nip/{ctx}/{NIP}/{seryjny HEX}/{skrót}/{podpis}` —
