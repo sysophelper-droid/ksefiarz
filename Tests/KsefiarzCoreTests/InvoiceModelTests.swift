@@ -56,6 +56,12 @@ struct InvoiceModelTests {
         #expect(invoice.kpirEventDate == nil)
         #expect(invoice.kpirAmountOverride == nil)
         #expect(invoice.kpirResearchDevelopmentCost == 0)
+        #expect(invoice.isExcludedFromRyczalt == false)
+        #expect(invoice.ryczaltRateRaw.isEmpty)
+        #expect(invoice.ryczaltEntryDate == nil)
+        #expect(invoice.ryczaltEventDate == nil)
+        #expect(invoice.ryczaltAmountOverride == nil)
+        #expect(invoice.ryczaltNotes.isEmpty)
     }
 
     @Test("Zapis i odczyt faktury z bazy zachowuje wszystkie pola")
@@ -76,6 +82,12 @@ struct InvoiceModelTests {
         invoice.kpirNotes = "KPiR"
         invoice.kpirAmountOverride = 90
         invoice.kpirResearchDevelopmentCost = 25
+        invoice.isExcludedFromRyczalt = true
+        invoice.ryczaltRateRaw = RyczaltRate.r12_5.rawValue
+        invoice.ryczaltEntryDate = Date(timeIntervalSince1970: 1_800_200_000)
+        invoice.ryczaltEventDate = Date(timeIntervalSince1970: 1_800_300_000)
+        invoice.ryczaltAmountOverride = 81.25
+        invoice.ryczaltNotes = "Wpis ryczałtu"
         context.insert(invoice)
         try context.save()
 
@@ -96,6 +108,12 @@ struct InvoiceModelTests {
         #expect(saved.kpirNotes == "KPiR")
         #expect(saved.kpirAmountOverride == 90)
         #expect(saved.kpirResearchDevelopmentCost == 25)
+        #expect(saved.isExcludedFromRyczalt)
+        #expect(saved.ryczaltRateRaw == RyczaltRate.r12_5.rawValue)
+        #expect(saved.ryczaltEntryDate == invoice.ryczaltEntryDate)
+        #expect(saved.ryczaltEventDate == invoice.ryczaltEventDate)
+        #expect(saved.ryczaltAmountOverride == 81.25)
+        #expect(saved.ryczaltNotes == "Wpis ryczałtu")
         #expect(saved.sellerNIP == "5260250274")
         #expect(abs(saved.grossAmount - 123.0) < 0.001)
     }

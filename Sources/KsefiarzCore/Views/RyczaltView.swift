@@ -101,7 +101,7 @@ public struct RyczaltView: View {
             if let invoice = selectedInvoice {
                 Divider()
                 RyczaltEntryEditor(invoice: invoice, defaultRate: defaultRate)
-                    .frame(minHeight: 170, idealHeight: 200, maxHeight: 240)
+                    .frame(minHeight: 210, idealHeight: 240, maxHeight: 290)
             } else {
                 Divider()
                 Text("Zaznacz wpis, aby poprawić stawkę, datę lub kwotę przychodu.")
@@ -210,6 +210,14 @@ private struct RyczaltEntryEditor: View {
                     .font(.caption).disabled(invoice.ryczaltRateRaw.isEmpty)
                 }
                 VStack(alignment: .leading, spacing: 8) {
+                    DatePicker("Data wpisu", selection: Binding(
+                        get: { invoice.ryczaltEntryDate ?? RyczaltEngine.effectiveDate(for: invoice) },
+                        set: { invoice.ryczaltEntryDate = $0 }
+                    ), displayedComponents: .date)
+                    Button("Przywróć datę wpisu z daty przychodu") {
+                        invoice.ryczaltEntryDate = nil
+                    }
+                    .font(.caption).disabled(invoice.ryczaltEntryDate == nil)
                     DatePicker("Data uzyskania przychodu", selection: Binding(
                         get: { invoice.ryczaltEventDate ?? automaticDate },
                         set: { invoice.ryczaltEventDate = $0 }

@@ -218,6 +218,8 @@ public final class Invoice {
     public var isExcludedFromRyczalt: Bool = false
     /// Stawka ryczałtu (rawValue `RyczaltRate`, np. „8.5”); "" = stawka domyślna.
     public var ryczaltRateRaw: String = ""
+    /// Data dokonania zapisu w ewidencji; nil = data uzyskania przychodu.
+    public var ryczaltEntryDate: Date? = nil
     /// Data uzyskania przychodu przyjęta do ewidencji; nil = data z faktury.
     public var ryczaltEventDate: Date? = nil
     /// Kwota przychodu w PLN; nil = kwota netto przeliczona kursem faktury.

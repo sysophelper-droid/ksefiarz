@@ -101,10 +101,11 @@ kolejność dowolna. ⚠️ operacje modyfikujące KSeF testować wyłącznie na
   bocznym widoczna tylko wybrana ewidencja) oraz domyślna stawka ryczałtu.
   Ewidencja obejmuje wyłącznie sprzedaż, przelicza kwoty walutowe na PLN,
   pokazuje przychód i szacowany ryczałt (bez odliczeń składek) łącznie i per
-  stawka; użytkownik może na wpisie nadpisać stawkę, datę uzyskania przychodu,
-  kwotę i uwagi lub wykluczyć dokument. Eksport CSV zawiera pełne kolumny 1–17
-  (numer KSeF, identyfikator kontrahenta) oraz wiersz sumy per stawka. Faktury
-  ukryte poza ewidencją, klasyfikacja ryczałtu w kopii zapasowej (v9).
+  stawka; użytkownik może na wpisie nadpisać stawkę, datę wpisu, datę uzyskania
+  przychodu, kwotę i uwagi lub wykluczyć dokument. Eksport CSV zawiera pełne
+  kolumny 1–17 (numer KSeF, identyfikator kontrahenta) oraz wiersz sumy per
+  stawka. Faktury ukryte poza ewidencją, klasyfikacja ryczałtu w kopii
+  zapasowej (v9).
 
 ### KPiR — Księga Przychodów i Rozchodów (13.07.2026)
 

@@ -54,7 +54,7 @@ Sources/
         ├── InvoiceAutomationView.swift # szablony, cykle i kolejka zatwierdzeń
         ├── HiddenInvoicesView.swift # archiwum „Nieuprawnione / Ukryte”
         └── SettingsView.swift    # NIP, token KSeF, środowisko
-Tests/KsefiarzCoreTests/          # 623 testy (Swift Testing) — model, parser, usługa, kryptografia, logika
+Tests/KsefiarzCoreTests/          # 637 testów (Swift Testing) — model, parser, usługa, kryptografia, logika
 ```
 
 ## Funkcje
@@ -270,9 +270,9 @@ Tests/KsefiarzCoreTests/          # 623 testy (Swift Testing) — model, parser,
     8,5%, 5,5% i 3%. Obejmuje wyłącznie sprzedaż, przelicza kwoty walutowe na PLN,
     pokazuje przychód i szacowany ryczałt (bez odliczeń składek) łącznie oraz per
     stawka. Domyślną stawkę ustawiasz raz, a na każdym wpisie możesz ją nadpisać
-    — podobnie datę uzyskania przychodu, kwotę i uwagi (kol. 17). Eksport CSV
-    zawiera pełne kolumny 1–17, w tym numer KSeF i identyfikator kontrahenta,
-    oraz wiersz sumy przychodów per stawka.
+    — podobnie datę wpisu, datę uzyskania przychodu, kwotę i uwagi (kol. 17).
+    Eksport CSV zawiera pełne kolumny 1–17, w tym numer KSeF i identyfikator
+    kontrahenta, oraz wiersz sumy przychodów per stawka.
   - We wszystkich ewidencjach faktury ukryte nigdy nie wchodzą do zestawienia,
     a lokalna klasyfikacja podatkowa wchodzi do kopii zapasowej.
 - **Rozbudowany Kokpit** — oprócz podsumowań kwot i najbliższych płatności:

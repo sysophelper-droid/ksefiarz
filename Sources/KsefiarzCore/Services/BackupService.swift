@@ -94,6 +94,7 @@ public struct BackupInvoice: Codable, Equatable, Sendable {
     /// Pola od wersji 9 — lokalna klasyfikacja ryczałtu (ewidencja przychodów).
     public var isExcludedFromRyczalt: Bool?
     public var ryczaltRateRaw: String?
+    public var ryczaltEntryDate: Date?
     public var ryczaltEventDate: Date?
     public var ryczaltAmountOverride: Double?
     public var ryczaltNotes: String?
@@ -215,7 +216,8 @@ public struct BackupFile: Codable, Sendable {
 /// pobierania wszystkiego z KSeF.
 public enum BackupService {
 
-    /// Bieżąca wersja formatu pliku (8: + klasyfikacja KPiR faktur).
+    /// Bieżąca wersja formatu pliku (9: + klasyfikacja ryczałtu i ustawienia
+    /// formy opodatkowania).
     /// Starsze pliki są nadal poprawnie importowane.
     public static let currentVersion = 9
 
@@ -398,6 +400,7 @@ public enum BackupService {
         invoice.kpirResearchDevelopmentCost = backup.kpirResearchDevelopmentCost ?? 0
         invoice.isExcludedFromRyczalt = backup.isExcludedFromRyczalt ?? false
         invoice.ryczaltRateRaw = backup.ryczaltRateRaw ?? ""
+        invoice.ryczaltEntryDate = backup.ryczaltEntryDate
         invoice.ryczaltEventDate = backup.ryczaltEventDate
         invoice.ryczaltAmountOverride = backup.ryczaltAmountOverride
         invoice.ryczaltNotes = backup.ryczaltNotes ?? ""
@@ -661,6 +664,7 @@ public enum BackupService {
                 ? nil : invoice.kpirResearchDevelopmentCost,
             isExcludedFromRyczalt: invoice.isExcludedFromRyczalt ? true : nil,
             ryczaltRateRaw: invoice.ryczaltRateRaw.isEmpty ? nil : invoice.ryczaltRateRaw,
+            ryczaltEntryDate: invoice.ryczaltEntryDate,
             ryczaltEventDate: invoice.ryczaltEventDate,
             ryczaltAmountOverride: invoice.ryczaltAmountOverride,
             ryczaltNotes: invoice.ryczaltNotes.isEmpty ? nil : invoice.ryczaltNotes

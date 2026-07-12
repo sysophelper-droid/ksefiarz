@@ -180,7 +180,9 @@ Scripts/build-app.sh                   # składanie bundla .app
   `ryczaltAmountOverride` pozwala ująć brutto (podatnik zwolniony z VAT) lub
   korektę. Stawka: `ryczaltRateRaw` na fakturze, a przy pustej — domyślna
   z ustawień (`ryczaltDefaultRate`, fallback 8,5%). Data przychodu:
-  `ryczaltEventDate ?? saleDate ?? issueDate`.
+  `ryczaltEventDate ?? saleDate ?? issueDate`. Osobna data wpisu (kol. 2) to
+  `ryczaltEntryDate`, z fallbackiem do daty przychodu; decyduje o kolejności
+  pozycji i może być skorygowana w edytorze.
 - Podsumowanie liczy przychód i szacowany ryczałt (przychód × stawka) łącznie
   i per stawka; szacunek jest bez odliczeń składek ZUS/zdrowotnej (etykieta
   „szac.”). Ostrzeżenie o braku kursu waluty jak w KPiR. Ukryte i wykluczone

@@ -134,6 +134,25 @@ struct RyczaltEngineTests {
         #expect(RyczaltEngine.effectiveDate(for: invoice) == date(2026, 1, 9))
     }
 
+    @Test("Data wpisu jest niezależna od daty przychodu i wyznacza kolejność")
+    func entryDate() {
+        let firstRevenue = sale(number: "S/1", date: date(2026, 1, 2))
+        #expect(RyczaltEngine.effectiveEntryDate(for: firstRevenue) == date(2026, 1, 2))
+        firstRevenue.ryczaltEntryDate = date(2026, 1, 10)
+        let secondRevenue = sale(number: "S/2", date: date(2026, 1, 3))
+        secondRevenue.ryczaltEntryDate = date(2026, 1, 8)
+
+        #expect(RyczaltEngine.effectiveEntryDate(for: firstRevenue) == date(2026, 1, 10))
+        let rows = RyczaltEngine.rows(
+            from: [firstRevenue, secondRevenue],
+            period: .init(year: 2026, month: 1),
+            defaultRate: .r8_5
+        )
+        #expect(rows.map(\.documentNumber) == ["S/2", "S/1"])
+        #expect(rows.map(\.entryDate) == [date(2026, 1, 8), date(2026, 1, 10)])
+        #expect(rows.map(\.revenueDate) == [date(2026, 1, 3), date(2026, 1, 2)])
+    }
+
     // MARK: Podsumowanie
 
     @Test("Podsumowanie sumuje przychód i szacuje ryczałt per stawka")
@@ -195,6 +214,7 @@ struct RyczaltEngineTests {
     func csvLayout() throws {
         let a = sale(number: "S/1", date: date(2026, 1, 2), net: 100)
         a.ryczaltRateRaw = RyczaltRate.r12.rawValue
+        a.ryczaltEntryDate = date(2026, 1, 5)
         let rows = RyczaltEngine.rows(from: [a], period: .init(year: 2026), defaultRate: .r8_5)
         let csv = RyczaltCSVExporter.csv(for: rows)
         let lines = csv.split(separator: "\n").map(String.init)
@@ -207,6 +227,8 @@ struct RyczaltEngineTests {
 
         let row = lines[1].components(separatedBy: ";")
         #expect(row.count == 17)
+        #expect(row[1] == "2026-01-05")
+        #expect(row[2] == "2026-01-02")
         // Kolumna 12% to indeks 10 (kol. 11 wzoru); pozostałe stawki puste.
         #expect(row[10] == "100,00")
         #expect(row[6] == "") // 17%

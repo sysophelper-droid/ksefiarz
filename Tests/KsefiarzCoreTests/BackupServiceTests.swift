@@ -32,6 +32,7 @@ struct BackupServiceTests {
         invoice.kpirResearchDevelopmentCost = 20
         invoice.isExcludedFromRyczalt = true
         invoice.ryczaltRateRaw = RyczaltRate.r12.rawValue
+        invoice.ryczaltEntryDate = Date(timeIntervalSince1970: 1_799_400_000)
         invoice.ryczaltEventDate = Date(timeIntervalSince1970: 1_799_500_000)
         invoice.ryczaltAmountOverride = 77.34
         invoice.ryczaltNotes = "Kwartalny ryczałt"
@@ -75,6 +76,7 @@ struct BackupServiceTests {
         #expect(entry.kpirResearchDevelopmentCost == 20)
         #expect(entry.isExcludedFromRyczalt == true)
         #expect(entry.ryczaltRateRaw == RyczaltRate.r12.rawValue)
+        #expect(entry.ryczaltEntryDate == invoice.ryczaltEntryDate)
         #expect(entry.ryczaltAmountOverride == 77.34)
         #expect(entry.ryczaltNotes == "Kwartalny ryczałt")
 
@@ -97,6 +99,7 @@ struct BackupServiceTests {
         #expect(restored.kpirResearchDevelopmentCost == 20)
         #expect(restored.isExcludedFromRyczalt)
         #expect(restored.ryczaltRateRaw == RyczaltRate.r12.rawValue)
+        #expect(restored.ryczaltEntryDate == invoice.ryczaltEntryDate)
         #expect(restored.ryczaltEventDate == invoice.ryczaltEventDate)
         #expect(restored.ryczaltAmountOverride == 77.34)
         #expect(restored.ryczaltNotes == "Kwartalny ryczałt")

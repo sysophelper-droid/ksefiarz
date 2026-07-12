@@ -89,7 +89,7 @@ public enum RyczaltEngine {
     public struct Row: Identifiable, Equatable, Sendable {
         public let id: UUID
         public let ordinal: Int
-        /// Kol. 2 — data wpisu (przyjmujemy datę uzyskania przychodu).
+        /// Kol. 2 — data dokonania zapisu w ewidencji.
         public let entryDate: Date
         /// Kol. 3 — data uzyskania przychodu.
         public let revenueDate: Date
@@ -137,6 +137,12 @@ public enum RyczaltEngine {
         invoice.ryczaltEventDate ?? invoice.saleDate ?? invoice.issueDate
     }
 
+    /// Data wpisu jest osobnym polem urzędowego wzoru. Dla wpisów bez
+    /// ręcznego wskazania przyjmujemy datę uzyskania przychodu.
+    public static func effectiveEntryDate(for invoice: Invoice) -> Date {
+        invoice.ryczaltEntryDate ?? effectiveDate(for: invoice)
+    }
+
     public static func effectiveAmount(for invoice: Invoice) -> Double {
         if let override = invoice.ryczaltAmountOverride { return rounded(override) }
         return rounded(DashboardAnalytics.inPLN(invoice.netAmount, invoice: invoice))
@@ -155,11 +161,14 @@ public enum RyczaltEngine {
                 && (includeExcluded || !invoice.isExcludedFromRyczalt)
                 && period.contains(effectiveDate(for: invoice), calendar: calendar)
         }.sorted {
-            let lhs = effectiveDate(for: $0)
-            let rhs = effectiveDate(for: $1)
-            return lhs == rhs
+            let lhsEntry = effectiveEntryDate(for: $0)
+            let rhsEntry = effectiveEntryDate(for: $1)
+            if lhsEntry != rhsEntry { return lhsEntry < rhsEntry }
+            let lhsRevenue = effectiveDate(for: $0)
+            let rhsRevenue = effectiveDate(for: $1)
+            return lhsRevenue == rhsRevenue
                 ? $0.invoiceNumber.localizedStandardCompare($1.invoiceNumber) == .orderedAscending
-                : lhs < rhs
+                : lhsRevenue < rhsRevenue
         }
 
         return selected.enumerated().map { index, invoice in
@@ -167,7 +176,7 @@ public enum RyczaltEngine {
             return Row(
                 id: invoice.id,
                 ordinal: index + 1,
-                entryDate: date,
+                entryDate: effectiveEntryDate(for: invoice),
                 revenueDate: date,
                 ksefNumber: invoice.ksefId ?? "",
                 documentNumber: invoice.invoiceNumber,
