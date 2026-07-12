@@ -135,10 +135,17 @@ enum ASN1DER {
         var contentLength = lengthByte
         if lengthByte & 0x80 != 0 {
             let lengthOfLength = lengthByte & 0x7F
-            guard lengthOfLength > 0, offset + 2 + lengthOfLength <= bytes.count else { return nil }
+            // Ograniczenie do 8 bajtów i kontrola po każdym bajcie chronią przed
+            // przepełnieniem Int (ujemna długość → zakres subdata z lower > upper).
+            // Dane niezaufane (np. garbage z błędnego hasła PKCS#8) tak wyglądają.
+            guard lengthOfLength > 0, lengthOfLength <= 8,
+                  offset + 2 + lengthOfLength <= bytes.count else { return nil }
             contentLength = 0
             for i in 0..<lengthOfLength {
                 contentLength = (contentLength << 8) | Int(bytes[offset + 2 + i])
+                // Długość zawartości nie może przekroczyć rozmiaru bufora —
+                // to od razu odrzuca przepełnienia i absurdalne wartości.
+                guard contentLength >= 0, contentLength <= bytes.count else { return nil }
             }
             headerLength = 2 + lengthOfLength
         }
