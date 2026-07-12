@@ -199,6 +199,18 @@ Tests/KsefiarzCoreTests/          # 278 testów (Swift Testing) — model, parse
 - **UPO** — automatyczne pobieranie i lokalne przechowywanie Urzędowego
   Poświadczenia Odbioru (XML) po przyjęciu faktury; w szczegółach można
   ponowić pobranie lub wyeksportować zapisany dokument także bez sieci.
+- **Eksport JPK_V7M** — ewidencja VAT wybranego miesiąca (sprzedaż
+  z podziałem na stawki, oznaczenia GTU i procedur z pozycji; zakupy jako
+  pozostałe nabycia) z częścią deklaracyjną VAT-7 (kwoty w pełnych złotych,
+  do wpłaty / do przeniesienia). Plik zgodny z oficjalną XSD JPK_V7M(2);
+  arkusz pokazuje podsumowanie i listę pozycji do ręcznej weryfikacji
+  (m.in. pozycje OSS rozliczane poza JPK, procedura marży, brak kursu).
+- **Wezwania do zapłaty i noty odsetkowe** — dla dłużników z zaległymi
+  fakturami (kandydaci ze struktury wiekowej Kokpitu): wybór faktur,
+  odsetki naliczane od salda według konfigurowalnej stopy rocznej
+  (domyślnie odsetki za opóźnienie w transakcjach handlowych), PDF
+  z tabelą zaległości i sumami per waluta, zapis do pliku albo wysyłka
+  e-mailem na adres ze słownika kontrahentów.
 - **Paczka dla księgowości** — eksport wybranego okresu (miesiąc albo
   własny zakres dat) do jednego pliku ZIP: zestawienia CSV osobno dla
   sprzedaży i zakupu, oryginalne dokumenty XML, wydruki PDF oraz

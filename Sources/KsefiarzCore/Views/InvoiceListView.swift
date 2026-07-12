@@ -18,6 +18,8 @@ public struct InvoiceListView: View {
     @State private var correctedInvoice: Invoice?
     @State private var duplicatedInvoice: Invoice?
     @State private var emailedInvoice: Invoice?
+    /// NIP dłużnika dla arkusza wezwania do zapłaty (nil = arkusz zamknięty).
+    @State private var demandBuyerNIP: String?
     @State private var documentTypeFilter: DocumentTypeFilter = .all
     @State private var isSyncing = false
     @State private var errorMessage: String?
@@ -27,6 +29,7 @@ public struct InvoiceListView: View {
     @State private var statementTransactions: [BankTransaction] = []
     @State private var showingStatementImport = false
     @State private var showingAccountingPackage = false
+    @State private var showingJPKExport = false
 
     @AppStorage(AppSettingsKeys.prepaidForms) private var prepaidFormsRaw = PaymentFormPolicy.encode(PaymentFormPolicy.defaultPrepaidForms)
 
@@ -200,6 +203,14 @@ public struct InvoiceListView: View {
                 }
                 ToolbarItem {
                     Button {
+                        showingJPKExport = true
+                    } label: {
+                        Label("JPK_V7M", systemImage: "doc.badge.gearshape")
+                    }
+                    .help("Eksportuj ewidencję VAT wybranego miesiąca do pliku JPK_V7M (sprzedaż + zakup, GTU, procedury, deklaracja)")
+                }
+                ToolbarItem {
+                    Button {
                         Task { await syncFromKSeF() }
                     } label: {
                         if isSyncing {
@@ -254,6 +265,9 @@ public struct InvoiceListView: View {
             .sheet(isPresented: $showingAccountingPackage) {
                 AccountingPackageView()
             }
+            .sheet(isPresented: $showingJPKExport) {
+                JPKExportView()
+            }
             .sheet(item: $duplicatedInvoice) { invoice in
                 NewInvoiceView(
                     initialDraft: InvoiceAutomationEngine.duplicate(invoice),
@@ -262,6 +276,12 @@ public struct InvoiceListView: View {
             }
             .sheet(item: $emailedInvoice) { invoice in
                 InvoiceEmailView(invoice: invoice)
+            }
+            .sheet(isPresented: Binding(
+                get: { demandBuyerNIP != nil },
+                set: { if !$0 { demandBuyerNIP = nil } }
+            )) {
+                PaymentDemandView(preselectedBuyerNIP: demandBuyerNIP)
             }
             .alert(
                 "Błąd synchronizacji z KSeF",
@@ -301,6 +321,11 @@ public struct InvoiceListView: View {
             if kind == .sales {
                 Button("Wyślij e-mailem…") {
                     emailedInvoice = invoice
+                }
+                if invoice.isOverdue {
+                    Button("Wezwanie do zapłaty…") {
+                        demandBuyerNIP = invoice.buyerNIP
+                    }
                 }
             }
             // Korekta dostępna dla każdej faktury sprzedażowej niebędącej korektą.

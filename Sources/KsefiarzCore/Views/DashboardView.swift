@@ -26,6 +26,9 @@ public struct DashboardView: View {
     /// pojedyncze kliknięcie zaznacza, podwójne otwiera szczegóły.
     @State private var selectedDueInvoiceID: UUID?
 
+    /// Arkusz wezwania do zapłaty / noty odsetkowej (z sekcji wiekowania).
+    @State private var showingPaymentDemand = false
+
     public init() {}
 
     /// „1 dzień” / „N dni” — poprawna polska odmiana.
@@ -200,6 +203,9 @@ public struct DashboardView: View {
             }
             .padding(20)
         }
+        .sheet(isPresented: $showingPaymentDemand) {
+            PaymentDemandView()
+        }
         .navigationTitle("Kokpit")
         .toolbar {
             ToolbarItem {
@@ -314,8 +320,18 @@ extension DashboardView {
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
         } label: {
-            Label("Struktura wiekowa nieopłaconych (saldo, PLN)", systemImage: "hourglass")
-                .font(.headline)
+            HStack {
+                Label("Struktura wiekowa nieopłaconych (saldo, PLN)", systemImage: "hourglass")
+                    .font(.headline)
+                Spacer()
+                Button {
+                    showingPaymentDemand = true
+                } label: {
+                    Label("Wezwanie do zapłaty…", systemImage: "envelope.badge.shield.half.filled")
+                }
+                .font(.callout)
+                .help("Wygeneruj wezwanie do zapłaty albo notę odsetkową dla dłużnika z zaległymi fakturami")
+            }
         }
     }
 
