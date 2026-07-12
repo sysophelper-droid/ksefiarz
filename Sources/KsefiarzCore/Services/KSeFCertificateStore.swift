@@ -218,11 +218,25 @@ public final class KSeFCertificateStore: ObservableObject {
         }
     }
 
-    /// Zapisuje certyfikat w pęku kluczy i publikuje zmianę.
+    /// Zapisuje certyfikat w pęku kluczy bieżącego środowiska i publikuje zmianę.
     public func save(_ certificate: KSeFCertificate, type: KSeFCertificateType) {
+        save(certificate, type: type, environmentRaw: environmentRaw)
+    }
+
+    /// Zapisuje certyfikat dla JAWNIE wskazanego środowiska (niezależnie od
+    /// bieżącego stanu magazynu). Publikuje zmianę tylko, gdy to środowisko
+    /// jest właśnie wybrane — dzięki temu odnowienie w tle nie miesza
+    /// środowisk, gdyby użytkownik przełączył je w trakcie sieciowego wniosku.
+    public func save(
+        _ certificate: KSeFCertificate,
+        type: KSeFCertificateType,
+        environmentRaw: String
+    ) {
         guard let payload = try? JSONEncoder().encode(certificate) else { return }
         storage.save(payload.base64EncodedString(), account: Self.account(type: type, environmentRaw: environmentRaw))
-        apply(certificate, type: type)
+        if environmentRaw == self.environmentRaw {
+            apply(certificate, type: type)
+        }
     }
 
     /// Usuwa certyfikat danego typu (np. po unieważnieniu).
