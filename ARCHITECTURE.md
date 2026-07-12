@@ -77,9 +77,13 @@ Sources/KsefiarzCore/
                InvoiceEmailComposer (adresat ze słownika po NIP — invoiceEmail
                przed email; domyślny temat/treść), DashboardAnalytics
                (przepływy z PaymentRecord, VAT okresu, wiekowanie sald,
-               porównania miesięczne), JPKV7Generator (JPK_V7M(2) zgodny
-               z XSD crd.gov.pl/wzor/2021/12/27/11148 — ewidencja + deklaracja
-               VAT-7(22); OSS poza JPK, ostrzeżenia o uproszczeniach),
+               porównania miesięczne), JPKV7Generator (JPK_V7M i JPK_V7K
+               — enum JPKV7Variant; automatyczny wybór schemy (2) do stycznia
+               2026 lub (3) od lutego 2026; ewidencja + deklaracja VAT-7/
+               VAT-7K; wydanie (3) z NrKSeF albo OFF/BFK/DI; V7K kwartalny —
+               deklaracja tylko w pliku ostatniego miesiąca kwartału, za cały
+               kwartał, z elementem Kwartal; OSS poza JPK, ostrzeżenia
+               o uproszczeniach),
                VATUEGenerator (informacja podsumowująca VAT-UE(5) zgodna
                z XSD crd.gov.pl/wzor/2021/01/12/10293 — WDT/część C,
                WNT/część D, usługi UE/część E z danych faktur; kontrahent
@@ -227,6 +231,34 @@ unikalności = kraj+numer+flaga): **Grupa1** WDT/część C
 **P_Dd=1 wymagane** — flaga transakcji trójstronnej}; **Grupa2** WNT/część D
 {P_Na, P_Nb, P_Nc, **P_Nd=1**}; **Grupa3** usługi/część E {P_Ua, P_Ub, P_Uc —
 bez flagi}; Grupa4 (call-off stock) NIE generowana (brak modelu danych).
+
+## JPK_V7M / JPK_V7K — ewidencja VAT z deklaracją
+
+Generator `JPKV7Generator` obsługuje dwa warianty (`JPKV7Variant`): miesięczny
+(**JPK_V7M**) i kwartalny (**JPK_V7K** — mały podatnik / VAT kwartalny). To
+osobne schematy XSD. Wydanie jest dobierane automatycznie do okresu:
+- od lutego 2026 r. V7M(3): namespace `.../2025/12/19/14090/`, VAT-7(23);
+  V7K(3): namespace `.../2025/12/19/14089/`, VAT-7K(17), element `Kwartal`;
+- od stycznia 2022 r. do stycznia 2026 r. zachowane są historyczne V7M(2)
+  (`.../11148`, VAT-7(22)) i V7K(2) (`.../11149`, VAT-7K(16)).
+
+W wydaniu (3) każdy wiersz ewidencji zawiera wymagany wybór: `NrKSeF`, jeśli
+faktura ma już numer, `OFF` dla faktury wystawionej podczas awarii KSeF bez
+numeru, `DI` dla offline24/niedostępności bez numeru albo `BFK` dla pozostałej
+faktury elektronicznej/papierowej wystawionej poza KSeF. Po nadaniu numeru KSeF
+ma on pierwszeństwo przed znacznikiem trybu wystawienia.
+
+Reguła składania V7K (broszura MF): ewidencję składa się co miesiąc, a część
+deklaracyjną raz na kwartał — **wyłącznie w pliku ostatniego miesiąca kwartału**
+(3/6/9/12). Wtedy `Ewidencja` = dane tylko tego miesiąca (`inPeriod`, jak V7M),
+a `Deklaracja` = **sumy całego kwartału** (`quarterMonths` → 3 miesiące). Dla
+miesięcy 1. i 2. kwartału generator emituje sam blok `Ewidencja` (bez
+`Deklaracja`) i dokłada ostrzeżenie. `JPKV7Result` rozdziela kwoty ewidencji
+(miesiąc: `outputVAT`/`inputVAT`) od kwot deklaracji (kwartał dla V7K:
+`declarationOutputVAT`/`declarationInputVAT`, `amountDue`/`excessCarried`,
+flaga `hasDeclaration`). Warianty (2) i (3) zweryfikowane oficjalnymi XSD
+(xmllint, 12.07.2026). Uproszczenia jak w V7M (OSS poza JPK, zakupy jako
+pozostałe nabycia, okres po dacie sprzedaży/wystawienia).
 Kody krajów: `TKodKrajuUE` (towary) i `TKodKrajuUEUslugi` (usługi, bez XI);
 Grecja = **EL**, Irlandia Płn. **XI tylko dla towarów**, PL wykluczone.
 Stary słownik XSD nadal technicznie zawiera GB, ale generator pomija Wielką
