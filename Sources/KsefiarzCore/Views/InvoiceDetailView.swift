@@ -17,7 +17,11 @@ public struct InvoiceDetailView: View {
 
     @State private var showingCorrectionForm = false
     @State private var showingEditForm = false
+    /// Edycja ręcznej faktury kosztowej (spoza KSeF).
+    @State private var showingPurchaseEditForm = false
     @State private var showingDeleteConfirmation = false
+    /// Kategorie użyte na zakupach — podpowiedzi przy zmianie kategorii.
+    @State private var usedCategories: [String] = []
     @State private var showingEmailSheet = false
     @State private var isDownloadingUPO = false
     @State private var isSendingToKSeF = false
@@ -202,6 +206,40 @@ public struct InvoiceDetailView: View {
                 }
                 LabeledContent("Status") {
                     PaymentBadge(invoice: invoice)
+                }
+                // Kategoria kosztu (tylko zakupy) — grupuje wydatki
+                // w raportach; edytowalna także dla faktur z KSeF
+                // (to lokalna metadana, nie treść dokumentu).
+                if invoice.kind == .purchase {
+                    LabeledContent("Kategoria kosztu") {
+                        HStack(spacing: 6) {
+                            TextField("", text: Binding(
+                                get: { invoice.costCategory },
+                                set: { invoice.costCategory = $0 }
+                            ), prompt: Text(CostCategories.none))
+                            .labelsHidden()
+                            .frame(maxWidth: 240)
+                            Menu {
+                                if !usedCategories.isEmpty {
+                                    Section("Użyte") {
+                                        ForEach(usedCategories, id: \.self) { category in
+                                            Button(category) { invoice.costCategory = category }
+                                        }
+                                    }
+                                }
+                                Section("Typowe") {
+                                    ForEach(CostCategories.suggestions, id: \.self) { category in
+                                        Button(category) { invoice.costCategory = category }
+                                    }
+                                }
+                            } label: {
+                                Image(systemName: "tag")
+                            }
+                            .menuStyle(.borderlessButton)
+                            .fixedSize()
+                            .help("Podstaw kategorię z listy — grupuje koszty w raportach")
+                        }
+                    }
                 }
                 if let sentAt = invoice.emailSentAt {
                     LabeledContent("Wysłano e-mailem") {
@@ -438,6 +476,22 @@ public struct InvoiceDetailView: View {
                     }
                 }
 
+                // Ręczna faktura kosztowa (spoza KSeF): edycja i usunięcie.
+                if invoice.isManualPurchase {
+                    HStack(spacing: 12) {
+                        Button {
+                            showingPurchaseEditForm = true
+                        } label: {
+                            Label("Edytuj zakup", systemImage: "pencil")
+                        }
+                        Button(role: .destructive) {
+                            showingDeleteConfirmation = true
+                        } label: {
+                            Label("Usuń", systemImage: "trash")
+                        }
+                    }
+                }
+
                 // Faktura zapisana tylko lokalnie: edycja, wysyłka, usunięcie.
                 // Faktury wysłane do KSeF są niezmienialne (dokument urzędowy).
                 if isEditableLocal {
@@ -507,12 +561,17 @@ public struct InvoiceDetailView: View {
                 .disabled((invoice.rawXmlContent ?? "").isEmpty)
                 .help("Zapisz oryginalny dokument XML e-Faktury")
 
-                Button {
-                    FileExportService.exportPDF(of: invoice)
+                Menu {
+                    Button("PDF (polski)") {
+                        FileExportService.exportPDF(of: invoice)
+                    }
+                    Button("PDF dwujęzyczny (PL/EN)") {
+                        FileExportService.exportPDF(of: invoice, bilingual: true)
+                    }
                 } label: {
                     Label("Eksportuj PDF", systemImage: "doc.richtext")
                 }
-                .help("Zapisz fakturę jako PDF")
+                .help("Zapisz fakturę jako PDF — wariant polski albo dwujęzyczny (PL/EN) dla kontrahentów zagranicznych")
 
                 if invoice.ksefSubmissionStatus == .accepted,
                    invoice.ksefSessionReference != nil, invoice.ksefId != nil {
@@ -538,6 +597,17 @@ public struct InvoiceDetailView: View {
         }
         .sheet(isPresented: $showingEditForm) {
             NewInvoiceView(editing: invoice)
+        }
+        .sheet(isPresented: $showingPurchaseEditForm) {
+            NewPurchaseView(editing: invoice)
+        }
+        .onAppear {
+            guard invoice.kind == .purchase else { return }
+            let purchaseRaw = Invoice.Kind.purchase.rawValue
+            let descriptor = FetchDescriptor<Invoice>(
+                predicate: #Predicate { $0.kindRaw == purchaseRaw }
+            )
+            usedCategories = CostCategories.used(in: (try? modelContext.fetch(descriptor)) ?? [])
         }
         .confirmationDialog(
             "Usunąć fakturę \(invoice.invoiceNumber)?",

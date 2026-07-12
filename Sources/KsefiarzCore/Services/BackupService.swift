@@ -79,6 +79,8 @@ public struct BackupInvoice: Codable, Equatable, Sendable {
     public var attachmentJSON: String?
     public var emailSentAt: Date?
     public var emailSentTo: String?
+    /// Pole od wersji 6 — kategoria kosztu (raporty zakupów).
+    public var costCategory: String?
 }
 
 /// Wpłata do faktury w kopii zapasowej.
@@ -119,6 +121,8 @@ public struct BackupContractor: Codable, Equatable, Sendable {
     public var invoiceEmail: String
     public var website: String
     public var notes: String
+    /// Pole od wersji 6 — dokumenty dwujęzyczne (PDF PL/EN, e-mail EN).
+    public var prefersBilingualDocuments: Bool?
 }
 
 /// Towar/usługa w kopii zapasowej (słownik, od wersji 2).
@@ -195,9 +199,9 @@ public struct BackupFile: Codable, Sendable {
 /// pobierania wszystkiego z KSeF.
 public enum BackupService {
 
-    /// Bieżąca wersja formatu pliku (3: + stan wysyłki i zapisane UPO,
-    /// bez tokenu KSeF). Starsze pliki są nadal poprawnie importowane.
-    public static let currentVersion = 5
+    /// Bieżąca wersja formatu pliku (6: + kategoria kosztu i dokumenty
+    /// dwujęzyczne kontrahenta). Starsze pliki są nadal poprawnie importowane.
+    public static let currentVersion = 6
 
     /// Klucze ustawień obejmowane kopią zapasową.
     /// Tokenu KSeF celowo tu nie ma — sekret żyje w pęku kluczy i nie może
@@ -356,6 +360,7 @@ public enum BackupService {
         invoice.attachmentJSON = backup.attachmentJSON ?? ""
         invoice.emailSentAt = backup.emailSentAt
         invoice.emailSentTo = backup.emailSentTo ?? ""
+        invoice.costCategory = backup.costCategory ?? ""
         return invoice
     }
 
@@ -460,6 +465,7 @@ public enum BackupService {
         contractor.invoiceEmail = backup.invoiceEmail
         contractor.website = backup.website
         contractor.notes = backup.notes
+        contractor.prefersBilingualDocuments = backup.prefersBilingualDocuments ?? false
         return contractor
     }
 
@@ -601,7 +607,8 @@ public enum BackupService {
             offlineEventEndedAt: invoice.offlineEventEndedAt,
             attachmentJSON: invoice.attachmentJSON.isEmpty ? nil : invoice.attachmentJSON,
             emailSentAt: invoice.emailSentAt,
-            emailSentTo: invoice.emailSentTo.isEmpty ? nil : invoice.emailSentTo
+            emailSentTo: invoice.emailSentTo.isEmpty ? nil : invoice.emailSentTo,
+            costCategory: invoice.costCategory.isEmpty ? nil : invoice.costCategory
         )
     }
 
@@ -633,7 +640,8 @@ public enum BackupService {
             email: contractor.email,
             invoiceEmail: contractor.invoiceEmail,
             website: contractor.website,
-            notes: contractor.notes
+            notes: contractor.notes,
+            prefersBilingualDocuments: contractor.prefersBilingualDocuments ? true : nil
         )
     }
 

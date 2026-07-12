@@ -18,6 +18,10 @@ public struct InvoiceEmailView: View {
     @State private var body_ = ""
     @State private var includePDF = true
     @State private var includeXML = true
+    /// Język szablonu treści (angielski dla kontrahentów zagranicznych).
+    @State private var language: InvoiceEmailComposer.Language = .polish
+    /// PDF w układzie dwujęzycznym PL/EN.
+    @State private var bilingualPDF = false
     @State private var errorMessage: String?
     @State private var prefilled = false
 
@@ -35,6 +39,12 @@ public struct InvoiceEmailView: View {
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
+                    Picker("Język szablonu", selection: $language) {
+                        ForEach(InvoiceEmailComposer.Language.allCases) { language in
+                            Text(language.displayName).tag(language)
+                        }
+                    }
+                    .help("Zmiana języka podstawia temat i treść od nowa (własne poprawki zostaną zastąpione). Angielski jest podpowiadany, gdy kontrahent ma w słowniku włączone dokumenty dwujęzyczne.")
                     TextField("Temat", text: $subject)
                     TextEditor(text: $body_)
                         .frame(minHeight: 160)
@@ -42,6 +52,9 @@ public struct InvoiceEmailView: View {
                 }
                 Section("Załączniki") {
                     Toggle("PDF faktury", isOn: $includePDF)
+                    Toggle("PDF dwujęzyczny (PL/EN)", isOn: $bilingualPDF)
+                        .disabled(!includePDF)
+                        .help("Etykiety na wydruku w obu językach — dla kontrahentów zagranicznych.")
                     Toggle("XML e-Faktury (FA)", isOn: $includeXML)
                         .disabled((invoice.rawXmlContent ?? "").isEmpty)
                     if (invoice.rawXmlContent ?? "").isEmpty {
@@ -88,6 +101,11 @@ public struct InvoiceEmailView: View {
         .frame(minWidth: 560, minHeight: 480)
         .navigationTitle("Wyślij fakturę e-mailem")
         .onAppear { prefillIfNeeded() }
+        // Zmiana języka podstawia szablon od nowa (pola dalej edytowalne).
+        .onChange(of: language) { _, newLanguage in
+            subject = InvoiceEmailComposer.defaultSubject(for: invoice, language: newLanguage)
+            body_ = InvoiceEmailComposer.defaultBody(for: invoice, language: newLanguage)
+        }
         .alert(
             "Nie udało się przygotować wiadomości",
             isPresented: Binding(
@@ -102,12 +120,16 @@ public struct InvoiceEmailView: View {
     }
 
     /// Wypełnia pola domyślnymi wartościami (raz, przy otwarciu arkusza).
+    /// Kontrahent z włączonymi dokumentami dwujęzycznymi dostaje od razu
+    /// angielski szablon i dwujęzyczny PDF.
     private func prefillIfNeeded() {
         guard !prefilled else { return }
         prefilled = true
         recipient = InvoiceEmailComposer.recipient(for: invoice, contractors: contractors)
-        subject = InvoiceEmailComposer.defaultSubject(for: invoice)
-        body_ = InvoiceEmailComposer.defaultBody(for: invoice)
+        language = InvoiceEmailComposer.preferredLanguage(for: invoice, contractors: contractors)
+        bilingualPDF = language == .english
+        subject = InvoiceEmailComposer.defaultSubject(for: invoice, language: language)
+        body_ = InvoiceEmailComposer.defaultBody(for: invoice, language: language)
         includeXML = !(invoice.rawXmlContent ?? "").isEmpty
     }
 
@@ -120,7 +142,8 @@ public struct InvoiceEmailView: View {
                 subject: subject,
                 body: body_,
                 includePDF: includePDF,
-                includeXML: includeXML
+                includeXML: includeXML,
+                bilingualPDF: bilingualPDF
             )
             invoice.emailSentAt = .now
             invoice.emailSentTo = recipient.trimmingCharacters(in: .whitespaces)

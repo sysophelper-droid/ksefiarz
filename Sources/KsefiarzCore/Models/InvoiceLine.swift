@@ -204,4 +204,17 @@ public enum PaymentForm: String, CaseIterable, Identifiable, Sendable {
         case .mobile: return "Płatność mobilna"
         }
     }
+
+    /// Nazwa angielska — dwujęzyczny PDF dla kontrahentów zagranicznych.
+    public var englishName: String {
+        switch self {
+        case .cash: return "Cash"
+        case .card: return "Card"
+        case .voucher: return "Voucher"
+        case .cheque: return "Cheque"
+        case .credit: return "Credit"
+        case .transfer: return "Bank transfer"
+        case .mobile: return "Mobile payment"
+        }
+    }
 }

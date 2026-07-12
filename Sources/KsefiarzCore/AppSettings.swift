@@ -67,4 +67,6 @@ public enum AppSettingsKeys {
     public static let demandInterestRate = "demand.interestRate"
     /// Wezwania do zapłaty: termin zapłaty z wezwania (dni).
     public static let demandPaymentDays = "demand.paymentDays"
+    /// Ikona Ksefiarza w pasku menu (status synchronizacji i dosłań).
+    public static let menuBarExtra = "ksef.menuBarExtra"
 }

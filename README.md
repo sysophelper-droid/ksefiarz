@@ -48,7 +48,7 @@ Sources/
         ├── InvoiceAutomationView.swift # szablony, cykle i kolejka zatwierdzeń
         ├── HiddenInvoicesView.swift # archiwum „Nieuprawnione / Ukryte”
         └── SettingsView.swift    # NIP, token KSeF, środowisko
-Tests/KsefiarzCoreTests/          # 278 testów (Swift Testing) — model, parser, usługa, kryptografia, logika
+Tests/KsefiarzCoreTests/          # 352 testy (Swift Testing) — model, parser, usługa, kryptografia, logika
 ```
 
 ## Funkcje
@@ -107,6 +107,12 @@ Tests/KsefiarzCoreTests/          # 278 testów (Swift Testing) — model, parse
   Oba tryby używają zakresu importu z Ustawień i działają **wyłącznie na
   środowisku produkcyjnym** (na testowym synchronizuj ręcznie z listy).
   Czas ostatniej udanej synchronizacji widać na dole paska bocznego.
+- **Ikona w pasku menu** — przy zegarze systemowym: status ostatniej
+  synchronizacji, liczba oczekujących i zaległych dosłań offline (czerwony
+  trójkąt po przekroczeniu terminu), wysyłki w toku oraz szybkie
+  „Pobierz z KSeF” (domknięcie wysyłek + import sprzedaży i zakupów);
+  działa też przy zamkniętym oknie głównym („Otwórz Ksefiarza” wraca
+  do aplikacji). Przełącznik w Ustawieniach → Synchronizacja.
 - **Centrum synchronizacji** (sekcja „Synchronizacja” w pasku bocznym) —
   osobne stany zakupów, sprzedaży i wysyłek (kolejka offline24, statusy
   przesyłek, UPO), historia przebiegów (ostatnie 200) z liczbą pobranych
@@ -120,6 +126,12 @@ Tests/KsefiarzCoreTests/          # 278 testów (Swift Testing) — model, parse
   z klasycznym układem faktury (z kwotą słownie; długie faktury dzielone
   na wiele stron z numeracją) oraz eksport widocznej listy faktur do CSV
   (format zgodny z polskim Excelem).
+- **Dwujęzyczny PDF (PL/EN)** — dla kontrahentów zagranicznych: wariant
+  wydruku z etykietami w obu językach („Sprzedawca / Seller”, „Do zapłaty /
+  Total due”…, angielskie nazwy form płatności). Wybór w menu „Eksportuj
+  PDF” w szczegółach faktury i przełącznikiem w arkuszu e-mail; kontrahent
+  z włączonym polem „Dokumenty dwujęzyczne (PL/EN)” w słowniku dostaje ten
+  wariant automatycznie.
 - **Numeracja per rodzaj dokumentu** — każdy rodzaj (VAT/ZAL/ROZ/UPR/korekty)
   może mieć w Ustawieniach własny wzorzec i niezależną serię numeracji;
   na listach faktur dostępny jest filtr rodzaju dokumentu.
@@ -162,7 +174,9 @@ Tests/KsefiarzCoreTests/          # 278 testów (Swift Testing) — model, parse
   sprzedażowej i menu listy: adresat podpowiadany ze słownika kontrahentów
   (pole „E-mail do faktur”, potem adres ogólny), edytowalny temat i treść,
   załączniki PDF i XML; wiadomość otwiera się w aplikacji Mail, a na
-  fakturze zapisywana jest data i adres przekazania do wysyłki.
+  fakturze zapisywana jest data i adres przekazania do wysyłki. Szablon
+  treści po polsku albo po angielsku (przełącznik języka w arkuszu;
+  angielski podpowiadany dla kontrahentów z dokumentami dwujęzycznymi).
 - **Faktury zaliczkowe i rozliczeniowe** — rodzaj dokumentu (VAT/ZAL/ROZ)
   do wyboru przy wystawianiu; ZAL z datą otrzymania zaliczki (P_6),
   ROZ ze wskazaniem numerów KSeF rozliczanych zaliczek.
@@ -180,6 +194,20 @@ Tests/KsefiarzCoreTests/          # 278 testów (Swift Testing) — model, parse
 - **Biała lista** — przycisk „Sprawdź rachunek na białej liście”
   w szczegółach faktury zakupowej weryfikuje rachunek sprzedawcy
   w wykazie podatników VAT (istotne przy przelewach powyżej 15 000 zł).
+- **Faktury kosztowe spoza KSeF** — „Dodaj zakup” na liście zakupów:
+  ręczne wprowadzanie dokumentów, których nie ma w KSeF (faktury
+  zagraniczne, paragony z NIP) dla pełnego obrazu VAT i przepływów.
+  Formularz z NIP/VAT ID (może być pusty), kwotami netto/VAT (brutto
+  wyliczane), walutą z kursem NBP, kategorią kosztu i płatnością.
+  Takie dokumenty mają odznakę „Spoza KSeF” i — w odróżnieniu od zakupów
+  pobranych z KSeF — można je edytować i usuwać.
+- **Raporty sprzedaży i kosztów** (sekcja „Raporty” w pasku bocznym) —
+  top kontrahenci sprzedaży (wykres + tabela: liczba faktur, netto,
+  brutto), przychody per towar/usługa (z pozycji faktur) oraz koszty per
+  kategoria (netto/VAT/brutto z sumami). Kategorię kosztu przypisuje się
+  w szczegółach faktury zakupowej (podpowiedzi z listy typowych i już
+  użytych) albo przy ręcznym dodawaniu zakupu. Kwoty w PLN po kursie
+  z faktury; okres analizy wybierany jak w Kokpicie.
 - **Rozbudowany Kokpit** — oprócz podsumowań kwot i najbliższych płatności:
   VAT należny/naliczony/saldo w analizowanym okresie, wykres przepływów
   pieniężnych z ostatnich 6 miesięcy (wg ewidencji wpłat), struktura wiekowa

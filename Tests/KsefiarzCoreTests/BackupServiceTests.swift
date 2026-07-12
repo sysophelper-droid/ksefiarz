@@ -94,6 +94,40 @@ struct BackupServiceTests {
         #expect(BackupService.invoicesToImport(from: backup, existing: []).count == 1)
     }
 
+    @Test("Kopia zachowuje kategorię kosztu i flagę dokumentów dwujęzycznych (wersja 6)")
+    func versionSixFields() throws {
+        let invoice = makeInvoiceWithDetails()
+        invoice.costCategory = "Paliwo i transport"
+
+        let contractor = Contractor()
+        contractor.name = "Foreign Ltd."
+        contractor.nip = "1111111111"
+        contractor.prefersBilingualDocuments = true
+
+        let data = try BackupService.makeBackup(
+            invoices: [invoice], settings: [:], contractors: [contractor]
+        )
+        let decoded = try BackupService.decode(data)
+
+        let entry = try #require(decoded.invoices.first)
+        #expect(entry.costCategory == "Paliwo i transport")
+        #expect(BackupService.makeInvoice(from: entry).costCategory == "Paliwo i transport")
+
+        let contractorEntry = try #require(decoded.contractors?.first)
+        #expect(contractorEntry.prefersBilingualDocuments == true)
+        #expect(BackupService.makeContractor(from: contractorEntry).prefersBilingualDocuments)
+
+        // Starsze kopie (bez pól wersji 6) odtwarzają wartości domyślne.
+        let legacyInvoice = BackupService.makeInvoice(
+            from: try #require(decoded.invoices.first.map { entry in
+                var legacy = entry
+                legacy.costCategory = nil
+                return legacy
+            })
+        )
+        #expect(legacyInvoice.costCategory == "")
+    }
+
     @Test("Uszkodzony plik kopii jest odrzucany")
     func rejectsCorruptedFile() {
         #expect(throws: KSeFError.self) {

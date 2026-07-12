@@ -192,6 +192,10 @@ public final class Invoice {
     /// Adres, na który przekazano fakturę e-mailem.
     public var emailSentTo: String = ""
 
+    /// Kategoria kosztu (tylko zakupy) — grupuje wydatki w raportach.
+    /// Pusta = „Bez kategorii”. Wartość domyślna obowiązkowa (migracja bazy).
+    public var costCategory: String = ""
+
     /// Dokument wystawiony w trybie offline (offline24 / niedostępność /
     /// awaria). Przy dosyłaniu do KSeF wysyłany jest DOKŁADNIE zapisany XML
     /// (`rawXmlContent`) — jego skrót jest częścią kodów QR na wydruku.

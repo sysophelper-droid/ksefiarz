@@ -15,6 +15,9 @@ public struct InvoiceListView: View {
     @State private var searchText = ""
     @State private var showingNewInvoice = false
     @State private var editedInvoice: Invoice?
+    /// Ręczna faktura kosztowa (spoza KSeF): arkusz dodawania i edycji.
+    @State private var showingNewPurchase = false
+    @State private var editedPurchase: Invoice?
     @State private var correctedInvoice: Invoice?
     @State private var duplicatedInvoice: Invoice?
     @State private var emailedInvoice: Invoice?
@@ -87,31 +90,7 @@ public struct InvoiceListView: View {
             // dopiero podwójne kliknięcie — pojedyncze tylko zaznacza.
             List(selection: $selection) {
                 ForEach(filteredInvoices) { invoice in
-                    InvoiceRowView(invoice: invoice)
-                        .tag(invoice.id)
-                        // Swipe w prawo — przełącz status opłacenia.
-                        .swipeActions(edge: .leading, allowsFullSwipe: true) {
-                            Button {
-                                invoice.isPaid.toggle()
-                            } label: {
-                                Label(
-                                    invoice.isPaid ? "Nieopłacona" : "Opłacona",
-                                    systemImage: invoice.isPaid ? "xmark.circle" : "checkmark.circle"
-                                )
-                            }
-                            .tint(invoice.isPaid ? .orange : .green)
-                        }
-                        // Swipe w lewo — ukrycie dotyczy wyłącznie zakupów
-                        // (ochrona przed nieuprawnionymi fakturami na nasz NIP).
-                        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                            if kind == .purchase {
-                                Button(role: .destructive) {
-                                    invoice.isArchivedOrHidden = true
-                                } label: {
-                                    Label("Ukryj", systemImage: "eye.slash")
-                                }
-                            }
-                        }
+                    listRow(for: invoice)
                 }
             }
             .contextMenu(forSelectionType: UUID.self) { ids in
@@ -132,111 +111,7 @@ public struct InvoiceListView: View {
             }
             .searchable(text: $searchText, prompt: "Szukaj po NIP lub nazwie kontrahenta")
             .navigationTitle(kind == .sales ? "Faktury Sprzedaży" : "Faktury Zakupu")
-            .toolbar {
-                ToolbarItem(placement: .principal) {
-                    Picker("Filtr", selection: $statusFilter) {
-                        ForEach(PaymentStatusFilter.allCases) { filter in
-                            Text(filter.displayName).tag(filter)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-                }
-                if kind == .sales {
-                    ToolbarItem {
-                        // Filtr statusu wysyłki do KSeF (tylko sprzedaż).
-                        Picker(selection: $syncFilter) {
-                            ForEach(KSeFSyncFilter.allCases) { filter in
-                                Text(filter.displayName).tag(filter)
-                            }
-                        } label: {
-                            Label("KSeF", systemImage: "paperplane")
-                        }
-                        .help("Filtruj według statusu wysyłki do KSeF")
-                    }
-                }
-                ToolbarItem {
-                    // Filtr rodzaju dokumentu (VAT/ZAL/ROZ/UPR/korekty).
-                    Picker(selection: $documentTypeFilter) {
-                        ForEach(DocumentTypeFilter.allCases) { filter in
-                            Text(filter.displayName).tag(filter)
-                        }
-                    } label: {
-                        Label("Rodzaj", systemImage: "doc.on.doc")
-                    }
-                    .help("Filtruj według rodzaju dokumentu")
-                }
-                ToolbarItem {
-                    // Filtr dat wyświetlania — niezależny od zakresu importu.
-                    Picker(selection: $displayFilterRaw) {
-                        ForEach(DisplayDateFilter.allCases) { filter in
-                            Text(filter.displayName).tag(filter.rawValue)
-                        }
-                    } label: {
-                        Label("Okres", systemImage: "calendar")
-                    }
-                    .help("Okres wyświetlanych faktur")
-                }
-                ToolbarItem {
-                    Button {
-                        FileExportService.exportCSV(of: filteredInvoices, suggestedName: csvFileName)
-                    } label: {
-                        Label("Eksportuj CSV", systemImage: "tablecells")
-                    }
-                    .disabled(filteredInvoices.isEmpty)
-                    .help("Eksportuj widoczne faktury do pliku CSV (np. dla księgowości)")
-                }
-                ToolbarItem {
-                    Button {
-                        importBankStatement()
-                    } label: {
-                        Label("Importuj wyciąg", systemImage: "building.columns")
-                    }
-                    .help("Wczytaj wyciąg bankowy (MT940) i dopasuj przelewy do nieopłaconych faktur")
-                }
-                ToolbarItem {
-                    Button {
-                        showingAccountingPackage = true
-                    } label: {
-                        Label("Paczka dla księgowości", systemImage: "archivebox")
-                    }
-                    .help("Eksportuj wybrany okres do ZIP: zestawienia CSV, XML, PDF i raport braków")
-                }
-                ToolbarItem {
-                    Button {
-                        showingJPKExport = true
-                    } label: {
-                        Label("JPK_V7M", systemImage: "doc.badge.gearshape")
-                    }
-                    .help("Eksportuj ewidencję VAT wybranego miesiąca do pliku JPK_V7M (sprzedaż + zakup, GTU, procedury, deklaracja)")
-                }
-                ToolbarItem {
-                    Button {
-                        Task { await syncFromKSeF() }
-                    } label: {
-                        if isSyncing {
-                            ProgressView().controlSize(.small)
-                        } else {
-                            Label("Pobierz z KSeF", systemImage: "arrow.triangle.2.circlepath")
-                        }
-                    }
-                    .disabled(isSyncing)
-                    .help(
-                        kind == .purchase
-                            ? "Pobierz faktury zakupowe z KSeF (zakres dat z Ustawień)"
-                            : "Pobierz wystawione faktury sprzedażowe z KSeF (zakres dat z Ustawień)"
-                    )
-                }
-                if kind == .sales {
-                    ToolbarItem {
-                        Button {
-                            showingNewInvoice = true
-                        } label: {
-                            Label("Nowa faktura", systemImage: "plus")
-                        }
-                        .help("Wystaw nową fakturę")
-                    }
-                }
-            }
+            .toolbar { toolbarContent }
             .overlay {
                 if filteredInvoices.isEmpty {
                     ContentUnavailableView(
@@ -255,6 +130,12 @@ public struct InvoiceListView: View {
             }
             .sheet(item: $editedInvoice) { invoice in
                 NewInvoiceView(editing: invoice)
+            }
+            .sheet(isPresented: $showingNewPurchase) {
+                NewPurchaseView()
+            }
+            .sheet(item: $editedPurchase) { invoice in
+                NewPurchaseView(editing: invoice)
             }
             .sheet(item: $correctedInvoice) { invoice in
                 NewInvoiceView(correcting: invoice)
@@ -295,6 +176,154 @@ public struct InvoiceListView: View {
                 Text(errorMessage ?? "")
             }
         }
+    }
+
+    /// Pasek narzędzi listy — wydzielony, bo rozbudowany budowniczy
+    /// w `body` przekraczał budżet type-checkera Swifta.
+    @ToolbarContentBuilder
+    private var toolbarContent: some ToolbarContent {
+        ToolbarItem(placement: .principal) {
+            Picker("Filtr", selection: $statusFilter) {
+                ForEach(PaymentStatusFilter.allCases) { filter in
+                    Text(filter.displayName).tag(filter)
+                }
+            }
+            .pickerStyle(.segmented)
+        }
+        if kind == .sales {
+            ToolbarItem {
+                // Filtr statusu wysyłki do KSeF (tylko sprzedaż).
+                Picker(selection: $syncFilter) {
+                    ForEach(KSeFSyncFilter.allCases) { filter in
+                        Text(filter.displayName).tag(filter)
+                    }
+                } label: {
+                    Label("KSeF", systemImage: "paperplane")
+                }
+                .help("Filtruj według statusu wysyłki do KSeF")
+            }
+        }
+        ToolbarItem {
+            // Filtr rodzaju dokumentu (VAT/ZAL/ROZ/UPR/korekty).
+            Picker(selection: $documentTypeFilter) {
+                ForEach(DocumentTypeFilter.allCases) { filter in
+                    Text(filter.displayName).tag(filter)
+                }
+            } label: {
+                Label("Rodzaj", systemImage: "doc.on.doc")
+            }
+            .help("Filtruj według rodzaju dokumentu")
+        }
+        ToolbarItem {
+            // Filtr dat wyświetlania — niezależny od zakresu importu.
+            Picker(selection: $displayFilterRaw) {
+                ForEach(DisplayDateFilter.allCases) { filter in
+                    Text(filter.displayName).tag(filter.rawValue)
+                }
+            } label: {
+                Label("Okres", systemImage: "calendar")
+            }
+            .help("Okres wyświetlanych faktur")
+        }
+        ToolbarItem {
+            Button {
+                FileExportService.exportCSV(of: filteredInvoices, suggestedName: csvFileName)
+            } label: {
+                Label("Eksportuj CSV", systemImage: "tablecells")
+            }
+            .disabled(filteredInvoices.isEmpty)
+            .help("Eksportuj widoczne faktury do pliku CSV (np. dla księgowości)")
+        }
+        ToolbarItem {
+            Button {
+                importBankStatement()
+            } label: {
+                Label("Importuj wyciąg", systemImage: "building.columns")
+            }
+            .help("Wczytaj wyciąg bankowy (MT940) i dopasuj przelewy do nieopłaconych faktur")
+        }
+        ToolbarItem {
+            Button {
+                showingAccountingPackage = true
+            } label: {
+                Label("Paczka dla księgowości", systemImage: "archivebox")
+            }
+            .help("Eksportuj wybrany okres do ZIP: zestawienia CSV, XML, PDF i raport braków")
+        }
+        ToolbarItem {
+            Button {
+                showingJPKExport = true
+            } label: {
+                Label("JPK_V7M", systemImage: "doc.badge.gearshape")
+            }
+            .help("Eksportuj ewidencję VAT wybranego miesiąca do pliku JPK_V7M (sprzedaż + zakup, GTU, procedury, deklaracja)")
+        }
+        ToolbarItem {
+            Button {
+                Task { await syncFromKSeF() }
+            } label: {
+                if isSyncing {
+                    ProgressView().controlSize(.small)
+                } else {
+                    Label("Pobierz z KSeF", systemImage: "arrow.triangle.2.circlepath")
+                }
+            }
+            .disabled(isSyncing)
+            .help(
+                kind == .purchase
+                    ? "Pobierz faktury zakupowe z KSeF (zakres dat z Ustawień)"
+                    : "Pobierz wystawione faktury sprzedażowe z KSeF (zakres dat z Ustawień)"
+            )
+        }
+        // Jeden przycisk „+” na liście: sprzedaż wystawia fakturę,
+        // zakupy dodają dokument kosztowy spoza KSeF.
+        ToolbarItem {
+            if kind == .sales {
+                Button {
+                    showingNewInvoice = true
+                } label: {
+                    Label("Nowa faktura", systemImage: "plus")
+                }
+                .help("Wystaw nową fakturę")
+            } else {
+                Button {
+                    showingNewPurchase = true
+                } label: {
+                    Label("Dodaj zakup", systemImage: "plus")
+                }
+                .help("Dodaj fakturę kosztową spoza KSeF (faktura zagraniczna, paragon z NIP)")
+            }
+        }
+    }
+
+    /// Wiersz listy z akcjami swipe — wydzielony, bo rozbudowane wyrażenie
+    /// w ForEach przekraczało budżet type-checkera Swifta.
+    private func listRow(for invoice: Invoice) -> some View {
+        InvoiceRowView(invoice: invoice)
+            .tag(invoice.id)
+            // Swipe w prawo — przełącz status opłacenia.
+            .swipeActions(edge: .leading, allowsFullSwipe: true) {
+                Button {
+                    invoice.isPaid.toggle()
+                } label: {
+                    Label(
+                        invoice.isPaid ? "Nieopłacona" : "Opłacona",
+                        systemImage: invoice.isPaid ? "xmark.circle" : "checkmark.circle"
+                    )
+                }
+                .tint(invoice.isPaid ? .orange : .green)
+            }
+            // Swipe w lewo — ukrycie dotyczy wyłącznie zakupów
+            // (ochrona przed nieuprawnionymi fakturami na nasz NIP).
+            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                if kind == .purchase {
+                    Button(role: .destructive) {
+                        invoice.isArchivedOrHidden = true
+                    } label: {
+                        Label("Ukryj", systemImage: "eye.slash")
+                    }
+                }
+            }
     }
 
     // MARK: Menu kontekstowe (pojedyncze i zbiorcze)
@@ -344,6 +373,16 @@ public struct InvoiceListView: View {
                     editedInvoice = invoice
                 }
                 Button("Usuń fakturę (lokalna)", role: .destructive) {
+                    modelContext.delete(invoice)
+                }
+            }
+            // Ręczne zakupy (spoza KSeF) można edytować i usuwać.
+            if invoice.isManualPurchase {
+                Divider()
+                Button("Edytuj fakturę kosztową") {
+                    editedPurchase = invoice
+                }
+                Button("Usuń fakturę kosztową (lokalna)", role: .destructive) {
                     modelContext.delete(invoice)
                 }
             }
@@ -474,6 +513,15 @@ struct InvoiceRowView: View {
                     }
                     if invoice.kind == .sales {
                         KSeFSubmissionBadge(invoice: invoice)
+                    }
+                    if invoice.isManualPurchase {
+                        Text("Spoza KSeF")
+                            .font(.caption2.weight(.bold))
+                            .padding(.horizontal, 5)
+                            .padding(.vertical, 1)
+                            .background(.gray.opacity(0.18), in: Capsule())
+                            .foregroundStyle(.secondary)
+                            .help("Faktura kosztowa dodana ręcznie (spoza KSeF)")
                     }
                 }
                 HStack(spacing: 8) {
