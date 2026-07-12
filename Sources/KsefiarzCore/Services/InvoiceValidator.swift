@@ -171,4 +171,18 @@ public enum InvoiceValidator {
         guard checksum != 10 else { return false }
         return checksum == digits[9]
     }
+
+    /// Sprawdza poprawność numeru PESEL (11 cyfr + suma kontrolna).
+    /// Akceptuje separatory (spacje, myślniki).
+    public static func isValidPESEL(_ pesel: String) -> Bool {
+        let stripped = pesel.replacingOccurrences(of: "-", with: "")
+            .replacingOccurrences(of: " ", with: "")
+        let digits = stripped.compactMap { $0.wholeNumberValue }
+        guard stripped.count == 11, digits.count == 11 else { return false }
+
+        let weights = [1, 3, 7, 9, 1, 3, 7, 9, 1, 3]
+        let sum = zip(digits, weights).reduce(0) { $0 + $1.0 * $1.1 }
+        let control = (10 - sum % 10) % 10
+        return control == digits[10]
+    }
 }

@@ -13,8 +13,7 @@ Zasady pracy i wiedza projektowa są w `CLAUDE.md` — tu tylko zadania.
 
 ### Rekomendowane rozszerzenia (sesja 12.07.2026)
 
-- [ ] Zarządzanie uprawnieniami KSeF: nadawanie/odbieranie uprawnień
-  (np. biuro rachunkowe po NIP) i przegląd dostępów — API permissions.
+_(wszystkie zrealizowane — patrz niżej)_
 
 ## Zrealizowane
 
@@ -81,6 +80,16 @@ Zasady pracy i wiedza projektowa są w `CLAUDE.md` — tu tylko zadania.
 
 ### Rozszerzenia (sesja 12.07.2026)
 
+- [x] Zarządzanie uprawnieniami KSeF (12.07.2026): sekcja „Uprawnienia” —
+  nadawanie po NIP/PESEL uprawnień do pracy w KSeF (podmiot, np. biuro
+  rachunkowe: InvoiceRead/InvoiceWrite + delegacja; osoba fizyczna: 7 zakresów)
+  oraz uprawnień podmiotowych (samofakturowanie, przedstawiciel podatkowy,
+  RR, PEF), przegląd nadanych dostępów i odbieranie (API permissions;
+  operacje asynchroniczne z pollingiem `/permissions/operations/{ref}`).
+  PermissionsEngine (walidacja NIP/PESEL, etykiety, normalizacja) +
+  KSeFPermissionsService (rozszerzenie KSeFService) z pełnym pokryciem
+  testami na mockach. Na produkcji nieprzetestowane na żywo (polityka
+  „tylko odczyt na żywo”).
 - [x] Automatyczne odnowienie certyfikatu KSeF (12.07.2026): na ~30 dni przed
   wygaśnięciem aplikacja sama składa wniosek o nowy certyfikat (typ 1 i typ 2)
   i podmienia go w pęku kluczy (CertificateRenewalEngine + Coordinator, czysta
