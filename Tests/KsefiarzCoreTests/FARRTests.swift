@@ -110,6 +110,7 @@ struct FARRTests {
         let xml = FARRXMLGenerator.generateXML(for: draft)
         #expect(xml.contains("<RodzajFaktury>KOR_VAT_RR</RodzajFaktury>"))
         #expect(xml.contains("<PrzyczynaKorekty>Korekta ceny</PrzyczynaKorekty>"))
+        #expect(xml.contains("<TypKorekty>2</TypKorekty>"))
         #expect(xml.contains("<NrKSeFN>1</NrKSeFN>"))
         #expect(xml.contains("<P_11_1>-20.00</P_11_1>"))
 

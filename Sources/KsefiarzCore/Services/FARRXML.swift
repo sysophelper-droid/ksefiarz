@@ -106,6 +106,9 @@ public enum FARRXMLGenerator {
         if let reason = correction.reason, !reason.trimmingCharacters(in: .whitespaces).isEmpty {
             xml += "    <PrzyczynaKorekty>\(escape(reason))</PrzyczynaKorekty>\n"
         }
+        // TypKorekty 2 — korekta ujmowana zgodnie z datą wystawienia korekty
+        // (spójnie z generatorem FA(3); pole niesie moment ujęcia w ewidencji).
+        xml += "    <TypKorekty>2</TypKorekty>\n"
         xml += """
             <DaneFaKorygowanej>
               <DataWystFaKorygowanej>\(originalDate)</DataWystFaKorygowanej>
