@@ -55,6 +55,10 @@ struct InvoiceApp: App {
 
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
 
+    /// Ikona w pasku menu (status synchronizacji i dosłań) — przełączana
+    /// w Ustawieniach; scena znika/wraca bez restartu aplikacji.
+    @AppStorage(AppSettingsKeys.menuBarExtra) private var menuBarExtraEnabled = true
+
     /// Wspólny kontener bazy danych dla całej aplikacji.
     ///
     /// Baza MUSI mieć jawny, dedykowany plik. SwiftData bez podanego URL-a
@@ -82,8 +86,19 @@ struct InvoiceApp: App {
     }()
 
     var body: some Scene {
-        WindowGroup {
+        // Identyfikator okna pozwala otworzyć je ponownie z paska menu
+        // (openWindow), gdy użytkownik zamknął okno główne.
+        WindowGroup(id: "main") {
             MainContentView()
+        }
+        .modelContainer(sharedModelContainer)
+
+        // Ikona w pasku menu: status synchronizacji, kolejka dosłań offline
+        // i szybkie „Pobierz z KSeF” — działa też przy zamkniętym oknie.
+        MenuBarExtra(isInserted: $menuBarExtraEnabled) {
+            MenuBarExtraView()
+        } label: {
+            MenuBarExtraLabel()
         }
         .modelContainer(sharedModelContainer)
 

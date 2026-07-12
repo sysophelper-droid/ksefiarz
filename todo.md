@@ -17,14 +17,6 @@ Zasady pracy i wiedza projektowa są w `CLAUDE.md` — tu tylko zadania.
   (typ 1 i 2) przed wygaśnięciem starego, podmiana w pęku kluczy.
 - [ ] Zarządzanie uprawnieniami KSeF: nadawanie/odbieranie uprawnień
   (np. biuro rachunkowe po NIP) i przegląd dostępów — API permissions.
-- [ ] Ikona w pasku menu (menu bar extra): status synchronizacji, liczba
-  zaległych i oczekujących dosłań, szybkie „Pobierz z KSeF”.
-- [ ] Raporty sprzedaży i kosztów: top kontrahenci, przychody per
-  towar/usługa, koszty per kategoria (wymaga tagów/kategorii na zakupach).
-- [ ] Faktury kosztowe spoza KSeF: ręczne dodawanie zakupów (faktury
-  zagraniczne, paragony z NIP) dla pełnego obrazu VAT i przepływów.
-- [ ] Dwujęzyczny PDF (PL/EN) dla kontrahentów zagranicznych + angielski
-  szablon treści e-mail.
 
 ## Zrealizowane
 
@@ -156,6 +148,23 @@ Zasady pracy i wiedza projektowa są w `CLAUDE.md` — tu tylko zadania.
   stanami zakupów, sprzedaży i wysyłek, historią przebiegów (model SyncRun,
   ostatnie 200 wpisów) — liczba pobranych/nowych dokumentów, wyzwalacz,
   środowisko i błędy — oraz ponowieniem nieudanej operacji.
+- [x] Ikona w pasku menu (12.07.2026): status synchronizacji, liczba
+  oczekujących i zaległych dosłań offline (czerwony trójkąt po terminie),
+  szybkie „Pobierz z KSeF” i powrót do okna aplikacji; przełącznik
+  w Ustawieniach → Synchronizacja (MenuBarStatus + SyncActivity).
+- [x] Raporty sprzedaży i kosztów (12.07.2026): sekcja „Raporty” — top
+  kontrahenci (wykres + tabela), przychody per towar/usługa, koszty per
+  kategoria; pole `costCategory` na zakupach (edycja w szczegółach
+  i przy ręcznym dodawaniu, podpowiedzi kategorii), kwoty w PLN.
+- [x] Faktury kosztowe spoza KSeF (12.07.2026): „Dodaj zakup” na liście
+  zakupów — faktury zagraniczne i paragony z NIP (NIP/VAT ID opcjonalny,
+  kurs NBP, kategoria kosztu); odznaka „Spoza KSeF”, edycja i usuwanie
+  ręcznych zakupów. Kopia zapasowa v6 (kategoria kosztu, flaga PL/EN
+  kontrahenta).
+- [x] Dwujęzyczny PDF (PL/EN) i angielski e-mail (12.07.2026): wariant
+  wydruku z etykietami PL/EN (menu „Eksportuj PDF”, przełącznik w arkuszu
+  e-mail), angielski szablon tematu i treści wiadomości; pole „Dokumenty
+  dwujęzyczne (PL/EN)” w słowniku kontrahentów podpowiada oba automatycznie.
 - [x] Rozbudowana ewidencja płatności (11.07.2026): historia wpłat
   (PaymentRecord) z płatnościami częściowymi i saldem, automatyczne
   oznaczenie opłacenia przy pełnym pokryciu (ręczne decyzje nadrzędne),

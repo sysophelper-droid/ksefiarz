@@ -163,6 +163,8 @@ struct ContractorEditorView: View {
                     Toggle("Kontrahent jest osobą fizyczną", isOn: $working.isNaturalPerson)
                     Toggle("Zgoda na otrzymywanie e-faktur", isOn: $working.consentsToEInvoices)
                     Toggle("Zgoda na przetwarzanie w celach marketingowych", isOn: $working.consentsToMarketing)
+                    Toggle("Dokumenty dwujęzyczne (PL/EN)", isOn: $working.prefersBilingualDocuments)
+                        .help("Kontrahent zagraniczny: PDF faktury będzie dwujęzyczny (polsko-angielski), a e-mail z fakturą dostanie angielski szablon treści.")
                 }
 
                 // Każde pole w osobnym wierszu — ściśnięte HStacki łamały
@@ -281,5 +283,6 @@ extension Contractor {
         invoiceEmail = other.invoiceEmail
         website = other.website
         notes = other.notes
+        prefersBilingualDocuments = other.prefersBilingualDocuments
     }
 }

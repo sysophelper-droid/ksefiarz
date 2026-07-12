@@ -51,6 +51,9 @@ public final class Contractor {
     public var invoiceEmail: String = ""
     public var website: String = ""
     public var notes: String = ""
+    /// Kontrahent zagraniczny — dokumenty dwujęzyczne: PDF PL/EN
+    /// i angielski szablon e-maila. Wartość domyślna (migracja bazy).
+    public var prefersBilingualDocuments: Bool = false
 
     public init() {}
 

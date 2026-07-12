@@ -1,6 +1,24 @@
 import SwiftUI
 import AppKit
 
+/// Etykiety wydruku faktury: polskie albo dwujęzyczne (PL/EN) dla
+/// kontrahentów zagranicznych. Czysta logika — sam wybór wariantu
+/// należy do wywołującego (eksport PDF, e-mail).
+public struct InvoicePDFLabels: Sendable {
+
+    /// Czy etykiety są dwujęzyczne („polski / angielski”).
+    public let bilingual: Bool
+
+    public init(bilingual: Bool) {
+        self.bilingual = bilingual
+    }
+
+    /// Etykieta w wybranym wariancie — dwujęzyczna łączy oba języki ukośnikiem.
+    public func text(_ polish: String, _ english: String) -> String {
+        bilingual ? "\(polish) / \(english)" : polish
+    }
+}
+
 /// Generator dokumentu PDF z fakturą — renderuje klasyczny układ faktury
 /// (strony, pozycje, podsumowanie, dane płatności) do stron A4.
 /// Długie faktury są dzielone na wiele stron: pierwsza zawiera nagłówek
@@ -25,7 +43,10 @@ public enum InvoicePDFGenerator {
     }
 
     /// Generuje dane PDF dla faktury. Zwraca `nil` przy błędzie renderowania.
-    public static func pdfData(for invoice: Invoice) -> Data? {
+    /// - Parameter bilingual: układ dwujęzyczny (PL/EN) dla kontrahentów
+    ///   zagranicznych — treść dokumentu bez zmian, etykiety w obu językach.
+    public static func pdfData(for invoice: Invoice, bilingual: Bool = false) -> Data? {
+        let labels = InvoicePDFLabels(bilingual: bilingual)
         let qrCodes = makeQRCodes(for: invoice)
         let chunks = paginate(invoice.sortedLines, reserveQRSpace: qrCodes != nil)
 
@@ -42,7 +63,8 @@ public enum InvoicePDFGenerator {
                 isLastPage: index == chunks.count - 1,
                 pageNumber: index + 1,
                 pageCount: chunks.count,
-                qrCodes: index == chunks.count - 1 ? qrCodes : nil
+                qrCodes: index == chunks.count - 1 ? qrCodes : nil,
+                labels: labels
             )
             .frame(width: pageSize.width - 80)
             .padding(40)
@@ -173,6 +195,8 @@ struct InvoicePrintPageView: View {
     let pageCount: Int
     /// Kody QR wizualizacji KSeF — tylko na ostatniej stronie.
     var qrCodes: InvoicePDFGenerator.InvoiceQRCodes?
+    /// Etykiety wydruku (polskie albo dwujęzyczne PL/EN).
+    var labels = InvoicePDFLabels(bilingual: false)
 
     private var dateText: String {
         FA2Format.dateFormatter.string(from: invoice.issueDate)
@@ -184,8 +208,8 @@ struct InvoicePrintPageView: View {
                 fullHeader
                 // Strony
                 HStack(alignment: .top, spacing: 24) {
-                    partyBox(title: "Sprzedawca", name: invoice.sellerName, nip: invoice.sellerNIP, address: invoice.sellerAddress)
-                    partyBox(title: "Nabywca", name: invoice.buyerName, nip: invoice.buyerNIP, address: invoice.buyerAddress)
+                    partyBox(title: labels.text("Sprzedawca", "Seller"), name: invoice.sellerName, nip: invoice.sellerNIP, address: invoice.sellerAddress)
+                    partyBox(title: labels.text("Nabywca", "Buyer"), name: invoice.buyerName, nip: invoice.buyerNIP, address: invoice.buyerAddress)
                 }
             } else {
                 continuationHeader
@@ -200,14 +224,16 @@ struct InvoicePrintPageView: View {
                 summarySection
             } else {
                 Spacer(minLength: 0)
-                Text("ciąg dalszy na następnej stronie…")
+                Text(labels.text("ciąg dalszy na następnej stronie…", "continued on the next page…"))
                     .font(.system(size: 8))
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .trailing)
             }
 
             if pageCount > 1 {
-                Text("Strona \(pageNumber) z \(pageCount)")
+                Text(labels.bilingual
+                    ? "Strona \(pageNumber) z \(pageCount) / Page \(pageNumber) of \(pageCount)"
+                    : "Strona \(pageNumber) z \(pageCount)")
                     .font(.system(size: 8))
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .center)
@@ -223,14 +249,14 @@ struct InvoicePrintPageView: View {
     private var fullHeader: some View {
         HStack(alignment: .top) {
             VStack(alignment: .leading, spacing: 4) {
-                Text("Faktura VAT")
+                Text(labels.text("Faktura VAT", "VAT Invoice"))
                     .font(.system(size: 22, weight: .bold))
-                Text("Nr \(invoice.invoiceNumber)")
+                Text("\(labels.text("Nr", "No")) \(invoice.invoiceNumber)")
                     .font(.system(size: 14, weight: .semibold))
             }
             Spacer()
             VStack(alignment: .trailing, spacing: 2) {
-                Text("Data wystawienia: \(dateText)")
+                Text("\(labels.text("Data wystawienia", "Issue date")): \(dateText)")
                 if let ksefId = invoice.ksefId {
                     Text("Nr KSeF: \(ksefId)")
                 }
@@ -243,10 +269,10 @@ struct InvoicePrintPageView: View {
     /// Skrócony nagłówek stron kontynuacji.
     private var continuationHeader: some View {
         HStack {
-            Text("Faktura VAT nr \(invoice.invoiceNumber) — ciąg dalszy")
+            Text("\(labels.text("Faktura VAT", "VAT Invoice")) \(labels.text("nr", "no")) \(invoice.invoiceNumber) — \(labels.text("ciąg dalszy", "continued"))")
                 .font(.system(size: 11, weight: .semibold))
             Spacer()
-            Text("Data wystawienia: \(dateText)")
+            Text("\(labels.text("Data wystawienia", "Issue date")): \(dateText)")
                 .font(.system(size: 9))
                 .foregroundStyle(.secondary)
         }
@@ -261,30 +287,31 @@ struct InvoicePrintPageView: View {
             Spacer()
             Grid(alignment: .trailing, horizontalSpacing: 24, verticalSpacing: 4) {
                 GridRow {
-                    Text("Razem netto:")
+                    Text("\(labels.text("Razem netto", "Total net")):")
                     Text(invoice.netAmount, format: .currency(code: invoice.currency))
                 }
                 GridRow {
-                    Text("Razem VAT:")
+                    Text("\(labels.text("Razem VAT", "Total VAT")):")
                     Text(invoice.vatAmount, format: .currency(code: invoice.currency))
                 }
                 GridRow {
-                    Text("Do zapłaty:").fontWeight(.bold)
+                    Text("\(labels.text("Do zapłaty", "Total due")):").fontWeight(.bold)
                     Text(invoice.grossAmount, format: .currency(code: invoice.currency)).fontWeight(.bold)
                 }
             }
             .font(.system(size: 11))
         }
 
-        // Kwota słownie — standardowy element polskiej faktury.
-        Text("Słownie: \(AmountInWords.polishCurrency(invoice.grossAmount))")
+        // Kwota słownie — standardowy element polskiej faktury
+        // (słowa po polsku również w wariancie dwujęzycznym).
+        Text("\(labels.text("Słownie", "In words")): \(AmountInWords.polishCurrency(invoice.grossAmount))")
             .font(.system(size: 9))
             .foregroundStyle(.secondary)
 
         // Uwagi (stopka faktury) — dopisek użytkownika.
         if !invoice.notes.isEmpty {
             VStack(alignment: .leading, spacing: 3) {
-                Text("Uwagi").font(.system(size: 10, weight: .semibold))
+                Text(labels.text("Uwagi", "Notes")).font(.system(size: 10, weight: .semibold))
                 Text(invoice.notes)
             }
             .font(.system(size: 9))
@@ -293,17 +320,19 @@ struct InvoicePrintPageView: View {
 
         // Płatność
         VStack(alignment: .leading, spacing: 3) {
-            Text("Płatność").font(.system(size: 10, weight: .semibold))
+            Text(labels.text("Płatność", "Payment")).font(.system(size: 10, weight: .semibold))
             if let form = invoice.paymentForm {
-                Text("Forma płatności: \(form.displayName)")
+                Text("\(labels.text("Forma płatności", "Payment method")): \(labels.text(form.displayName, form.englishName))")
             }
             if let due = invoice.paymentDueDate {
-                Text("Termin płatności: \(FA2Format.dateFormatter.string(from: due))")
+                Text("\(labels.text("Termin płatności", "Payment due date")): \(FA2Format.dateFormatter.string(from: due))")
             }
             if let account = invoice.paymentBankAccount, !account.isEmpty {
-                Text("Rachunek bankowy: \(account)")
+                Text("\(labels.text("Rachunek bankowy", "Bank account")): \(account)")
             }
-            Text(invoice.isPaid ? "Status: opłacona" : "Status: do opłacenia")
+            Text(invoice.isPaid
+                ? "Status: \(labels.text("opłacona", "paid"))"
+                : "Status: \(labels.text("do opłacenia", "payment due"))")
         }
         .font(.system(size: 9))
         .foregroundStyle(.secondary)
@@ -352,13 +381,21 @@ struct InvoicePrintPageView: View {
             if !address.isEmpty {
                 Text(address).font(.system(size: 9))
             }
-            Text("NIP: \(nip)").font(.system(size: 9))
+            Text("\(labels.text("NIP", "Tax ID")): \(nip)").font(.system(size: 9))
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var linesTable: some View {
-        let columns = ["Lp.", "Nazwa", "Ilość", "J.m.", "Cena netto", "Wartość netto", "VAT"]
+        let columns = [
+            labels.text("Lp.", "No."),
+            labels.text("Nazwa", "Description"),
+            labels.text("Ilość", "Qty"),
+            labels.text("J.m.", "Unit"),
+            labels.text("Cena netto", "Net price"),
+            labels.text("Wartość netto", "Net value"),
+            "VAT",
+        ]
         return VStack(spacing: 0) {
             Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 5) {
                 GridRow {

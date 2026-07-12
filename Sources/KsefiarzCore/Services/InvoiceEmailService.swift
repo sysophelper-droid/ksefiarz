@@ -34,7 +34,8 @@ public enum InvoiceEmailService {
         subject: String,
         body: String,
         includePDF: Bool,
-        includeXML: Bool
+        includeXML: Bool,
+        bilingualPDF: Bool = false
     ) throws {
         guard let service = NSSharingService(named: .composeEmail) else {
             throw InvoiceEmailError.composeUnavailable
@@ -47,7 +48,7 @@ public enum InvoiceEmailService {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
 
         if includePDF {
-            guard let pdfData = InvoicePDFGenerator.pdfData(for: invoice) else {
+            guard let pdfData = InvoicePDFGenerator.pdfData(for: invoice, bilingual: bilingualPDF) else {
                 throw InvoiceEmailError.missingPDF
             }
             let url = directory.appending(path: "\(baseName).pdf")

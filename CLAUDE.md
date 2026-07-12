@@ -73,7 +73,12 @@ Sources/KsefiarzApp/InvoiceApp.swift   # @main, ModelContainer, AppDelegate (iko
 Sources/KsefiarzCore/
   Models/      Invoice (@Model) + InvoiceLine + PaymentRecord (relacje; wpłaty
                przypisywać PO context.insert jak pozycje), InvoiceDraft
-               (+ init(from: Invoice)), słowniki: Contractor, Product,
+               (+ init(from: Invoice)), ManualPurchaseDraft (zakupy spoza
+               KSeF: walidacja + makeInvoice/apply; Invoice.isManualPurchase
+               = zakup bez ksefId, edytowalny/usuwalny;
+               Invoice.costCategory — kategoria kosztu do raportów),
+               słowniki: Contractor (+ prefersBilingualDocuments — PDF
+               PL/EN i angielski e-mail), Product,
                BankAccount (@Model, dane tylko PODSTAWIANE do faktur —
                pola faktury zawsze edytowalne ręcznie), SyncRun (@Model,
                historia przebiegów Centrum synchronizacji), FA3Attachment
@@ -90,7 +95,12 @@ Sources/KsefiarzCore/
                (enrollment API), KSeFCertificateImporter (.p12/PEM),
                KSeFQRCode (linki weryfikacyjne KOD I/II + render QR),
                InvoiceEmailService (okno wiadomości Mail przez
-               NSSharingService; załączniki PDF/XML z katalogu tymczasowego)
+               NSSharingService; załączniki PDF/XML z katalogu tymczasowego),
+               InvoicePDFGenerator ma wariant dwujęzyczny
+               (pdfData(for:bilingual:), etykiety w InvoicePDFLabels),
+               SyncActivity (współdzielony stan synchronizacji: pasek
+               boczny + ikona w pasku menu; QuickSyncRunner — ręczne
+               „Pobierz z KSeF” z paska menu)
   Logic/       InvoiceFilter, KSeFSyncFilter, DashboardMetrics, DateRangeResolver,
                DisplayDateFilter, InvoiceNumberGenerator, AmountInWords, InvoiceCSVExporter,
                PaymentFormPolicy, InvoiceSyncEngine (wspólny sync: ręczny,
@@ -113,9 +123,17 @@ Sources/KsefiarzCore/
                z XSD crd.gov.pl/wzor/2021/12/27/11148 — ewidencja + deklaracja
                VAT-7(22); OSS poza JPK, ostrzeżenia o uproszczeniach),
                PaymentDemandEngine (odsetki od salda, pozycje wezwań;
-               PDF w Services/PaymentDemandPDFGenerator)
+               PDF w Services/PaymentDemandPDFGenerator),
+               ReportsEngine (raporty: top kontrahenci, przychody per
+               towar/usługa, koszty per kategoria; CostCategories —
+               podpowiedzi kategorii), MenuBarStatus (liczniki dosłań
+               i opisy dla ikony w pasku menu)
   Views/       MainContentView (NavigationSplitView), InvoiceListView, InvoiceDetailView,
-               NewInvoiceView (nowa/edycja/korekta), DashboardView, SettingsView, HiddenInvoicesView,
+               NewInvoiceView (nowa/edycja/korekta), NewPurchaseView (zakup
+               spoza KSeF), ReportsView (sekcja Raporty), MenuBarExtraView
+               (+ MenuBarExtraLabel — scena MenuBarExtra w InvoiceApp,
+               przełącznik ksef.menuBarExtra), DashboardView, SettingsView,
+               HiddenInvoicesView,
                DictionariesView (+ ContractorsView/ProductsView/BankAccountsView)
 Tests/KsefiarzCoreTests/               # Swift Testing (#expect/#require), nazwy PO POLSKU
 Scripts/build-app.sh                   # składanie bundla .app

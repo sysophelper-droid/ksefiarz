@@ -7,6 +7,7 @@ public enum SidebarSection: String, CaseIterable, Identifiable, Hashable {
     case dashboard
     case sales
     case purchases
+    case reports
     case dictionaries
     case automation
     case syncCenter
@@ -20,6 +21,7 @@ public enum SidebarSection: String, CaseIterable, Identifiable, Hashable {
         case .dashboard: return "Kokpit"
         case .sales: return "Faktury Sprzedaży"
         case .purchases: return "Faktury Zakupu"
+        case .reports: return "Raporty"
         case .dictionaries: return "Słowniki"
         case .automation: return "Szablony i cykle"
         case .syncCenter: return "Synchronizacja"
@@ -33,6 +35,7 @@ public enum SidebarSection: String, CaseIterable, Identifiable, Hashable {
         case .dashboard: return "gauge.with.dots.needle.50percent"
         case .sales: return "arrow.up.doc"
         case .purchases: return "arrow.down.doc"
+        case .reports: return "chart.bar.xaxis"
         case .dictionaries: return "text.book.closed"
         case .automation: return "calendar.badge.clock"
         case .syncCenter: return "arrow.triangle.2.circlepath"
@@ -48,7 +51,8 @@ public enum SidebarSection: String, CaseIterable, Identifiable, Hashable {
 public struct MainContentView: View {
 
     @State private var selection: SidebarSection? = .dashboard
-    @State private var isAutoSyncing = false
+    /// Wspólny stan synchronizacji — dzielony z ikoną w pasku menu.
+    @ObservedObject private var syncActivity = SyncActivity.shared
 
     @Environment(\.modelContext) private var modelContext
     @ObservedObject private var tokenStore = TokenStore.shared
@@ -82,9 +86,9 @@ public struct MainContentView: View {
             .navigationTitle("Ksefiarz")
             // Status synchronizacji — żeby było widać, że automatyka żyje.
             .safeAreaInset(edge: .bottom) {
-                if isAutoSyncing || lastSyncAt > 0 {
+                if syncActivity.isSyncing || lastSyncAt > 0 {
                     HStack(spacing: 6) {
-                        if isAutoSyncing {
+                        if syncActivity.isSyncing {
                             ProgressView().controlSize(.small)
                             Text("Synchronizuję…")
                         } else {
@@ -109,6 +113,8 @@ public struct MainContentView: View {
                 InvoiceListView(kind: .sales)
             case .purchases:
                 InvoiceListView(kind: .purchase)
+            case .reports:
+                ReportsView()
             case .dictionaries:
                 DictionariesView()
             case .automation:
@@ -190,9 +196,9 @@ public struct MainContentView: View {
     @MainActor
     private func syncBothKinds(trigger: SyncRun.Trigger) async {
         guard environmentRaw == KSeFEnvironment.production.rawValue else { return }
-        guard !myNIP.isEmpty, !tokenStore.token.isEmpty || KSeFCertificateStore.shared.authenticationCertificate != nil, !isAutoSyncing else { return }
-        isAutoSyncing = true
-        defer { isAutoSyncing = false }
+        guard !myNIP.isEmpty, !tokenStore.token.isEmpty || KSeFCertificateStore.shared.authenticationCertificate != nil, !syncActivity.isSyncing else { return }
+        syncActivity.isSyncing = true
+        defer { syncActivity.isSyncing = false }
 
         let environment = KSeFEnvironment(rawValue: environmentRaw) ?? .test
         let service = KSeFService(environment: environment, nip: myNIP, authToken: tokenStore.token, certificate: KSeFCertificateStore.shared.authenticationCertificate)
@@ -249,6 +255,10 @@ public struct MainContentView: View {
             trigger: trigger,
             using: service,
             context: modelContext
+        )
+        // Świeże liczniki dla ikony w pasku menu (kolejka mogła się domknąć).
+        syncActivity.refreshMenuBarStatus(
+            invoices: (try? modelContext.fetch(FetchDescriptor<Invoice>())) ?? []
         )
     }
 

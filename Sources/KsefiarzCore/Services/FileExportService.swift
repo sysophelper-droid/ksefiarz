@@ -36,14 +36,16 @@ public enum FileExportService {
         )
     }
 
-    /// Eksportuje fakturę jako dokument PDF.
+    /// Eksportuje fakturę jako dokument PDF (opcjonalnie w układzie
+    /// dwujęzycznym PL/EN dla kontrahentów zagranicznych).
     /// Zwraca `true` tylko, gdy plik faktycznie zapisano (nie przy anulowaniu).
     @discardableResult
-    public static func exportPDF(of invoice: Invoice) -> Bool {
-        guard let pdf = InvoicePDFGenerator.pdfData(for: invoice) else { return false }
+    public static func exportPDF(of invoice: Invoice, bilingual: Bool = false) -> Bool {
+        guard let pdf = InvoicePDFGenerator.pdfData(for: invoice, bilingual: bilingual) else { return false }
+        let suffix = bilingual ? "_PL-EN" : ""
         return save(
             data: pdf,
-            suggestedName: "Faktura_\(sanitized(invoice.invoiceNumber)).pdf",
+            suggestedName: "Faktura_\(sanitized(invoice.invoiceNumber))\(suffix).pdf",
             contentType: .pdf
         )
     }
