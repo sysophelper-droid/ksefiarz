@@ -13,6 +13,8 @@ public struct SettingsView: View {
     @AppStorage(AppSettingsKeys.sellerAddress) private var sellerAddress = ""
     @AppStorage(AppSettingsKeys.nip) private var nip = ""
     @AppStorage(AppSettingsKeys.bankAccount) private var bankAccount = ""
+    @AppStorage(AppSettingsKeys.taxForm) private var taxFormRaw = TaxForm.kpir.rawValue
+    @AppStorage(AppSettingsKeys.ryczaltDefaultRate) private var ryczaltDefaultRateRaw = RyczaltRate.r8_5.rawValue
     @AppStorage(AppSettingsKeys.pdfBrandingEnabled) private var pdfBrandingEnabled = false
     @AppStorage(AppSettingsKeys.pdfBrandingLogo) private var pdfBrandingLogo = ""
     @AppStorage(AppSettingsKeys.pdfBrandingPrimaryColor) private var pdfBrandingPrimaryColor = InvoicePDFBranding.defaultPrimaryHex
@@ -96,6 +98,8 @@ public struct SettingsView: View {
     private static let searchIndex: [(label: String, tab: SettingsTab)] = [
         ("Nazwa firmy", .company), ("NIP", .company), ("Adres firmy", .company),
         ("Rachunek bankowy (domyślny)", .company),
+        ("Forma opodatkowania (KPiR / ryczałt)", .company),
+        ("Domyślna stawka ryczałtu", .company),
         ("Branding PDF", .company), ("Logo na PDF", .company),
         ("Kolory PDF", .company), ("Stopka PDF", .company),
         ("Token autoryzacyjny KSeF", .ksef), ("Środowisko KSeF", .ksef),
@@ -269,6 +273,29 @@ public struct SettingsView: View {
                 .listRowBackground(highlight("Adres firmy"))
                 TextField("Rachunek bankowy", text: $bankAccount, prompt: Text("26 cyfr (NRB) — na wystawianych fakturach"))
                 .listRowBackground(highlight("Rachunek bankowy (domyślny)"))
+            }
+
+            Section {
+                Picker("Forma rozliczenia", selection: $taxFormRaw) {
+                    ForEach(TaxForm.allCases) { form in
+                        Text(form.displayName).tag(form.rawValue)
+                    }
+                }
+                .listRowBackground(highlight("Forma opodatkowania (KPiR / ryczałt)"))
+                if TaxForm.resolve(taxFormRaw) == .ryczalt {
+                    Picker("Domyślna stawka ryczałtu", selection: $ryczaltDefaultRateRaw) {
+                        ForEach(RyczaltRate.allCases) { rate in
+                            Text(rate.displayName).tag(rate.rawValue)
+                        }
+                    }
+                    .listRowBackground(highlight("Domyślna stawka ryczałtu"))
+                }
+            } header: {
+                Text("Podatek dochodowy")
+            } footer: {
+                Text("Wybór decyduje, którą ewidencję prowadzi aplikacja: KPiR (zasady ogólne / podatek liniowy) albo ewidencję przychodów (ryczałt) — w pasku bocznym pojawi się tylko wybrana, bo nie można rozliczać się na obu formach naraz. Domyślną stawkę ryczałtu można nadpisać na każdym wpisie ewidencji.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
 
             Section {

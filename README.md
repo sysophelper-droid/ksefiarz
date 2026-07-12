@@ -42,7 +42,8 @@ Sources/
     │   ├── DashboardMetrics.swift# agregaty Kokpitu (ukryte faktury pomijane)
     │   ├── PermissionsEngine.swift # walidacja i normalizacja uprawnień KSeF
     │   ├── InvoiceAutomationEngine.swift # duplikaty i terminy cykli
-    │   └── KPiREngine.swift       # KPiR 2026: klasyfikacja, sumy i CSV 1–19
+    │   ├── KPiREngine.swift       # KPiR 2026: klasyfikacja, sumy i CSV 1–19
+    │   └── RyczaltEngine.swift    # ryczałt 2026: stawki, przychód i CSV 1–17
     └── Views/
         ├── MainContentView.swift # NavigationSplitView + pasek boczny
         ├── DashboardView.swift   # Kokpit: podsumowania, płatności na 7 dni
@@ -252,16 +253,28 @@ Tests/KsefiarzCoreTests/          # 623 testy (Swift Testing) — model, parser,
   w szczegółach faktury zakupowej (podpowiedzi z listy typowych i już
   użytych) albo przy ręcznym dodawaniu zakupu. Kwoty w PLN po kursie
   z faktury; okres analizy wybierany jak w Kokpicie.
-- **KPiR — Księga Przychodów i Rozchodów** (osobna sekcja w pasku
-  bocznym) — ewidencja dla zasad ogólnych i podatku liniowego zgodna
-  z 19-kolumnowym wzorem obowiązującym od 2026 r. Automatycznie ujmuje
-  widoczne faktury sprzedażowe i zakupowe, przelicza kwoty walutowe na PLN,
-  pokazuje przychód, koszty i dochód dla miesiąca lub roku oraz pozwala
-  skorygować lokalną klasyfikację: datę zdarzenia, opis, kolumnę 9/10/12–15,
-  kwotę podatkową, koszt B+R (kol. 18), uwagi i wykluczenie z księgi.
-  Eksport CSV zawiera pełne kolumny 1–19, w tym numer KSeF; ukryte faktury
-  nigdy nie wchodzą do ewidencji. CSV jest materiałem roboczym do
-  weryfikacji księgowej — nie jest plikiem JPK_PKPIR.
+- **Ewidencja podatku dochodowego — KPiR albo ryczałt** — w Ustawieniach →
+  Firma wybierasz formę opodatkowania (zasady ogólne / podatek liniowy → KPiR
+  albo ryczałt od przychodów ewidencjonowanych). Nie można prowadzić obu naraz —
+  w pasku bocznym pojawia się tylko wybrana ewidencja.
+  - **KPiR — Księga Przychodów i Rozchodów** — zgodna z 19-kolumnowym wzorem
+    obowiązującym od 2026 r. Automatycznie ujmuje widoczne faktury sprzedażowe
+    i zakupowe, przelicza kwoty walutowe na PLN, pokazuje przychód, koszty
+    i dochód dla miesiąca lub roku oraz pozwala skorygować lokalną klasyfikację:
+    datę zdarzenia, opis, kolumnę 9/10/12–15, kwotę podatkową, koszt B+R
+    (kol. 18), uwagi i wykluczenie z księgi. Eksport CSV zawiera pełne kolumny
+    1–19, w tym numer KSeF. CSV jest materiałem roboczym do weryfikacji
+    księgowej — nie jest plikiem JPK_PKPIR.
+  - **Ewidencja przychodów (ryczałt)** — zgodna z 17-kolumnowym wzorem od 2026 r.
+    (Dz.U. 2025 poz. 1294) z podziałem na stawki 17%, 15%, 14%, 12,5%, 12%, 10%,
+    8,5%, 5,5% i 3%. Obejmuje wyłącznie sprzedaż, przelicza kwoty walutowe na PLN,
+    pokazuje przychód i szacowany ryczałt (bez odliczeń składek) łącznie oraz per
+    stawka. Domyślną stawkę ustawiasz raz, a na każdym wpisie możesz ją nadpisać
+    — podobnie datę uzyskania przychodu, kwotę i uwagi (kol. 17). Eksport CSV
+    zawiera pełne kolumny 1–17, w tym numer KSeF i identyfikator kontrahenta,
+    oraz wiersz sumy przychodów per stawka.
+  - We wszystkich ewidencjach faktury ukryte nigdy nie wchodzą do zestawienia,
+    a lokalna klasyfikacja podatkowa wchodzi do kopii zapasowej.
 - **Rozbudowany Kokpit** — oprócz podsumowań kwot i najbliższych płatności:
   VAT należny/naliczony/saldo w analizowanym okresie, wykres przepływów
   pieniężnych z ostatnich 6 miesięcy (wg ewidencji wpłat), struktura wiekowa

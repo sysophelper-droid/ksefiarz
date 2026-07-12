@@ -91,6 +91,12 @@ public struct BackupInvoice: Codable, Equatable, Sendable {
     public var kpirNotes: String?
     public var kpirAmountOverride: Double?
     public var kpirResearchDevelopmentCost: Double?
+    /// Pola od wersji 9 — lokalna klasyfikacja ryczałtu (ewidencja przychodów).
+    public var isExcludedFromRyczalt: Bool?
+    public var ryczaltRateRaw: String?
+    public var ryczaltEventDate: Date?
+    public var ryczaltAmountOverride: Double?
+    public var ryczaltNotes: String?
 }
 
 /// Wpłata do faktury w kopii zapasowej.
@@ -211,7 +217,7 @@ public enum BackupService {
 
     /// Bieżąca wersja formatu pliku (8: + klasyfikacja KPiR faktur).
     /// Starsze pliki są nadal poprawnie importowane.
-    public static let currentVersion = 8
+    public static let currentVersion = 9
 
     /// Klucze ustawień obejmowane kopią zapasową.
     /// Tokenu KSeF celowo tu nie ma — sekret żyje w pęku kluczy i nie może
@@ -222,6 +228,8 @@ public enum BackupService {
         AppSettingsKeys.sellerAddress,
         AppSettingsKeys.nip,
         AppSettingsKeys.bankAccount,
+        AppSettingsKeys.taxForm,
+        AppSettingsKeys.ryczaltDefaultRate,
         AppSettingsKeys.pdfBrandingEnabled,
         AppSettingsKeys.pdfBrandingLogo,
         AppSettingsKeys.pdfBrandingPrimaryColor,
@@ -388,6 +396,11 @@ public enum BackupService {
         invoice.kpirNotes = backup.kpirNotes ?? ""
         invoice.kpirAmountOverride = backup.kpirAmountOverride
         invoice.kpirResearchDevelopmentCost = backup.kpirResearchDevelopmentCost ?? 0
+        invoice.isExcludedFromRyczalt = backup.isExcludedFromRyczalt ?? false
+        invoice.ryczaltRateRaw = backup.ryczaltRateRaw ?? ""
+        invoice.ryczaltEventDate = backup.ryczaltEventDate
+        invoice.ryczaltAmountOverride = backup.ryczaltAmountOverride
+        invoice.ryczaltNotes = backup.ryczaltNotes ?? ""
         return invoice
     }
 
@@ -645,7 +658,12 @@ public enum BackupService {
             kpirNotes: invoice.kpirNotes.isEmpty ? nil : invoice.kpirNotes,
             kpirAmountOverride: invoice.kpirAmountOverride,
             kpirResearchDevelopmentCost: invoice.kpirResearchDevelopmentCost == 0
-                ? nil : invoice.kpirResearchDevelopmentCost
+                ? nil : invoice.kpirResearchDevelopmentCost,
+            isExcludedFromRyczalt: invoice.isExcludedFromRyczalt ? true : nil,
+            ryczaltRateRaw: invoice.ryczaltRateRaw.isEmpty ? nil : invoice.ryczaltRateRaw,
+            ryczaltEventDate: invoice.ryczaltEventDate,
+            ryczaltAmountOverride: invoice.ryczaltAmountOverride,
+            ryczaltNotes: invoice.ryczaltNotes.isEmpty ? nil : invoice.ryczaltNotes
         )
     }
 

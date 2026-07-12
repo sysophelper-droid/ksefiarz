@@ -9,6 +9,7 @@ public enum SidebarSection: String, CaseIterable, Identifiable, Hashable {
     case purchases
     case reports
     case kpir
+    case ryczalt
     case dictionaries
     case automation
     case syncCenter
@@ -25,6 +26,7 @@ public enum SidebarSection: String, CaseIterable, Identifiable, Hashable {
         case .purchases: return "Faktury Zakupu"
         case .reports: return "Raporty"
         case .kpir: return "KPiR"
+        case .ryczalt: return "Ewidencja przychodów"
         case .dictionaries: return "Słowniki"
         case .automation: return "Szablony i cykle"
         case .syncCenter: return "Synchronizacja"
@@ -41,6 +43,7 @@ public enum SidebarSection: String, CaseIterable, Identifiable, Hashable {
         case .purchases: return "arrow.down.doc"
         case .reports: return "chart.bar.xaxis"
         case .kpir: return "books.vertical"
+        case .ryczalt: return "list.bullet.rectangle.portrait"
         case .dictionaries: return "text.book.closed"
         case .automation: return "calendar.badge.clock"
         case .syncCenter: return "arrow.triangle.2.circlepath"
@@ -82,14 +85,35 @@ public struct MainContentView: View {
     @AppStorage(AppSettingsKeys.notifyNewPurchases) private var notifyNewPurchases = true
     @AppStorage(AppSettingsKeys.notifyDeadlines) private var notifyDeadlines = true
     @AppStorage(AppSettingsKeys.autoRenewCertificates) private var autoRenewCertificates = true
+    @AppStorage(AppSettingsKeys.taxForm) private var taxFormRaw = TaxForm.kpir.rawValue
 
     public init() {}
 
+    /// Sekcje widoczne w pasku bocznym. Ewidencja podatkowa zależy od wybranej
+    /// formy opodatkowania — KPiR albo ryczałt, nigdy obie naraz.
+    private var visibleSections: [SidebarSection] {
+        let taxForm = TaxForm.resolve(taxFormRaw)
+        return SidebarSection.allCases.filter { section in
+            switch section {
+            case .kpir: return taxForm == .kpir
+            case .ryczalt: return taxForm == .ryczalt
+            default: return true
+            }
+        }
+    }
+
     public var body: some View {
         NavigationSplitView {
-            List(SidebarSection.allCases, selection: $selection) { section in
+            List(visibleSections, selection: $selection) { section in
                 Label(section.title, systemImage: section.icon)
                     .tag(section)
+            }
+            // Po zmianie formy opodatkowania nie zostawiaj zaznaczenia na
+            // ukrytej już ewidencji — przełącz na Kokpit.
+            .onChange(of: taxFormRaw) {
+                if let current = selection, !visibleSections.contains(current) {
+                    selection = .dashboard
+                }
             }
             .listStyle(.sidebar)
             .navigationSplitViewColumnWidth(min: 200, ideal: 230, max: 300)
@@ -127,6 +151,8 @@ public struct MainContentView: View {
                 ReportsView()
             case .kpir:
                 KPiRView()
+            case .ryczalt:
+                RyczaltView()
             case .dictionaries:
                 DictionariesView()
             case .automation:

@@ -210,6 +210,21 @@ public final class Invoice {
     /// Część kosztu wykazywana dodatkowo informacyjnie w kolumnie 18 (B+R).
     public var kpirResearchDevelopmentCost: Double = 0
 
+    /// Lokalne metadane ryczałtu (ewidencja przychodów). Dotyczą wyłącznie
+    /// sprzedaży; nie zmieniają treści faktury ani dokumentu KSeF. Puste
+    /// wartości oznaczają automatyczne wyprowadzenie (stawka domyślna
+    /// z ustawień, data i kwota z faktury). Wartości domyślne obowiązkowe
+    /// (lekka migracja bazy).
+    public var isExcludedFromRyczalt: Bool = false
+    /// Stawka ryczałtu (rawValue `RyczaltRate`, np. „8.5”); "" = stawka domyślna.
+    public var ryczaltRateRaw: String = ""
+    /// Data uzyskania przychodu przyjęta do ewidencji; nil = data z faktury.
+    public var ryczaltEventDate: Date? = nil
+    /// Kwota przychodu w PLN; nil = kwota netto przeliczona kursem faktury.
+    public var ryczaltAmountOverride: Double? = nil
+    /// Uwagi ewidencji przychodów (kol. 17 wzoru).
+    public var ryczaltNotes: String = ""
+
     /// Dokument wystawiony w trybie offline (offline24 / niedostępność /
     /// awaria). Przy dosyłaniu do KSeF wysyłany jest DOKŁADNIE zapisany XML
     /// (`rawXmlContent`) — jego skrót jest częścią kodów QR na wydruku.
