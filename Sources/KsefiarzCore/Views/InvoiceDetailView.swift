@@ -44,7 +44,7 @@ public struct InvoiceDetailView: View {
     /// sprzedaż lub zakupowy dokument wystawiany przez nas
     /// (VAT RR, samofaktura).
     private var isEditableLocal: Bool {
-        (invoice.kind == .sales || invoice.isSelfIssuedPurchase) && invoice.isLocalOnly
+        invoice.hasKSeFSubmissionLifecycle && invoice.isLocalOnly
     }
 
     public var body: some View {
@@ -148,7 +148,7 @@ public struct InvoiceDetailView: View {
                         }
                     }
                 }
-                if invoice.kind == .sales {
+                if invoice.hasKSeFSubmissionLifecycle {
                     LabeledContent("Status KSeF") {
                         KSeFSubmissionBadge(invoice: invoice)
                     }
@@ -443,7 +443,7 @@ public struct InvoiceDetailView: View {
                         )
                     }
 
-                    if (invoice.kind == .sales || invoice.isSelfIssuedPurchase), !invoice.isCorrection {
+                    if invoice.hasKSeFSubmissionLifecycle, !invoice.isCorrection {
                         Button {
                             showingCorrectionForm = true
                         } label: {
@@ -460,7 +460,7 @@ public struct InvoiceDetailView: View {
                         .help("Otwórz wiadomość z fakturą (PDF/XML) w aplikacji Mail — adresat ze słownika kontrahentów")
                     }
 
-                    if invoice.kind == .sales, invoice.ksefInvoiceReference != nil {
+                    if invoice.hasKSeFSubmissionLifecycle, invoice.ksefInvoiceReference != nil {
                         Button {
                             Task { await refreshKSeFStatus() }
                         } label: {

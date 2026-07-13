@@ -461,8 +461,17 @@ Scripts/build-app.sh                   # składanie bundla .app
   flagę `isSelfInvoicing` (mapowana w `KSeFInvoiceMetadata`). W aplikacji:
   `Invoice.isSelfInvoicing` (P_17), `Invoice.isSelfIssuedPurchase`
   (= zakup i (RR albo samofaktura) — dokument wystawiony przez nas jako
-  nabywcę, z pełnym cyklem KSeF), tryb w `NewInvoiceView` z zamianą ról jak
-  RR, osobna seria numeracji (`AppSettingsKeys.numberPatternSF`), adnotacja
+  nabywcę, z pełnym cyklem KSeF) oraz `Invoice.hasKSeFSubmissionLifecycle`
+  (= własna sprzedaż bez P_17 albo `isSelfIssuedPurchase`; wspólne źródło
+  warunków UI dla statusu, ręcznego odświeżenia, edycji i korekty). Sprzedaż
+  z P_17 sporządził klient w naszym imieniu i aplikacja nie oferuje dla niej
+  naszej korekty/duplikatu/edycji — korektę wystawia podmiot sporządzający
+  fakturę pierwotną (oficjalne wyjaśnienie Biznes.gov.pl „Co zrobić z błędem
+  na fakturze lub po zgubieniu faktury”). Wspólne pole
+  `Invoice.ksefSubmissionContextNIP` wybiera Podmiot2 dla dokumentów
+  `isSelfIssuedPurchase`, a Podmiot1 dla zwykłej sprzedaży. Tryb w `NewInvoiceView`
+  zamienia role jak RR, ma osobną serię numeracji
+  (`AppSettingsKeys.numberPatternSF`) i adnotację
   „samofakturowanie” na PDF (art. 106e ust. 1 pkt 17), wyłączony branding,
   kopia zapasowa v12. `isManualPurchase` wyklucza RR i samofaktury (lokalny,
   jeszcze niewysłany dokument nie jest ręcznym zakupem). KOD II QR dla

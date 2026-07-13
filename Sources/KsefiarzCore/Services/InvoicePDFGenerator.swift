@@ -220,8 +220,7 @@ public enum InvoicePDFGenerator {
                    // Kontekst wysyłki: dla dokumentów wystawianych przez nas
                    // jako nabywcę (VAT RR, samofaktura) to NASZ NIP
                    // (Podmiot2), nie NIP sprzedawcy z dokumentu.
-                   contextNip: invoice.isSelfIssuedPurchase
-                       ? invoice.buyerNIP : invoice.sellerNIP,
+                   contextNip: invoice.ksefSubmissionContextNIP,
                    sellerNIP: invoice.sellerNIP,
                    certificate: offlineCertificate,
                    xmlHashBase64: hashBase64

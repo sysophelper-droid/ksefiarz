@@ -143,6 +143,38 @@ struct SelfInvoicingTests {
         #expect(!makeTestInvoice(number: "Z/1", kind: .purchase).isSelfIssuedPurchase)
     }
 
+    @Test("Cykl wysyłki KSeF obejmuje własną sprzedaż, VAT RR i nasze samofaktury")
+    func klasyfikacjaCykluWysylkiKSeF() {
+        let sales = makeTestInvoice(number: "FV/1", kind: .sales)
+        #expect(sales.hasKSeFSubmissionLifecycle)
+
+        let selfInvoicedSales = makeSelfInvoice(kind: .sales)
+        #expect(!selfInvoicedSales.hasKSeFSubmissionLifecycle)
+
+        let selfInvoice = makeSelfInvoice(kind: .purchase)
+        #expect(selfInvoice.hasKSeFSubmissionLifecycle)
+
+        let rr = makeTestInvoice(number: "RR/1", kind: .purchase)
+        rr.documentTypeRaw = "VAT_RR"
+        #expect(rr.hasKSeFSubmissionLifecycle)
+
+        let purchase = makeTestInvoice(number: "Z/1", kind: .purchase)
+        #expect(!purchase.hasKSeFSubmissionLifecycle)
+    }
+
+    @Test("Kontekst KODU II to NIP nabywcy dla samofaktury i VAT RR")
+    func kontekstWysylkiDlaDokumentowZakupowych() {
+        let selfInvoice = makeSelfInvoice(kind: .purchase)
+        #expect(selfInvoice.ksefSubmissionContextNIP == selfInvoice.buyerNIP)
+
+        let rr = makeTestInvoice(number: "RR/1", kind: .purchase)
+        rr.documentTypeRaw = "VAT_RR"
+        #expect(rr.ksefSubmissionContextNIP == rr.buyerNIP)
+
+        let sales = makeTestInvoice(number: "FV/1", kind: .sales)
+        #expect(sales.ksefSubmissionContextNIP == sales.sellerNIP)
+    }
+
     @Test("Lokalna samofaktura i VAT RR nie są ręcznymi fakturami kosztowymi")
     func recznyZakupVsSamofaktura() {
         // Ręczny zakup spoza KSeF — edytowalny formularzem zakupu.

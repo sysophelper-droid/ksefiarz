@@ -98,7 +98,9 @@ Tests/KsefiarzCoreTests/          # Swift Testing — model, parser, usługa, kr
   na PDF drukowana jest wymagana adnotacja „samofakturowanie”, a rachunek
   płatności to rachunek dostawcy. Faktury sprzedaży pobrane z KSeF
   z adnotacją P_17 (wystawione przez klienta w imieniu użytkownika) dostają
-  znacznik „Samofakturowanie” na liście i w szczegółach.
+  znacznik „Samofakturowanie” na liście i w szczegółach, ale pozostają
+  dokumentami tylko do odczytu — ich korektę wystawia klient, który sporządził
+  fakturę pierwotną w ramach umowy o samofakturowaniu.
 - **Faktury proforma** — osobna sekcja „Faktury proforma" na dokumenty
   handlowe, które **nie idą do KSeF** i nie wchodzą do rozliczeń podatkowych
   (proforma nie jest fakturą VAT). Wystawianie z lekkiego formularza (NIP

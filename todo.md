@@ -84,12 +84,14 @@ kolejność dowolna. ⚠️ operacje modyfikujące KSeF testować wyłącznie na
   „samofakturowanie” na PDF, wyłączony branding (dokument formalnie
   dostawcy), rachunek płatności = rachunek dostawcy, znaczniki na listach
   i w szczegółach (także dla sprzedaży z P_17 pobranej z KSeF — wystawionej
-  przez klienta w naszym imieniu, z flagą wprost z metadanych zapytania).
+  przez klienta w naszym imieniu, z flagą wprost z metadanych zapytania;
+  dokument tylko do odczytu, bo jego korektę wystawia klient jako podmiot
+  sporządzający fakturę pierwotną).
   Kopia zapasowa v12. Przy okazji domknięte regresje RR: lokalna faktura
   VAT RR/samofaktura nie jest już „ręcznym zakupem” (błędny formularz
   edycji), a KOD II QR dokumentów wystawianych przez nas jako nabywcę używa
   kontekstu = NIP nabywcy. Dokument zweryfikowany oficjalną XSD FA(3)
-  (xmllint); 17 nowych testów. Wysyłka nieprzetestowana na żywo — wymaga
+  (xmllint); 19 nowych testów. Wysyłka nieprzetestowana na żywo — wymaga
   kontrahenta, który nadał uprawnienie (polityka „tylko odczyt na żywo”).
 
 ### Import wsadowy CSV/Excel (13.07.2026)

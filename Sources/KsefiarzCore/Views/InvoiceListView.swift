@@ -399,7 +399,7 @@ public struct InvoiceListView: View {
             }
             // Korekta dostępna dla sprzedaży oraz wystawionych przez nas
             // dokumentów zakupowych (VAT RR, samofaktura).
-            if (kind == .sales || invoice.isSelfIssuedPurchase), !invoice.isCorrection {
+            if invoice.hasKSeFSubmissionLifecycle, !invoice.isCorrection {
                 Button("Wystaw korektę") {
                     correctedInvoice = invoice
                 }
@@ -408,7 +408,7 @@ public struct InvoiceListView: View {
                 }
             }
             // Faktury tylko lokalne (niewysłane do KSeF) można edytować i usuwać.
-            if (kind == .sales || invoice.isSelfIssuedPurchase), invoice.isLocalOnly {
+            if invoice.hasKSeFSubmissionLifecycle, invoice.isLocalOnly {
                 Divider()
                 Button("Edytuj fakturę") {
                     editedInvoice = invoice
@@ -575,7 +575,7 @@ struct InvoiceRowView: View {
                     }
                     // Pełny cykl wysyłki KSeF dotyczy sprzedaży oraz
                     // wystawianych przez nas dokumentów zakupowych.
-                    if invoice.kind == .sales || invoice.isSelfIssuedPurchase {
+                    if invoice.hasKSeFSubmissionLifecycle {
                         KSeFSubmissionBadge(invoice: invoice)
                     }
                     if invoice.isManualPurchase {

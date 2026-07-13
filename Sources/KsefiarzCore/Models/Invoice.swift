@@ -268,6 +268,24 @@ public final class Invoice {
         kind == .purchase && (isRR || isSelfInvoicing)
     }
 
+    /// Dokument, którego cyklem wysyłki do KSeF zarządza aplikacja:
+    /// własna sprzedaż albo zakup wystawiony przez nas jako nabywcę (VAT RR
+    /// lub samofaktura). Sprzedaż z P_17 sporządził klient w naszym imieniu,
+    /// więc nie wolno proponować dla niej naszej korekty/edycji. Zwykłe
+    /// zakupy są tylko pobierane z KSeF, a ręczne faktury kosztowe pozostają
+    /// poza cyklem wysyłki.
+    public var hasKSeFSubmissionLifecycle: Bool {
+        (kind == .sales && !isSelfInvoicing) || isSelfIssuedPurchase
+    }
+
+    /// NIP kontekstu, w którym aplikacja wysyła dokument do KSeF. Dla
+    /// dokumentów wystawianych przez nas jako nabywcę kontekstem jest
+    /// Podmiot2; dla zwykłej sprzedaży — Podmiot1. Wartość jest używana
+    /// m.in. w KODZIE II dokumentu offline.
+    public var ksefSubmissionContextNIP: String {
+        isSelfIssuedPurchase ? buyerNIP : sellerNIP
+    }
+
     /// Numery KSeF faktur zaliczkowych (dokumenty ROZ) jako tablica.
     public var advanceInvoiceRefs: [String] {
         get { advanceInvoiceRefsRaw.split(separator: "\n").map(String.init) }
