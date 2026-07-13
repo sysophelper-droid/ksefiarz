@@ -61,6 +61,10 @@ public enum AppSettingsKeys {
     public static let numberPatternUPR = "ksef.numberPattern.UPR"
     public static let numberPatternKOR = "ksef.numberPattern.KOR"
     public static let numberPatternRR = "ksef.numberPattern.RR"
+    /// Wzorzec numeracji samofaktur (samofakturowanie — my jako nabywca
+    /// wystawiamy w imieniu dostawcy); pusty dziedziczy wzorzec faktur VAT.
+    /// Numerację samofaktur zwykle określa umowa z dostawcą.
+    public static let numberPatternSF = "ksef.numberPattern.SF"
     /// Wzorzec numeracji faktur proforma — pusty oznacza domyślny wzorzec
     /// proform (`InvoiceNumberGenerator.defaultProformaPattern`), NIE serię VAT
     /// (proforma to osobny dokument handlowy z własną numeracją).

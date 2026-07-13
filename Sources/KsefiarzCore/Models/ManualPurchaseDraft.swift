@@ -202,8 +202,11 @@ public extension ManualPurchaseDraft {
 
 public extension Invoice {
     /// Faktura kosztowa dodana ręcznie (spoza KSeF) — można ją edytować
-    /// i usuwać, w odróżnieniu od zakupów pobranych z KSeF.
+    /// i usuwać, w odróżnieniu od zakupów pobranych z KSeF. Zakupowe
+    /// dokumenty wystawiane przez nas (VAT RR, samofaktura) mają własny
+    /// cykl KSeF i NIE są ręcznymi fakturami kosztowymi, nawet zanim
+    /// dostaną numer KSeF.
     var isManualPurchase: Bool {
-        kind == .purchase && ksefId == nil
+        kind == .purchase && ksefId == nil && !isRR && !isSelfInvoicing
     }
 }

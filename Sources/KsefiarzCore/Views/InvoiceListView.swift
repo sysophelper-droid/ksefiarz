@@ -18,6 +18,8 @@ public struct InvoiceListView: View {
     /// Ręczna faktura kosztowa (spoza KSeF): arkusz dodawania i edycji.
     @State private var showingNewPurchase = false
     @State private var editedPurchase: Invoice?
+    /// Arkusz samofaktury — wystawienie w imieniu dostawcy z listy zakupów.
+    @State private var showingNewSelfInvoice = false
     @State private var correctedInvoice: Invoice?
     @State private var duplicatedInvoice: Invoice?
     @State private var emailedInvoice: Invoice?
@@ -137,6 +139,9 @@ public struct InvoiceListView: View {
             }
             .sheet(isPresented: $showingNewPurchase) {
                 NewPurchaseView()
+            }
+            .sheet(isPresented: $showingNewSelfInvoice) {
+                NewInvoiceView(selfInvoicing: true)
             }
             .sheet(item: $editedPurchase) { invoice in
                 NewPurchaseView(editing: invoice)
@@ -312,12 +317,21 @@ public struct InvoiceListView: View {
                 }
                 .help("Wystaw nową fakturę")
             } else {
-                Button {
-                    showingNewPurchase = true
+                Menu {
+                    Button {
+                        showingNewPurchase = true
+                    } label: {
+                        Label("Dodaj zakup spoza KSeF", systemImage: "doc.badge.plus")
+                    }
+                    Button {
+                        showingNewSelfInvoice = true
+                    } label: {
+                        Label("Wystaw samofakturę (w imieniu dostawcy)", systemImage: "person.2.badge.gearshape")
+                    }
                 } label: {
-                    Label("Dodaj zakup", systemImage: "plus")
+                    Label("Dodaj", systemImage: "plus")
                 }
-                .help("Dodaj fakturę kosztową spoza KSeF (faktura zagraniczna, paragon z NIP)")
+                .help("Dodaj fakturę kosztową spoza KSeF albo wystaw samofakturę w imieniu dostawcy (samofakturowanie — wymaga uprawnienia SelfInvoicing od dostawcy)")
             }
         }
     }
@@ -383,8 +397,9 @@ public struct InvoiceListView: View {
                     }
                 }
             }
-            // Korekta dostępna dla sprzedaży oraz wystawionej przez nas VAT RR.
-            if (kind == .sales || invoice.isRR), !invoice.isCorrection {
+            // Korekta dostępna dla sprzedaży oraz wystawionych przez nas
+            // dokumentów zakupowych (VAT RR, samofaktura).
+            if invoice.hasKSeFSubmissionLifecycle, !invoice.isCorrection {
                 Button("Wystaw korektę") {
                     correctedInvoice = invoice
                 }
@@ -393,7 +408,7 @@ public struct InvoiceListView: View {
                 }
             }
             // Faktury tylko lokalne (niewysłane do KSeF) można edytować i usuwać.
-            if (kind == .sales || invoice.isRR), invoice.isLocalOnly {
+            if invoice.hasKSeFSubmissionLifecycle, invoice.isLocalOnly {
                 Divider()
                 Button("Edytuj fakturę") {
                     editedInvoice = invoice
@@ -555,7 +570,12 @@ struct InvoiceRowView: View {
                             .foregroundStyle(.purple)
                             .help("Faktura korygująca")
                     }
-                    if invoice.kind == .sales {
+                    if invoice.isSelfInvoicing {
+                        SelfInvoicingBadge(isPurchase: invoice.kind == .purchase)
+                    }
+                    // Pełny cykl wysyłki KSeF dotyczy sprzedaży oraz
+                    // wystawianych przez nas dokumentów zakupowych.
+                    if invoice.hasKSeFSubmissionLifecycle {
                         KSeFSubmissionBadge(invoice: invoice)
                     }
                     if invoice.isManualPurchase {
@@ -589,6 +609,25 @@ struct InvoiceRowView: View {
             }
         }
         .padding(.vertical, 4)
+    }
+}
+
+/// Znacznik samofakturowania (Adnotacje P_17 = 1, art. 106d):
+/// na zakupie — samofaktura wystawiona przez nas w imieniu dostawcy,
+/// na sprzedaży — dokument wystawiony przez klienta w naszym imieniu.
+struct SelfInvoicingBadge: View {
+    let isPurchase: Bool
+
+    var body: some View {
+        Text("Samofakturowanie")
+            .font(.caption2.weight(.bold))
+            .padding(.horizontal, 5)
+            .padding(.vertical, 1)
+            .background(.teal.opacity(0.18), in: Capsule())
+            .foregroundStyle(.teal)
+            .help(isPurchase
+                ? "Samofaktura — wystawiona przez nas (nabywcę) w imieniu dostawcy (art. 106d)"
+                : "Fakturę wystawił nabywca w naszym imieniu (samofakturowanie, art. 106d)")
     }
 }
 

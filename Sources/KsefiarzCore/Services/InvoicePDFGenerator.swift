@@ -217,7 +217,10 @@ public enum InvoicePDFGenerator {
                offlineCertificate.info?.isValid() == true,
                let url = try? KSeFVerificationLink.certificateURL(
                    environment: environment,
-                   contextNip: invoice.sellerNIP,
+                   // Kontekst wysyłki: dla dokumentów wystawianych przez nas
+                   // jako nabywcę (VAT RR, samofaktura) to NASZ NIP
+                   // (Podmiot2), nie NIP sprzedawcy z dokumentu.
+                   contextNip: invoice.ksefSubmissionContextNIP,
                    sellerNIP: invoice.sellerNIP,
                    certificate: offlineCertificate,
                    xmlHashBase64: hashBase64
@@ -346,6 +349,18 @@ struct InvoicePrintPageView: View {
                             "Commercial document — not a VAT invoice, not a basis for tax settlement."
                         ))
                         .font(.system(size: 8))
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    }
+                    // Adnotacja wymagana przez art. 106e ust. 1 pkt 17
+                    // ustawy o VAT: wyraz „samofakturowanie” na fakturze
+                    // wystawionej przez nabywcę (P_17 = 1).
+                    if invoice.isSelfInvoicing {
+                        Text(labels.text(
+                            "SAMOFAKTUROWANIE — faktura wystawiona przez nabywcę w imieniu i na rzecz sprzedawcy (art. 106d ustawy o VAT).",
+                            "SELF-BILLING — invoice issued by the buyer in the name and on behalf of the seller."
+                        ))
+                        .font(.system(size: 8, weight: .semibold))
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                     }

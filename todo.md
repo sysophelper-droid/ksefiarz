@@ -19,8 +19,6 @@ kolejność dowolna. ⚠️ operacje modyfikujące KSeF testować wyłącznie na
 
 #### A. Zgodność / KSeF
 
-- [ ] A3. Samofakturowanie — wystawianie faktur w imieniu dostawcy
-  (uprawnienie `SelfInvoicing` już obsługiwane po stronie nadawania).
 - [ ] A4. Wsadowa wysyłka do KSeF (sesja batch/ZIP) — masowa wysyłka zamiast
   pojedynczej sesji interaktywnej (migracja/zaległości). ⚠️ tylko `test`.
 - [ ] A5. Anonimowy dostęp / pobranie faktury po numerze KSeF — wciągnięcie
@@ -70,6 +68,31 @@ kolejność dowolna. ⚠️ operacje modyfikujące KSeF testować wyłącznie na
   (dziś zaszyte PL/EN).
 
 ## Zrealizowane
+
+### Samofakturowanie — wystawianie faktur w imieniu dostawcy (13.07.2026)
+
+- [x] A3. Przełącznik „Samofakturowanie” w formularzu wystawiania (i wejście
+  „Wystaw samofakturę” pod „+” na liście zakupów): zwykła FA(3) z adnotacją
+  `P_17 = 1` (art. 106d), Podmiot1 = dostawca, Podmiot2 = nasza firma;
+  dokument zapisywany jako zakup (koszt/VAT naliczony), ale z pełnym cyklem
+  KSeF jak sprzedaż (edycja lokalna, wysyłka we własnym kontekście, statusy,
+  UPO, tryby offline, korekty dziedziczące adnotację i role). USTALENIE
+  u źródła (ksef-docs, OpenAPI): uprawnienia podmiotowe nie zmieniają
+  kontekstu uwierzytelnienia — KSeF weryfikuje relację `SelfInvoicing`
+  (nadaną nam przez dostawcę) przy walidacji pliku. Osobna seria numeracji
+  samofaktur (Ustawienia; pusta dziedziczy wzorzec VAT), adnotacja
+  „samofakturowanie” na PDF, wyłączony branding (dokument formalnie
+  dostawcy), rachunek płatności = rachunek dostawcy, znaczniki na listach
+  i w szczegółach (także dla sprzedaży z P_17 pobranej z KSeF — wystawionej
+  przez klienta w naszym imieniu, z flagą wprost z metadanych zapytania;
+  dokument tylko do odczytu, bo jego korektę wystawia klient jako podmiot
+  sporządzający fakturę pierwotną).
+  Kopia zapasowa v12. Przy okazji domknięte regresje RR: lokalna faktura
+  VAT RR/samofaktura nie jest już „ręcznym zakupem” (błędny formularz
+  edycji), a KOD II QR dokumentów wystawianych przez nas jako nabywcę używa
+  kontekstu = NIP nabywcy. Dokument zweryfikowany oficjalną XSD FA(3)
+  (xmllint); 19 nowych testów. Wysyłka nieprzetestowana na żywo — wymaga
+  kontrahenta, który nadał uprawnienie (polityka „tylko odczyt na żywo”).
 
 ### Import wsadowy CSV/Excel (13.07.2026)
 

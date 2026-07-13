@@ -31,6 +31,12 @@ public struct InvoiceDraft: Equatable, Sendable {
     public var exchangeRate: Double = 0
     /// Mechanizm podzielonej płatności (Adnotacje P_18A = 1).
     public var splitPayment: Bool = false
+    /// Samofakturowanie (Adnotacje P_17 = 1, art. 106d ustawy o VAT) —
+    /// wystawiamy dokument jako NABYWCA w imieniu dostawcy (sprzedawcy).
+    /// Role stron są już zamienione w polach szkicu (seller = dostawca,
+    /// buyer = nasza firma); zapisany dokument jest zakupem. Wysyłka wymaga
+    /// uprawnienia SelfInvoicing nadanego nam przez dostawcę w KSeF.
+    public var isSelfInvoicing: Bool = false
     /// Data dokonania dostawy / otrzymania zapłaty (P_6).
     public var saleDate: Date?
     /// Numery KSeF faktur zaliczkowych rozliczanych dokumentem ROZ.
@@ -79,6 +85,7 @@ public struct InvoiceDraft: Equatable, Sendable {
         currency: String = "PLN",
         exchangeRate: Double = 0,
         splitPayment: Bool = false,
+        isSelfInvoicing: Bool = false,
         saleDate: Date? = nil,
         advanceInvoiceRefs: [String] = [],
         marginProcedure: String = "",
@@ -117,6 +124,7 @@ public struct InvoiceDraft: Equatable, Sendable {
         self.currency = currency
         self.exchangeRate = exchangeRate
         self.splitPayment = splitPayment
+        self.isSelfInvoicing = isSelfInvoicing
         self.saleDate = saleDate
         self.advanceInvoiceRefs = advanceInvoiceRefs
         self.marginProcedure = marginProcedure
@@ -174,6 +182,7 @@ public extension InvoiceDraft {
             currency: invoice.currency,
             exchangeRate: invoice.exchangeRate,
             splitPayment: invoice.splitPayment,
+            isSelfInvoicing: invoice.isSelfInvoicing,
             saleDate: invoice.saleDate,
             advanceInvoiceRefs: invoice.advanceInvoiceRefs,
             marginProcedure: invoice.marginProcedureRaw,
@@ -228,6 +237,9 @@ public struct InvoicePreset: Codable, Equatable, Sendable {
     public var currency: String
     public var exchangeRate: Double
     public var splitPayment: Bool
+    /// Samofakturowanie — opcjonalne dla zgodności z szablonami zapisanymi
+    /// przed obsługą samofaktur (nil = zwykła faktura).
+    public var isSelfInvoicing: Bool?
     public var hasSaleDate: Bool
     public var advanceInvoiceRefs: [String]
     public var marginProcedure: String
@@ -254,6 +266,7 @@ public struct InvoicePreset: Codable, Equatable, Sendable {
         currency = draft.currency
         exchangeRate = draft.exchangeRate
         splitPayment = draft.splitPayment
+        isSelfInvoicing = draft.isSelfInvoicing ? true : nil
         hasSaleDate = draft.saleDate != nil
         advanceInvoiceRefs = draft.advanceInvoiceRefs
         marginProcedure = draft.marginProcedure
@@ -289,6 +302,7 @@ public struct InvoicePreset: Codable, Equatable, Sendable {
             currency: currency,
             exchangeRate: exchangeRate,
             splitPayment: splitPayment,
+            isSelfInvoicing: isSelfInvoicing ?? false,
             saleDate: hasSaleDate ? issueDate : nil,
             advanceInvoiceRefs: advanceInvoiceRefs,
             marginProcedure: marginProcedure,

@@ -120,6 +120,9 @@ public struct FA2InvoiceData: Equatable, Sendable {
     public var currency: String
     /// Mechanizm podzielonej płatności (Adnotacje P_18A = 1).
     public var splitPayment: Bool
+    /// Samofakturowanie (Adnotacje P_17 = 1) — faktura wystawiona przez
+    /// nabywcę w imieniu i na rzecz sprzedawcy (art. 106d ustawy o VAT).
+    public var isSelfInvoicing: Bool
     /// Data dokonania dostawy / otrzymania zapłaty (P_6).
     public var saleDate: Date?
     /// Załącznik do faktury (element Zalacznik FA(3)) — bloki danych.
@@ -151,6 +154,7 @@ public struct FA2InvoiceData: Equatable, Sendable {
         notes: String = "",
         currency: String = "PLN",
         splitPayment: Bool = false,
+        isSelfInvoicing: Bool = false,
         saleDate: Date? = nil,
         attachments: [FA3AttachmentBlock] = [],
         rawXML: String = ""
@@ -178,6 +182,7 @@ public struct FA2InvoiceData: Equatable, Sendable {
         self.notes = notes
         self.currency = currency
         self.splitPayment = splitPayment
+        self.isSelfInvoicing = isSelfInvoicing
         self.saleDate = saleDate
         self.attachments = attachments
         self.rawXML = rawXML
@@ -285,7 +290,7 @@ public enum FA2XMLGenerator {
         \(saleDateElement(draft))\(vatSummaryBlock(draft))    <P_15>\(FA2Format.amount(draft.grossAmount))</P_15>
             <Adnotacje>
               <P_16>2</P_16>
-              <P_17>2</P_17>
+              <P_17>\(draft.isSelfInvoicing ? 1 : 2)</P_17>
               <P_18>2</P_18>
               <P_18A>\(draft.splitPayment ? 1 : 2)</P_18A>
               <Zwolnienie>
@@ -728,6 +733,8 @@ public enum FA2XMLParser {
 
         let currency = text(of: "KodWaluty", in: fa) ?? "PLN"
         let splitPayment = text(of: "P_18A", in: fa) == "1"
+        // Adnotacja samofakturowania (art. 106d) — dokument wystawił nabywca.
+        let isSelfInvoicing = text(of: "P_17", in: fa) == "1"
         let saleDate = text(of: "P_6", in: fa)
             .flatMap { FA2Format.dateFormatter.date(from: $0) }
 
@@ -757,6 +764,7 @@ public enum FA2XMLParser {
             notes: notes,
             currency: currency,
             splitPayment: splitPayment,
+            isSelfInvoicing: isSelfInvoicing,
             saleDate: saleDate,
             attachments: attachments,
             rawXML: String(data: data, encoding: .utf8) ?? ""

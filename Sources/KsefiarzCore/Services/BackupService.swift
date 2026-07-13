@@ -98,6 +98,8 @@ public struct BackupInvoice: Codable, Equatable, Sendable {
     public var ryczaltEventDate: Date?
     public var ryczaltAmountOverride: Double?
     public var ryczaltNotes: String?
+    /// Pole od wersji 12 — samofakturowanie (Adnotacje P_17 = 1).
+    public var isSelfInvoicing: Bool?
 }
 
 /// Pozycja proformy w kopii zapasowej.
@@ -262,11 +264,11 @@ public struct BackupFile: Codable, Sendable {
 /// pobierania wszystkiego z KSeF.
 public enum BackupService {
 
-    /// Bieżąca wersja formatu pliku (11: + faktury proforma i wzorzec ich
-    /// numeracji; 10 dodała ustawienia kalendarza i prognozy podatkowej;
-    /// 9 — klasyfikację ryczałtu i formę opodatkowania).
-    /// Starsze pliki są nadal poprawnie importowane.
-    public static let currentVersion = 11
+    /// Bieżąca wersja formatu pliku (12: + samofakturowanie — pole
+    /// isSelfInvoicing i wzorzec numeracji samofaktur; 11 dodała faktury
+    /// proforma i wzorzec ich numeracji; 10 — ustawienia kalendarza
+    /// i prognozy podatkowej). Starsze pliki są nadal poprawnie importowane.
+    public static let currentVersion = 12
 
     /// Klucze ustawień obejmowane kopią zapasową.
     /// Tokenu KSeF celowo tu nie ma — sekret żyje w pęku kluczy i nie może
@@ -297,6 +299,7 @@ public enum BackupService {
         AppSettingsKeys.numberPatternUPR,
         AppSettingsKeys.numberPatternKOR,
         AppSettingsKeys.numberPatternRR,
+        AppSettingsKeys.numberPatternSF,
         AppSettingsKeys.numberPatternPRO,
         AppSettingsKeys.rangeMode,
     ]
@@ -438,6 +441,7 @@ public enum BackupService {
             saleDate: backup.saleDate,
             advanceInvoiceRefs: backup.advanceInvoiceRefs ?? [],
             marginProcedure: backup.marginProcedure ?? "",
+            isSelfInvoicing: backup.isSelfInvoicing ?? false,
             kind: Invoice.Kind(rawValue: backup.kindRaw) ?? .purchase
         )
         invoice.isOfflineMode = backup.isOfflineMode ?? false
@@ -790,7 +794,8 @@ public enum BackupService {
             ryczaltEntryDate: invoice.ryczaltEntryDate,
             ryczaltEventDate: invoice.ryczaltEventDate,
             ryczaltAmountOverride: invoice.ryczaltAmountOverride,
-            ryczaltNotes: invoice.ryczaltNotes.isEmpty ? nil : invoice.ryczaltNotes
+            ryczaltNotes: invoice.ryczaltNotes.isEmpty ? nil : invoice.ryczaltNotes,
+            isSelfInvoicing: invoice.isSelfInvoicing ? true : nil
         )
     }
 

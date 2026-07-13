@@ -54,6 +54,10 @@ public struct NewInvoiceView: View {
     @State private var currency = "PLN"
     @State private var exchangeRate = 0.0
     @State private var splitPayment = false
+    /// Samofakturowanie (P_17 = 1) — wystawiamy dokument jako nabywca
+    /// w imieniu dostawcy; role stron w szkicu są zamieniane jak dla RR,
+    /// a zapisany dokument trafia do zakupów.
+    @State private var isSelfInvoicing = false
     @State private var hasSaleDate = false
     @State private var saleDate = Date.now
     /// Numery KSeF faktur zaliczkowych (ROZ) — jeden na linię.
@@ -74,6 +78,7 @@ public struct NewInvoiceView: View {
     @AppStorage(AppSettingsKeys.numberPatternUPR) private var numberPatternUPR = ""
     @AppStorage(AppSettingsKeys.numberPatternKOR) private var numberPatternKOR = ""
     @AppStorage(AppSettingsKeys.numberPatternRR) private var numberPatternRR = ""
+    @AppStorage(AppSettingsKeys.numberPatternSF) private var numberPatternSF = ""
 
     /// Rodzaje dokumentów dostępne przy wystawianiu (korekta ma własny przepływ).
     private static let invoiceTypes: [(raw: String, label: String)] = [
@@ -158,6 +163,7 @@ public struct NewInvoiceView: View {
         editing: Invoice? = nil,
         initialDraft: InvoiceDraft? = nil,
         sourceTitle: String? = nil,
+        selfInvoicing: Bool = false,
         onCompleted: (() -> Void)? = nil,
         onCreatedInvoice: ((Invoice) -> Void)? = nil
     ) {
@@ -167,6 +173,9 @@ public struct NewInvoiceView: View {
         self.sourceTitle = sourceTitle
         self.onCompleted = onCompleted
         self.onCreatedInvoice = onCreatedInvoice
+        // Wejście „Wystaw samofakturę” z listy zakupów otwiera formularz
+        // z włączonym trybem samofakturowania.
+        _isSelfInvoicing = State(initialValue: selfInvoicing)
     }
 
     /// Czy formularz dotyczy dokumentu korygującego (nowa korekta
@@ -179,6 +188,9 @@ public struct NewInvoiceView: View {
     private var totalVat: Double { lines.reduce(0) { $0 + $1.vatAmount } }
     private var totalGross: Double { totalNet + totalVat }
     private var isRR: Bool { invoiceType == "VAT_RR" }
+    /// Tryby z zamianą ról stron: kontrahent jest sprzedawcą (Podmiot1),
+    /// a nasza firma nabywcą (Podmiot2) — VAT RR oraz samofakturowanie.
+    private var swapsParties: Bool { isRR || isSelfInvoicing }
 
     /// Dane korekty zbudowane z faktury korygowanej (nowa korekta)
     /// lub z pól edytowanej korekty.
@@ -207,12 +219,12 @@ public struct NewInvoiceView: View {
         InvoiceDraft(
             invoiceNumber: invoiceNumber,
             issueDate: issueDate,
-            sellerName: isRR ? buyerName : sellerName,
-            sellerNIP: isRR ? buyerNIP : sellerNIP,
-            sellerAddress: isRR ? buyerAddress : sellerAddress,
-            buyerName: isRR ? sellerName : buyerName,
-            buyerNIP: isRR ? sellerNIP : buyerNIP,
-            buyerAddress: isRR ? sellerAddress : buyerAddress,
+            sellerName: swapsParties ? buyerName : sellerName,
+            sellerNIP: swapsParties ? buyerNIP : sellerNIP,
+            sellerAddress: swapsParties ? buyerAddress : sellerAddress,
+            buyerName: swapsParties ? sellerName : buyerName,
+            buyerNIP: swapsParties ? sellerNIP : buyerNIP,
+            buyerAddress: swapsParties ? sellerAddress : buyerAddress,
             lines: lines,
             paymentDueDate: hasDueDate ? dueDate : nil,
             paymentForm: paymentForm,
@@ -222,6 +234,7 @@ public struct NewInvoiceView: View {
             currency: currency,
             exchangeRate: exchangeRate,
             splitPayment: splitPayment,
+            isSelfInvoicing: isSelfInvoicing && !isRR,
             saleDate: hasSaleDate ? saleDate : nil,
             advanceInvoiceRefs: advanceRefsText
                 .split(separator: "\n")
@@ -280,6 +293,17 @@ public struct NewInvoiceView: View {
                             }
                         }
                     }
+                    if !isRR {
+                        // Korekta dziedziczy adnotację z dokumentu pierwotnego —
+                        // przełącznik jest wtedy tylko informacyjny.
+                        Toggle("Samofakturowanie — wystawiam jako nabywca w imieniu dostawcy", isOn: $isSelfInvoicing)
+                            .disabled(isCorrectionDocument)
+                        if isSelfInvoicing {
+                            Text("Faktura dostanie adnotację „samofakturowanie” (P_17, art. 106d ustawy o VAT) i trafi do zakupów. Wysyłka wymaga uprawnienia „Samofakturowanie” nadanego Twojej firmie przez dostawcę w KSeF (sekcja Uprawnienia po jego stronie) — KSeF sprawdzi tę relację przy przyjęciu dokumentu.")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
                     Toggle(
                         isRR ? "Wspólna data nabycia (P_4A)" : invoiceType == "ZAL"
                             ? "Data otrzymania zaliczki (P_6)"
@@ -336,15 +360,20 @@ public struct NewInvoiceView: View {
                     }
                 }
 
-                Section(isRR ? "Nabywca (Twoja firma)" : "Sprzedawca (Twoja firma)") {
+                Section(swapsParties ? "Nabywca (Twoja firma)" : "Sprzedawca (Twoja firma)") {
                     TextField("Nazwa firmy", text: $sellerName)
                     TextField("NIP", text: $sellerNIP)
                     TextField("Adres", text: $sellerAddress, prompt: Text("ul. Przykładowa 1, 00-001 Warszawa"))
                 }
 
-                Section(isRR ? "Dostawca — rolnik ryczałtowy" : "Nabywca") {
-                    // Dla RR wybieramy dostawcę; dla zwykłej faktury odbiorcę.
-                    let recipients = dictionaryContractors.filter { isRR ? $0.isSupplier : $0.isRecipient }
+                Section(
+                    isRR ? "Dostawca — rolnik ryczałtowy"
+                        : isSelfInvoicing ? "Sprzedawca — dostawca (samofakturowanie)"
+                        : "Nabywca"
+                ) {
+                    // Dla RR i samofakturowania wybieramy dostawcę;
+                    // dla zwykłej faktury odbiorcę.
+                    let recipients = dictionaryContractors.filter { swapsParties ? $0.isSupplier : $0.isRecipient }
                     if !recipients.isEmpty {
                         Menu {
                             ForEach(recipients) { contractor in
@@ -372,9 +401,22 @@ public struct NewInvoiceView: View {
                             Label("Wybierz kontrahenta z historii", systemImage: "person.crop.rectangle.stack")
                         }
                     }
-                    TextField(isRR ? "Imię i nazwisko / nazwa rolnika" : "Nazwa nabywcy", text: $buyerName)
-                    TextField(isRR ? "NIP rolnika" : "NIP nabywcy", text: $buyerNIP)
-                    TextField(isRR ? "Adres rolnika" : "Adres nabywcy", text: $buyerAddress, prompt: Text(isRR ? "wymagany" : "opcjonalnie"))
+                    TextField(
+                        isRR ? "Imię i nazwisko / nazwa rolnika"
+                            : isSelfInvoicing ? "Nazwa dostawcy" : "Nazwa nabywcy",
+                        text: $buyerName
+                    )
+                    TextField(
+                        isRR ? "NIP rolnika" : isSelfInvoicing ? "NIP dostawcy" : "NIP nabywcy",
+                        text: $buyerNIP
+                    )
+                    TextField(
+                        isRR ? "Adres rolnika" : isSelfInvoicing ? "Adres dostawcy" : "Adres nabywcy",
+                        text: $buyerAddress,
+                        // Dostawca jest w dokumencie sprzedawcą (Podmiot1) —
+                        // schema FA(3) wymaga jego adresu.
+                        prompt: Text(swapsParties ? "wymagany" : "opcjonalnie")
+                    )
                 }
 
                 Section("Pozycje") {
@@ -452,8 +494,15 @@ public struct NewInvoiceView: View {
                         }
                     }
                     HStack {
-                        TextField(isRR ? "Rachunek rolnika" : "Numer rachunku bankowego", text: $paymentBankAccount, prompt: Text("26 cyfr (NRB)"))
-                        if !isRR, !dictionaryAccounts.isEmpty {
+                        TextField(
+                            isRR ? "Rachunek rolnika"
+                                : isSelfInvoicing ? "Rachunek dostawcy" : "Numer rachunku bankowego",
+                            text: $paymentBankAccount,
+                            prompt: Text("26 cyfr (NRB)")
+                        )
+                        // Słownik własnych rachunków tylko, gdy odbiorcą
+                        // płatności jest nasza firma (zwykła sprzedaż).
+                        if !swapsParties, !dictionaryAccounts.isEmpty {
                             Menu {
                                 ForEach(dictionaryAccounts) { account in
                                     Button(account.displayName) {
@@ -560,6 +609,8 @@ public struct NewInvoiceView: View {
                 attachments = []
                 splitPayment = false
                 marginProcedure = ""
+                // FA_RR(1) nie ma adnotacji P_17 — tryby się wykluczają.
+                isSelfInvoicing = false
                 for index in lines.indices {
                     lines[index].vatRate = .rr
                     lines[index].ossRate = nil
@@ -573,11 +624,24 @@ public struct NewInvoiceView: View {
             guard editingInvoice == nil else { return }
             prefillInvoiceNumber(force: true)
         }
+        // Przełączenie samofakturowania zmienia strony, serię numeracji
+        // i odbiorcę płatności (płacimy dostawcy — nie podstawiamy
+        // własnego rachunku).
+        .onChange(of: isSelfInvoicing) { _, enabled in
+            if enabled {
+                if paymentBankAccount == defaultBankAccount { paymentBankAccount = "" }
+            } else if paymentBankAccount.isEmpty, !isRR {
+                paymentBankAccount = defaultBankAccount
+            }
+            loadContractors()
+            guard editingInvoice == nil else { return }
+            prefillInvoiceNumber(force: true)
+        }
         .onAppear {
             prefillFromEditedInvoice()
             prefillFromCorrectedInvoice()
             prefillFromInitialDraft()
-            if paymentBankAccount.isEmpty, !isRR { paymentBankAccount = defaultBankAccount }
+            if paymentBankAccount.isEmpty, !swapsParties { paymentBankAccount = defaultBankAccount }
             prefillInvoiceNumber()
             loadContractors()
         }
@@ -616,9 +680,17 @@ public struct NewInvoiceView: View {
     // MARK: Akcje
 
     private var formTitle: String {
-        if editingInvoice != nil { return isRR ? "Edycja faktury VAT RR" : "Edycja faktury" }
+        if editingInvoice != nil {
+            if isRR { return "Edycja faktury VAT RR" }
+            return isSelfInvoicing ? "Edycja samofaktury" : "Edycja faktury"
+        }
         if let sourceTitle { return sourceTitle }
         if isRR { return isCorrectionDocument ? "Korekta faktury VAT RR" : "Nowa faktura VAT RR" }
+        if isSelfInvoicing {
+            return isCorrectionDocument
+                ? "Korekta samofaktury"
+                : "Nowa samofaktura (w imieniu dostawcy)"
+        }
         return isCorrectionDocument ? "Faktura korygująca" : "Nowa faktura"
     }
 
@@ -627,7 +699,10 @@ public struct NewInvoiceView: View {
         invoiceNumber = initial.invoiceNumber
         issueDate = initial.issueDate
         invoiceType = initial.invoiceType
-        if initial.isRR {
+        isSelfInvoicing = initial.isSelfInvoicing
+        if initial.isRR || initial.isSelfInvoicing {
+            // W szkicu sprzedawcą jest kontrahent (rolnik/dostawca) —
+            // do pól formularza wraca po stronie kontrahenta.
             buyerName = initial.sellerName
             buyerNIP = initial.sellerNIP
             buyerAddress = initial.sellerAddress
@@ -668,11 +743,15 @@ public struct NewInvoiceView: View {
         invoiceNumber = editing.invoiceNumber
         issueDate = editing.issueDate
         invoiceType = InvoiceDraft.baseType(for: editing.documentTypeRaw)
-        buyerName = editing.isRR ? editing.sellerName : editing.buyerName
-        buyerNIP = editing.isRR ? editing.sellerNIP : editing.buyerNIP
-        buyerAddress = editing.isRR ? editing.sellerAddress : editing.buyerAddress
+        isSelfInvoicing = editing.isSelfInvoicing && !editing.isRR
+        // Dokumenty z zamianą ról (RR, samofaktura) trzymają kontrahenta
+        // po stronie sprzedawcy.
+        let swapped = editing.isRR || editing.isSelfIssuedPurchase
+        buyerName = swapped ? editing.sellerName : editing.buyerName
+        buyerNIP = swapped ? editing.sellerNIP : editing.buyerNIP
+        buyerAddress = swapped ? editing.sellerAddress : editing.buyerAddress
         paymentForm = editing.paymentForm ?? .transfer
-        paymentBankAccount = editing.paymentBankAccount ?? (editing.isRR ? "" : defaultBankAccount)
+        paymentBankAccount = editing.paymentBankAccount ?? (swapped ? "" : defaultBankAccount)
         correctionReason = editing.correctionReason ?? ""
         if let due = editing.paymentDueDate {
             hasDueDate = true
@@ -715,11 +794,16 @@ public struct NewInvoiceView: View {
     private func prefillFromCorrectedInvoice() {
         guard let original = correctingInvoice, buyerName.isEmpty else { return }
         invoiceType = InvoiceDraft.baseType(for: original.documentTypeRaw)
-        buyerName = original.isRR ? original.sellerName : original.buyerName
-        buyerNIP = original.isRR ? original.sellerNIP : original.buyerNIP
-        buyerAddress = original.isRR ? original.sellerAddress : original.buyerAddress
+        // Korekta samofaktury pozostaje samofakturą (adnotacja P_17
+        // i role stron jak w dokumencie pierwotnym). Sprzedaż z adnotacją
+        // samofakturowania korygujemy już jako zwykłą własną korektę.
+        isSelfInvoicing = original.isSelfIssuedPurchase && !original.isRR
+        let swapped = original.isRR || original.isSelfIssuedPurchase
+        buyerName = swapped ? original.sellerName : original.buyerName
+        buyerNIP = swapped ? original.sellerNIP : original.buyerNIP
+        buyerAddress = swapped ? original.sellerAddress : original.buyerAddress
         paymentForm = original.paymentForm ?? .transfer
-        paymentBankAccount = original.paymentBankAccount ?? (original.isRR ? "" : defaultBankAccount)
+        paymentBankAccount = original.paymentBankAccount ?? (swapped ? "" : defaultBankAccount)
         marginProcedure = original.marginProcedureRaw
         currency = original.currency
         exchangeRate = original.exchangeRate
@@ -750,6 +834,10 @@ public struct NewInvoiceView: View {
         let specific: String
         if correctionInfo != nil {
             specific = numberPatternKOR
+        } else if isSelfInvoicing {
+            // Samofaktury mają jedną własną serię niezależnie od rodzaju
+            // dokumentu — numerację zwykle określa umowa z dostawcą.
+            specific = numberPatternSF
         } else {
             switch invoiceType {
             case "ZAL": specific = numberPatternZAL
@@ -763,6 +851,16 @@ public struct NewInvoiceView: View {
         return trimmed.isEmpty ? numberPattern : trimmed
     }
 
+    /// Czy dokument należy do serii numeracji bieżącego trybu formularza:
+    /// RR, samofaktury (nasze zakupowe dokumenty samofakturowania) albo
+    /// zwykła sprzedaż. Sprzedaż z adnotacją samofakturowania (numer nadał
+    /// klient według własnej serii) nie wchodzi do żadnej naszej serii.
+    private func belongsToCurrentSeries(_ invoice: Invoice) -> Bool {
+        if isRR { return invoice.isRR }
+        if isSelfInvoicing { return invoice.isSelfIssuedPurchase && !invoice.isRR }
+        return invoice.kind == .sales && !invoice.isSelfInvoicing
+    }
+
     /// Proponuje kolejny numer według wzorca rodzaju dokumentu — każdy
     /// rodzaj ma własną serię (licznik rośnie w obrębie numerów pasujących
     /// do danego wzorca).
@@ -774,7 +872,7 @@ public struct NewInvoiceView: View {
             guard invoiceNumber.isEmpty else { return }
         }
         let existing = (try? modelContext.fetch(FetchDescriptor<Invoice>()))?
-            .filter { isRR ? $0.isRR : $0.kind == .sales }
+            .filter { belongsToCurrentSeries($0) }
             .map(\.invoiceNumber) ?? []
         invoiceNumber = InvoiceNumberGenerator.nextNumber(
             pattern: patternForCurrentType,
@@ -789,19 +887,23 @@ public struct NewInvoiceView: View {
         let descriptor = FetchDescriptor<Invoice>(
             sortBy: [SortDescriptor(\Invoice.issueDate, order: .reverse)]
         )
-        let salesInvoices = ((try? modelContext.fetch(descriptor)) ?? []).filter {
-            isRR ? $0.isRR : $0.kind == .sales
+        // Historia kontrahentów: dla trybów z zamianą ról (RR, samofaktura)
+        // dostawcy z naszych dokumentów zakupowych, inaczej odbiorcy sprzedaży.
+        let historyInvoices = ((try? modelContext.fetch(descriptor)) ?? []).filter {
+            if isRR { return $0.isRR }
+            if isSelfInvoicing { return $0.isSelfIssuedPurchase }
+            return $0.kind == .sales
         }
         var seen = Set<String>()
-        contractors = salesInvoices.compactMap { invoice in
-            let nip = isRR ? invoice.sellerNIP : invoice.buyerNIP
+        contractors = historyInvoices.compactMap { invoice in
+            let nip = swapsParties ? invoice.sellerNIP : invoice.buyerNIP
             guard !nip.isEmpty, !seen.contains(nip) else { return nil }
             seen.insert(nip)
             return HistoryContractor(
                 id: nip,
-                name: isRR ? invoice.sellerName : invoice.buyerName,
+                name: swapsParties ? invoice.sellerName : invoice.buyerName,
                 nip: nip,
-                address: isRR ? invoice.sellerAddress : invoice.buyerAddress
+                address: swapsParties ? invoice.sellerAddress : invoice.buyerAddress
             )
         }
     }
@@ -819,7 +921,7 @@ public struct NewInvoiceView: View {
     /// z wyłączeniem dokumentu właśnie edytowanego.
     private func existingNumbers() -> Set<String> {
         let all = ((try? modelContext.fetch(FetchDescriptor<Invoice>())) ?? []).filter {
-            isRR ? $0.isRR : $0.kind == .sales
+            belongsToCurrentSeries($0)
         }
         return Set(
             all.filter { $0.id != editingInvoice?.id }
@@ -1002,6 +1104,10 @@ public struct NewInvoiceView: View {
         invoice.saleDate = draft.saleDate
         invoice.advanceInvoiceRefs = draft.advanceInvoiceRefs
         invoice.marginProcedureRaw = draft.marginProcedure
+        invoice.isSelfInvoicing = draft.isSelfInvoicing
+        // Zmiana trybu przy edycji (np. włączenie samofakturowania) może
+        // przenieść dokument między sprzedażą a zakupami.
+        invoice.kind = draft.isRR || draft.isSelfInvoicing ? .purchase : .sales
         invoice.attachmentJSON = draft.attachments.encodedJSON()
         invoice.rawXmlContent = xml
         if let ksefId { invoice.ksefId = ksefId }
@@ -1071,7 +1177,8 @@ public struct NewInvoiceView: View {
             saleDate: draft.saleDate,
             advanceInvoiceRefs: draft.advanceInvoiceRefs,
             marginProcedure: draft.marginProcedure,
-            kind: draft.isRR ? .purchase : .sales
+            isSelfInvoicing: draft.isSelfInvoicing,
+            kind: draft.isRR || draft.isSelfInvoicing ? .purchase : .sales
         )
         invoice.attachmentJSON = draft.attachments.encodedJSON()
         modelContext.insert(invoice)

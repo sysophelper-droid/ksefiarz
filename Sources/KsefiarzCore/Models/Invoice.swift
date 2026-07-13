@@ -183,6 +183,13 @@ public final class Invoice {
     /// "3_1" = towary używane, "3_2" = dzieła sztuki, "3_3" = antyki.
     public var marginProcedureRaw: String = ""
 
+    /// Samofakturowanie (Adnotacje P_17 = 1, art. 106d ust. 1 ustawy o VAT) —
+    /// faktura wystawiona przez NABYWCĘ w imieniu i na rzecz sprzedawcy.
+    /// Dla zakupów: my (nabywca) wystawiliśmy dokument w imieniu dostawcy;
+    /// dla sprzedaży: dokument wystawił w naszym imieniu nasz klient.
+    /// Wartość domyślna obowiązkowa (lekka migracja istniejącej bazy).
+    public var isSelfInvoicing: Bool = false
+
     /// Załącznik FA(3) (element Zalacznik) — bloki danych zserializowane
     /// do JSON (`[FA3AttachmentBlock]`); "" = brak załącznika.
     public var attachmentJSON: String = ""
@@ -249,6 +256,34 @@ public final class Invoice {
     /// Czy dokument należy do osobnej struktury FA_RR(1).
     public var isRR: Bool {
         documentTypeRaw == "VAT_RR" || documentTypeRaw == "KOR_VAT_RR"
+    }
+
+    /// Zakupowy dokument wystawiony PRZEZ NAS jako nabywcę: faktura VAT RR
+    /// albo samofaktura (samofakturowanie). Taki dokument podlega pełnemu
+    /// cyklowi wysyłki do KSeF jak sprzedaż (edycja/korekta/wysyłka),
+    /// w odróżnieniu od zakupów pobranych z KSeF i ręcznych faktur kosztowych.
+    /// Sprzedaż z adnotacją samofakturowania (wystawiona przez klienta
+    /// w naszym imieniu) świadomie NIE wchodzi do tej kategorii.
+    public var isSelfIssuedPurchase: Bool {
+        kind == .purchase && (isRR || isSelfInvoicing)
+    }
+
+    /// Dokument, którego cyklem wysyłki do KSeF zarządza aplikacja:
+    /// własna sprzedaż albo zakup wystawiony przez nas jako nabywcę (VAT RR
+    /// lub samofaktura). Sprzedaż z P_17 sporządził klient w naszym imieniu,
+    /// więc nie wolno proponować dla niej naszej korekty/edycji. Zwykłe
+    /// zakupy są tylko pobierane z KSeF, a ręczne faktury kosztowe pozostają
+    /// poza cyklem wysyłki.
+    public var hasKSeFSubmissionLifecycle: Bool {
+        (kind == .sales && !isSelfInvoicing) || isSelfIssuedPurchase
+    }
+
+    /// NIP kontekstu, w którym aplikacja wysyła dokument do KSeF. Dla
+    /// dokumentów wystawianych przez nas jako nabywcę kontekstem jest
+    /// Podmiot2; dla zwykłej sprzedaży — Podmiot1. Wartość jest używana
+    /// m.in. w KODZIE II dokumentu offline.
+    public var ksefSubmissionContextNIP: String {
+        isSelfIssuedPurchase ? buyerNIP : sellerNIP
     }
 
     /// Numery KSeF faktur zaliczkowych (dokumenty ROZ) jako tablica.
@@ -404,6 +439,7 @@ public final class Invoice {
         saleDate: Date? = nil,
         advanceInvoiceRefs: [String] = [],
         marginProcedure: String = "",
+        isSelfInvoicing: Bool = false,
         kind: Kind = .purchase
     ) {
         self.id = id
@@ -447,6 +483,7 @@ public final class Invoice {
         self.saleDate = saleDate
         self.advanceInvoiceRefsRaw = advanceInvoiceRefs.joined(separator: "\n")
         self.marginProcedureRaw = marginProcedure
+        self.isSelfInvoicing = isSelfInvoicing
         self.kindRaw = kind.rawValue
     }
 
@@ -498,6 +535,7 @@ public extension Invoice {
             currency: data.currency,
             splitPayment: data.splitPayment,
             saleDate: data.saleDate,
+            isSelfInvoicing: data.isSelfInvoicing,
             kind: kind
         )
     }
@@ -537,6 +575,7 @@ public extension Invoice {
         if !data.notes.isEmpty { notes = data.notes }
         currency = data.currency
         splitPayment = data.splitPayment
+        isSelfInvoicing = data.isSelfInvoicing
         if let sale = data.saleDate { saleDate = sale }
         if !data.attachments.isEmpty { attachmentJSON = data.attachments.encodedJSON() }
 
