@@ -7,7 +7,7 @@ import Foundation
 /// Format to dziewięć pól rozdzielonych znakiem `|` (potok):
 /// `NIP | KodKraju | NrRachunku | Kwota | NazwaOdbiorcy | Tytuł | Rez1 | Rez2 | Rez3`,
 /// gdzie:
-/// - **NIP** — 10 cyfr NIP odbiorcy (opcjonalny; przy niepoprawnym pusty),
+/// - **NIP** — poprawny, 10-cyfrowy NIP odbiorcy instytucjonalnego,
 /// - **KodKraju** — dwuliterowy kod kraju odbiorcy (np. `PL`),
 /// - **NrRachunku** — 26 cyfr NRB (bez prefiksu `PL` i separatorów),
 /// - **Kwota** — kwota w GROSZACH, wyrównana zerami do min. 6 cyfr (`%06d`),
@@ -35,18 +35,29 @@ public enum PaymentQRCode {
     /// Minimalna liczba cyfr pola kwoty (zera wiodące).
     public static let amountMinDigits = 6
 
+    private static let asciiDigits = Set("0123456789")
+    /// Bez separatora pól `|`; znaki spoza rekomendacji są zastępowane spacją.
+    private static let allowedTextCharacters = Set(
+        "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 ,./\\-@#&*_"
+            + "ąćęłńóśźżĄĆĘŁŃÓŚŹŻ"
+    )
+
     /// Czy kod QR płatności ma być rysowany na wydruku faktury. Ustawienie
     /// jest domyślnie WŁĄCZONE — funkcja ma wartość dopiero, gdy odbiorca
     /// może dzięki niej zapłacić, więc nie zaśmieca dokumentów, na których
     /// i tak się nie pojawi (waluta obca, brak rachunku, faktura opłacona).
     public static func isEnabled(defaults: UserDefaults = .standard) -> Bool {
-        defaults.object(forKey: AppSettingsKeys.pdfPaymentQR) as? Bool ?? true
+        guard defaults.object(forKey: AppSettingsKeys.pdfPaymentQR) != nil else { return true }
+        // Kopia zapasowa przechowuje ustawienia jako String ("0"/"1").
+        // `bool(forKey:)` poprawnie obsługuje zarówno String, jak i Bool.
+        return defaults.bool(forKey: AppSettingsKeys.pdfPaymentQR)
     }
 
     /// Buduje treść kodu 2D ZBP z danych pojedynczego przelewu. Zwraca `nil`,
-    /// gdy przelewu nie da się poprawnie zakodować (waluta inna niż PLN,
-    /// kwota niedodatnia, brak poprawnego 26-cyfrowego rachunku, pusta nazwa
-    /// lub tytuł, albo przekroczenie 160 znaków).
+    /// gdy przelewu nie da się poprawnie zakodować (waluta/kraj inne niż
+    /// PLN/PL, niepoprawny NIP odbiorcy instytucjonalnego, kwota niedodatnia
+    /// lub niefinitywna, brak poprawnego 26-cyfrowego rachunku, pusta nazwa
+    /// lub tytuł albo przekroczenie 160 znaków).
     public static func zbpTransferContent(
         recipientName: String,
         recipientNIP: String,
@@ -59,6 +70,12 @@ public enum PaymentQRCode {
         // Standard 2D ZBP to krajowy przelew w złotych — kwota w groszach.
         guard currency.trimmingCharacters(in: .whitespaces).uppercased() == "PLN" else { return nil }
 
+        let nip = normalizedNIP(recipientNIP)
+        guard InvoiceValidator.isValidNIP(nip) else { return nil }
+
+        let country = normalizedCountry(countryCode)
+        guard country == "PL" else { return nil }
+
         let account = normalizedBankAccount(bankAccount)
         guard account.count == bankAccountLength else { return nil }
 
@@ -68,15 +85,21 @@ public enum PaymentQRCode {
         let paymentTitle = truncated(title, to: titleMaxLength)
         guard !paymentTitle.isEmpty else { return nil }
 
-        let grosze = Int((amount * 100).rounded())
+        guard amount.isFinite, amount > 0 else { return nil }
+        let roundedGrosze = (amount * 100).rounded()
+        // Konwersja wartości NaN/nieskończonej lub wykraczającej poza Int
+        // kończy proces pułapką, więc odrzucamy ją przed inicjalizatorem.
+        guard roundedGrosze.isFinite,
+              roundedGrosze > 0,
+              roundedGrosze < Double(Int.max) else { return nil }
+        let grosze = Int(roundedGrosze)
         guard grosze > 0 else { return nil }
-        // `%ld` (long) — na 64-bitowym macOS `%d` odczytałby tylko 32 bity,
-        // psując pole kwoty dla dużych faktur (grosze > Int32.max ≈ 21,4 mln zł).
-        let amountField = String(format: "%0\(amountMinDigits)ld", grosze)
+        let digits = String(grosze)
+        let amountField = String(repeating: "0", count: max(0, amountMinDigits - digits.count)) + digits
 
         let fields = [
-            normalizedNIP(recipientNIP), // NIP odbiorcy (opcjonalny)
-            normalizedCountry(countryCode),
+            nip,
+            country,
             account,
             amountField,
             name,
@@ -125,31 +148,43 @@ public enum PaymentQRCode {
 
     // MARK: - Normalizacje pól
 
-    /// Numer rachunku do 26 cyfr: usuwa spacje, prefiks `PL` i pozostałe znaki.
+    /// Numer rachunku do 26 cyfr: usuwa prefiks `PL`, spacje i myślniki.
+    /// Inne znaki odrzucają wartość zamiast być po cichu pomijane.
     static func normalizedBankAccount(_ value: String) -> String {
-        var text = value.uppercased()
+        var text = value.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
         if text.hasPrefix("PL") { text.removeFirst(2) }
-        return String(text.filter(\.isNumber))
+        guard text.allSatisfy({ asciiDigits.contains($0) || $0.isWhitespace || $0 == "-" }) else {
+            return ""
+        }
+        return String(text.filter { asciiDigits.contains($0) })
     }
 
-    /// NIP do dokładnie 10 cyfr (bez prefiksu `PL` i kresek); w przeciwnym
-    /// razie pusty — pole jest opcjonalne, więc niepełny NIP go nie psuje.
+    /// NIP do dokładnie 10 cyfr (bez prefiksu `PL`, spacji i kresek).
+    /// Inne znaki albo zła długość dają pustą wartość; poprawność sumy
+    /// kontrolnej sprawdza `InvoiceValidator` przed zbudowaniem kodu.
     static func normalizedNIP(_ value: String) -> String {
-        var text = value.uppercased()
+        var text = value.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
         if text.hasPrefix("PL") { text.removeFirst(2) }
-        let digits = String(text.filter(\.isNumber))
+        guard text.allSatisfy({ asciiDigits.contains($0) || $0.isWhitespace || $0 == "-" }) else {
+            return ""
+        }
+        let digits = String(text.filter { asciiDigits.contains($0) })
         return digits.count == 10 ? digits : ""
     }
 
     /// Dwuliterowy kod kraju (wielkie litery) albo pusty.
     static func normalizedCountry(_ value: String) -> String {
-        let letters = value.uppercased().filter(\.isLetter)
-        return letters.count == 2 ? String(letters) : ""
+        let country = value.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        return country.count == 2 && country.allSatisfy(\.isASCII) && country.allSatisfy(\.isLetter)
+            ? country
+            : ""
     }
 
-    /// Przycina po przycięciu białych znaków do zadanego limitu.
+    /// Zastępuje znaki spoza rekomendacji ZBP spacją, scala białe znaki
+    /// i przycina wynik do zadanego limitu. W szczególności usuwa możliwość
+    /// wstrzyknięcia separatora `|`, który zmieniłby strukturę dziewięciu pól.
     static func truncated(_ value: String, to limit: Int) -> String {
-        String(value.trimmingCharacters(in: .whitespacesAndNewlines).prefix(limit))
+        String(sanitizedText(value).prefix(limit)).trimmingCharacters(in: .whitespaces)
     }
 
     /// Nazwa odbiorcy skrócona do 20 znaków (limit standardu 2D ZBP). Gdy
@@ -158,7 +193,7 @@ public enum PaymentQRCode {
     /// „Krzysztof Borek It-Krak” staje się „Krzysztof Borek”, a nie
     /// „Krzysztof Borek It-K”.
     static func truncatedName(_ value: String) -> String {
-        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmed = sanitizedText(value)
         guard trimmed.count > nameMaxLength else { return trimmed }
         let hardCut = String(trimmed.prefix(nameMaxLength))
         if let space = hardCut.lastIndex(of: " ") {
@@ -166,5 +201,27 @@ public enum PaymentQRCode {
             if atWord.count >= nameMaxLength / 2 { return atWord }
         }
         return hardCut.trimmingCharacters(in: .whitespaces)
+    }
+
+    private static func sanitizedText(_ value: String) -> String {
+        let normalized = value.precomposedStringWithCanonicalMapping
+        var result = ""
+        var previousWasSpace = true
+
+        for character in normalized {
+            if allowedTextCharacters.contains(character) {
+                if character == " " {
+                    guard !previousWasSpace else { continue }
+                    previousWasSpace = true
+                } else {
+                    previousWasSpace = false
+                }
+                result.append(character)
+            } else if !previousWasSpace {
+                result.append(" ")
+                previousWasSpace = true
+            }
+        }
+        return result.trimmingCharacters(in: .whitespaces)
     }
 }

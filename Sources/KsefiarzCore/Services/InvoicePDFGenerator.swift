@@ -158,7 +158,9 @@ public enum InvoicePDFGenerator {
            let content = PaymentQRCode.zbpTransferContent(
                for: invoice, recipientNameOverride: paymentRecipientName
            ) {
-            paymentImage = QRCodeRenderer.image(for: content)
+            // Rekomendacja ZBP wymaga dla kodu płatności korekcji błędów L.
+            // Kody KSeF zachowują domyślny poziom M wspólnego renderera.
+            paymentImage = QRCodeRenderer.image(for: content, correctionLevel: .low)
         }
 
         // Bez żadnego kodu nie rezerwujemy miejsca i nie rysujemy sekcji QR.

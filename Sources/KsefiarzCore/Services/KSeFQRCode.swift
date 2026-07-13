@@ -89,11 +89,22 @@ public enum KSeFVerificationLink {
 /// Rysowanie kodów QR (CoreImage) do osadzenia na wydruku PDF.
 public enum QRCodeRenderer {
 
+    public enum ErrorCorrectionLevel: String, Sendable {
+        case low = "L"
+        case medium = "M"
+        case quartile = "Q"
+        case high = "H"
+    }
+
     /// Generuje obraz QR dla podanego tekstu; `scale` mnoży rozmiar modułu.
-    public static func image(for text: String, scale: CGFloat = 8) -> CGImage? {
+    public static func image(
+        for text: String,
+        scale: CGFloat = 8,
+        correctionLevel: ErrorCorrectionLevel = .medium
+    ) -> CGImage? {
         guard let filter = CIFilter(name: "CIQRCodeGenerator") else { return nil }
         filter.setValue(Data(text.utf8), forKey: "inputMessage")
-        filter.setValue("M", forKey: "inputCorrectionLevel")
+        filter.setValue(correctionLevel.rawValue, forKey: "inputCorrectionLevel")
         guard let output = filter.outputImage else { return nil }
         let scaled = output.transformed(by: CGAffineTransform(scaleX: scale, y: scale))
         return CIContext().createCGImage(scaled, from: scaled.extent)

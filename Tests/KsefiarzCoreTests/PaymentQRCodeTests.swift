@@ -36,55 +36,59 @@ struct PaymentQRCodeTests {
         #expect(PaymentQRCode.normalizedBankAccount("PL 12 3456 7890 1234 5678 9012 3456")
             == "12345678901234567890123456")
         #expect(PaymentQRCode.normalizedBankAccount("12345678901234567890123456").count == 26)
+        #expect(PaymentQRCode.normalizedBankAccount("PLxx12345678901234567890123456").isEmpty)
     }
 
     @Test("Rachunek o innej długości niż 26 cyfr → brak kodu")
     func invalidAccount() {
         // 25 cyfr — za krótki.
         #expect(PaymentQRCode.zbpTransferContent(
-            recipientName: "Firma", recipientNIP: "", bankAccount: "1234567890123456789012345",
+            recipientName: "Firma", recipientNIP: "5260250274", bankAccount: "1234567890123456789012345",
             amount: 100, currency: "PLN", title: "FV/1"
         ) == nil)
         // Pusty rachunek.
         #expect(PaymentQRCode.zbpTransferContent(
-            recipientName: "Firma", recipientNIP: "", bankAccount: "",
+            recipientName: "Firma", recipientNIP: "5260250274", bankAccount: "",
             amount: 100, currency: "PLN", title: "FV/1"
         ) == nil)
     }
 
-    @Test("NIP: prefiks PL i kreski usuwane; niepoprawny (≠10 cyfr) → pusty")
+    @Test("NIP odbiorcy instytucjonalnego jest obowiązkowy i musi być poprawny")
     func nipNormalization() {
         #expect(PaymentQRCode.normalizedNIP("PL526-025-02-74") == "5260250274")
         #expect(PaymentQRCode.normalizedNIP("123") == "")       // za krótki
         #expect(PaymentQRCode.normalizedNIP("12345678901") == "") // za długi
-        // Niepoprawny NIP daje pole puste, ale kod dalej powstaje.
-        let content = PaymentQRCode.zbpTransferContent(
-            recipientName: "Firma", recipientNIP: "123", bankAccount: "12345678901234567890123456",
-            amount: 100, currency: "PLN", title: "FV/1"
-        )
-        #expect(content?.hasPrefix("|PL|") == true)
+        #expect(PaymentQRCode.normalizedNIP("52602502x4") == "")
+
+        for invalidNIP in ["", "123", "5260250275"] {
+            #expect(PaymentQRCode.zbpTransferContent(
+                recipientName: "Firma", recipientNIP: invalidNIP,
+                bankAccount: "12345678901234567890123456",
+                amount: 100, currency: "PLN", title: "FV/1"
+            ) == nil)
+        }
     }
 
     @Test("Kwota w groszach: min. 6 cyfr z zerami wiodącymi i zaokrąglenie")
     func amountFormatting() {
         // 99,99 zł → 9999 gr → 6 cyfr z zerem wiodącym.
         let a = PaymentQRCode.zbpTransferContent(
-            recipientName: "F", recipientNIP: "", bankAccount: "12345678901234567890123456",
+            recipientName: "F", recipientNIP: "5260250274", bankAccount: "12345678901234567890123456",
             amount: 99.99, currency: "PLN", title: "T"
         )
         #expect(a?.components(separatedBy: "|")[3] == "009999")
 
         // 12 345,67 zł → 1 234 567 gr → pole rośnie ponad 6 cyfr.
         let b = PaymentQRCode.zbpTransferContent(
-            recipientName: "F", recipientNIP: "", bankAccount: "12345678901234567890123456",
+            recipientName: "F", recipientNIP: "5260250274", bankAccount: "12345678901234567890123456",
             amount: 12_345.67, currency: "PLN", title: "T"
         )
         #expect(b?.components(separatedBy: "|")[3] == "1234567")
 
         // Duża kwota powyżej Int32.max w groszach (25 mln zł → 2,5 mld gr):
-        // regresja formatu %ld — z %d pole kwoty byłoby przekłamane.
+        // regresja pełnego zakresu Int — format 32-bitowy przekłamywał wartość.
         let c = PaymentQRCode.zbpTransferContent(
-            recipientName: "F", recipientNIP: "", bankAccount: "12345678901234567890123456",
+            recipientName: "F", recipientNIP: "5260250274", bankAccount: "12345678901234567890123456",
             amount: 25_000_000, currency: "PLN", title: "T"
         )
         #expect(c?.components(separatedBy: "|")[3] == "2500000000")
@@ -94,7 +98,18 @@ struct PaymentQRCodeTests {
     func nonPositiveAmount() {
         for amount in [0.0, -5.0] {
             #expect(PaymentQRCode.zbpTransferContent(
-                recipientName: "F", recipientNIP: "", bankAccount: "12345678901234567890123456",
+                recipientName: "F", recipientNIP: "5260250274", bankAccount: "12345678901234567890123456",
+                amount: amount, currency: "PLN", title: "T"
+            ) == nil)
+        }
+    }
+
+    @Test("Kwota niefinitywna lub poza zakresem Int → brak kodu bez awarii")
+    func invalidFloatingPointAmount() {
+        for amount in [Double.nan, .infinity, -.infinity, .greatestFiniteMagnitude] {
+            #expect(PaymentQRCode.zbpTransferContent(
+                recipientName: "F", recipientNIP: "5260250274",
+                bankAccount: "12345678901234567890123456",
                 amount: amount, currency: "PLN", title: "T"
             ) == nil)
         }
@@ -103,12 +118,12 @@ struct PaymentQRCodeTests {
     @Test("Waluta inna niż PLN → brak kodu (standard to przelew krajowy)")
     func onlyPLN() {
         #expect(PaymentQRCode.zbpTransferContent(
-            recipientName: "F", recipientNIP: "", bankAccount: "12345678901234567890123456",
+            recipientName: "F", recipientNIP: "5260250274", bankAccount: "12345678901234567890123456",
             amount: 100, currency: "EUR", title: "T"
         ) == nil)
         // PLN pisane małymi/spacją — dalej akceptowane.
         #expect(PaymentQRCode.zbpTransferContent(
-            recipientName: "F", recipientNIP: "", bankAccount: "12345678901234567890123456",
+            recipientName: "F", recipientNIP: "5260250274", bankAccount: "12345678901234567890123456",
             amount: 100, currency: " pln ", title: "T"
         ) != nil)
     }
@@ -117,7 +132,7 @@ struct PaymentQRCodeTests {
     func truncation() throws {
         let content = try #require(PaymentQRCode.zbpTransferContent(
             recipientName: "Przedsiębiorstwo Handlowo-Usługowe ABCDEF",
-            recipientNIP: "",
+            recipientNIP: "5260250274",
             bankAccount: "12345678901234567890123456",
             amount: 100,
             currency: "PLN",
@@ -126,6 +141,22 @@ struct PaymentQRCodeTests {
         let fields = content.components(separatedBy: "|")
         #expect(fields[4].count <= 20)
         #expect(fields[5].count == 32)
+    }
+
+    @Test("Znaki spoza rekomendacji, w tym separator |, nie psują struktury pól")
+    func unsupportedCharactersAreSanitized() throws {
+        let content = try #require(PaymentQRCode.zbpTransferContent(
+            recipientName: "Firma | (Test)",
+            recipientNIP: "5260250274",
+            bankAccount: "12345678901234567890123456",
+            amount: 100,
+            currency: "PLN",
+            title: "FV|1:2026"
+        ))
+        let fields = content.components(separatedBy: "|")
+        #expect(fields.count == 9)
+        #expect(fields[4] == "Firma Test")
+        #expect(fields[5] == "FV 1 2026")
     }
 
     @Test("Nazwa za długa: cięcie na granicy słowa zamiast w środku")
@@ -145,20 +176,25 @@ struct PaymentQRCodeTests {
     @Test("Pusta nazwa lub pusty tytuł → brak kodu")
     func emptyMandatoryFields() {
         #expect(PaymentQRCode.zbpTransferContent(
-            recipientName: "   ", recipientNIP: "", bankAccount: "12345678901234567890123456",
+            recipientName: "   ", recipientNIP: "5260250274", bankAccount: "12345678901234567890123456",
             amount: 100, currency: "PLN", title: "T"
         ) == nil)
         #expect(PaymentQRCode.zbpTransferContent(
-            recipientName: "F", recipientNIP: "", bankAccount: "12345678901234567890123456",
+            recipientName: "F", recipientNIP: "5260250274", bankAccount: "12345678901234567890123456",
             amount: 100, currency: "PLN", title: "  "
         ) == nil)
     }
 
-    @Test("Kod kraju: niepoprawny → pusty, domyślnie PL")
+    @Test("Kod kraju: dla przelewu krajowego wymagane PL")
     func countryNormalization() {
         #expect(PaymentQRCode.normalizedCountry("pl") == "PL")
         #expect(PaymentQRCode.normalizedCountry("POL") == "")
         #expect(PaymentQRCode.normalizedCountry("") == "")
+        #expect(PaymentQRCode.zbpTransferContent(
+            recipientName: "F", recipientNIP: "5260250274",
+            bankAccount: "12345678901234567890123456",
+            amount: 100, currency: "PLN", title: "T", countryCode: "DE"
+        ) == nil)
     }
 
     // MARK: - Wariant z faktury
@@ -256,6 +292,17 @@ struct PaymentQRCodeTests {
         #expect(PaymentQRCode.isEnabled(defaults: defaults) == false)
         defaults.set(true, forKey: AppSettingsKeys.pdfPaymentQR)
         #expect(PaymentQRCode.isEnabled(defaults: defaults) == true)
+        // Import kopii zapasowej odtwarza wartości UserDefaults jako String.
+        defaults.set("0", forKey: AppSettingsKeys.pdfPaymentQR)
+        #expect(PaymentQRCode.isEnabled(defaults: defaults) == false)
+        defaults.set("1", forKey: AppSettingsKeys.pdfPaymentQR)
+        #expect(PaymentQRCode.isEnabled(defaults: defaults) == true)
+    }
+
+    @Test("Kopia zapasowa obejmuje oba ustawienia kodu płatności")
+    func backupIncludesPaymentQRSettings() {
+        #expect(BackupService.backedUpSettingsKeys.contains(AppSettingsKeys.pdfPaymentQR))
+        #expect(BackupService.backedUpSettingsKeys.contains(AppSettingsKeys.paymentQRRecipientName))
     }
 }
 
@@ -288,6 +335,13 @@ struct InvoicePDFPaymentQRTests {
         #expect(codes?.payment != nil)
         #expect(codes?.verification == nil) // brak numeru KSeF i nie offline
         #expect(codes?.verificationLabel == "")
+    }
+
+    @Test("Renderer obsługuje wymagany przez ZBP poziom korekcji błędów L")
+    func lowErrorCorrectionLevel() {
+        let image = QRCodeRenderer.image(for: "test", correctionLevel: .low)
+        #expect(image != nil)
+        #expect(QRCodeRenderer.ErrorCorrectionLevel.low.rawValue == "L")
     }
 
     @Test("Wyłączone ustawienie: brak kodu płatności (i brak sekcji QR, gdy nic więcej)")

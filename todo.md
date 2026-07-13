@@ -88,16 +88,20 @@ kolejność dowolna. ⚠️ operacje modyfikujące KSeF testować wyłącznie na
 
 - [x] ⭐ C1. Na własnych fakturach sprzedaży PDF dostaje kod „Zapłać (QR)”
   zgodny z Rekomendacją Związku Banków Polskich (9 pól rozdzielonych `|`:
-  NIP, kod kraju, 26-cyfrowy NRB, kwota w groszach `%06d`, nazwa odbiorcy ≤20,
+  poprawny NIP odbiorcy instytucjonalnego, kod kraju, 26-cyfrowy NRB,
+  kwota w groszach `%06d`, nazwa odbiorcy ≤20,
   tytuł ≤32, trzy pola rezerwowe; maks. 160 znaków). Klient skanuje kod
   aplikacją banku i płaci bez przepisywania danych. Kod powstaje wyłącznie dla
   faktur sprzedaży w PLN z podanym rachunkiem i niezerowym saldem — kwota to
   saldo pozostałe do zapłaty (`outstandingAmount`), więc faktura opłacona kodu
   nie dostaje, a częściowo opłacona dostaje kod na kwotę brakującą. Odbiorcą
   przelewu jest sprzedawca, tytułem — numer faktury; rachunek i NIP są
-  normalizowane (usuwanie spacji, prefiksu `PL`, kresek). Przełącznik
+  normalizowane (usuwanie spacji, prefiksu `PL`, kresek), a znaki spoza
+  rekomendacji nie mogą wstrzyknąć separatora pól. Renderer używa wymaganego
+  przez ZBP poziomu korekcji błędów `L`. Przełącznik
   w Ustawieniach → Firma („Drukuj kod QR płatności na fakturach”, domyślnie
-  włączony, w kopii zapasowej), niezależny od kodu weryfikacyjnego KSeF.
+  włączony, w kopii zapasowej; poprawnie odczytywany także po przywróceniu
+  tekstowej wartości `"0"`/`"1"`), niezależny od kodu weryfikacyjnego KSeF.
   Czysta logika `PaymentQRCode` (weryfikacja formatu u źródła — referencyjna
   biblioteka ZBP) z osobnym suitem testów; render `QRCodeRenderer`, osadzenie
   w `InvoicePDFGenerator`.

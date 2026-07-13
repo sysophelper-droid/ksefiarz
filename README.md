@@ -57,7 +57,7 @@ Sources/
         ├── InvoiceAutomationView.swift # szablony, cykle i kolejka zatwierdzeń
         ├── HiddenInvoicesView.swift # archiwum „Nieuprawnione / Ukryte”
         └── SettingsView.swift    # NIP, token KSeF, środowisko
-Tests/KsefiarzCoreTests/          # 677 testów (Swift Testing) — model, parser, usługa, kryptografia, logika
+Tests/KsefiarzCoreTests/          # 706 testów (Swift Testing) — model, parser, usługa, kryptografia, logika
 ```
 
 ## Funkcje
@@ -153,7 +153,9 @@ Tests/KsefiarzCoreTests/          # 677 testów (Swift Testing) — model, parse
   od kodu weryfikacyjnego KSeF. Pole nazwy odbiorcy w standardzie ma tylko
   20 znaków — gdy pełna nazwa firmy się nie mieści, można podać własny,
   czytelny skrót („Nazwa odbiorcy na kodzie QR”); puste pole skraca nazwę
-  automatycznie na granicy słowa.
+  automatycznie na granicy słowa. Kod wymaga poprawnego NIP firmy; znaki
+  spoza rekomendacji ZBP są bezpiecznie normalizowane, aby nie uszkodzić
+  struktury danych przelewu.
 - **Pełny status wysyłki** — faktura sprzedażowa rozróżnia stan lokalny,
   przetwarzanie, przyjęcie i odrzucenie. Numer referencyjny przesyłki jest
   przechowywany osobno od numeru KSeF; aplikacja automatycznie ponawia
