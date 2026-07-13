@@ -150,7 +150,10 @@ Tests/KsefiarzCoreTests/          # 677 testów (Swift Testing) — model, parse
   z podanym rachunkiem i niezerowym saldem (kwota = pozostałe do zapłaty;
   faktura opłacona kodu nie dostaje). Przełącznik w Ustawieniach → Firma
   („Drukuj kod QR płatności na fakturach”, domyślnie włączony); niezależny
-  od kodu weryfikacyjnego KSeF.
+  od kodu weryfikacyjnego KSeF. Pole nazwy odbiorcy w standardzie ma tylko
+  20 znaków — gdy pełna nazwa firmy się nie mieści, można podać własny,
+  czytelny skrót („Nazwa odbiorcy na kodzie QR”); puste pole skraca nazwę
+  automatycznie na granicy słowa.
 - **Pełny status wysyłki** — faktura sprzedażowa rozróżnia stan lokalny,
   przetwarzanie, przyjęcie i odrzucenie. Numer referencyjny przesyłki jest
   przechowywany osobno od numeru KSeF; aplikacja automatycznie ponawia

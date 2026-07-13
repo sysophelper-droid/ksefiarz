@@ -268,6 +268,12 @@ Scripts/build-app.sh                   # składanie bundla .app
   płatności z kodami weryfikacyjnymi KSeF (KOD I/II) i rezerwuje miejsce na
   wydruku, gdy jest choć jeden kod; przełącznik `AppSettingsKeys.pdfPaymentQR`
   (domyślnie włączony, w kopii zapasowej) steruje tylko kodem płatności.
+- **Nazwa odbiorcy (20 znaków)**: pole nazwy standardu jest krótkie, więc
+  pełna nazwa firmy bywa ucinana. `AppSettingsKeys.paymentQRRecipientName`
+  pozwala podać własny skrót (np. „IT-KRAK”); puste = pełna nazwa sprzedawcy
+  skracana przez `truncatedName` na granicy słowa (gdy zostawia ≥ połowę
+  limitu), inaczej twarde ucięcie. Override wstrzykiwany do
+  `zbpTransferContent(for:recipientNameOverride:)` przez `makeQRCodes`.
 
 ## API KSeF 2.0 — fakty krytyczne
 

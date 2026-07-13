@@ -148,12 +148,16 @@ public enum InvoicePDFGenerator {
     static func makeQRCodes(
         for invoice: Invoice,
         offlineCertificate: KSeFCertificate? = KSeFCertificateStore.shared.offlineCertificate,
-        paymentEnabled: Bool = PaymentQRCode.isEnabled()
+        paymentEnabled: Bool = PaymentQRCode.isEnabled(),
+        paymentRecipientName: String? = PaymentQRCode.configuredRecipientName()
     ) -> InvoiceQRCodes? {
         let ksef = makeKSeFQRCodes(for: invoice, offlineCertificate: offlineCertificate)
 
         var paymentImage: CGImage?
-        if paymentEnabled, let content = PaymentQRCode.zbpTransferContent(for: invoice) {
+        if paymentEnabled,
+           let content = PaymentQRCode.zbpTransferContent(
+               for: invoice, recipientNameOverride: paymentRecipientName
+           ) {
             paymentImage = QRCodeRenderer.image(for: content)
         }
 

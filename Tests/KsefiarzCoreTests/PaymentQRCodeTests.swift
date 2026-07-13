@@ -113,7 +113,7 @@ struct PaymentQRCodeTests {
         ) != nil)
     }
 
-    @Test("Nazwa odbiorcy przycięta do 20 znaków, tytuł do 32")
+    @Test("Nazwa odbiorcy nie przekracza 20 znaków, tytuł 32")
     func truncation() throws {
         let content = try #require(PaymentQRCode.zbpTransferContent(
             recipientName: "Przedsiębiorstwo Handlowo-Usługowe ABCDEF",
@@ -124,8 +124,22 @@ struct PaymentQRCodeTests {
             title: "Zapłata za fakturę numer FV/2026/07/0001 z dnia 13 lipca"
         ))
         let fields = content.components(separatedBy: "|")
-        #expect(fields[4].count == 20)
+        #expect(fields[4].count <= 20)
         #expect(fields[5].count == 32)
+    }
+
+    @Test("Nazwa za długa: cięcie na granicy słowa zamiast w środku")
+    func nameCutsOnWordBoundary() {
+        // 23 znaki → twarde ucięcie dałoby „Krzysztof Borek It-K"; granica
+        // słowa daje czytelne „Krzysztof Borek".
+        #expect(PaymentQRCode.truncatedName("Krzysztof Borek It-Krak") == "Krzysztof Borek")
+        // Jedno długie słowo bez spacji → twarde ucięcie do 20.
+        #expect(PaymentQRCode.truncatedName("Wielkopolskoprzedsiębiorstwo").count == 20)
+        // Krótka nazwa bez zmian.
+        #expect(PaymentQRCode.truncatedName("IT-KRAK") == "IT-KRAK")
+        // Pierwsze słowo bardzo krótkie: granica zbyt blisko początku →
+        // twarde ucięcie, nie „A".
+        #expect(PaymentQRCode.truncatedName("A bcdefghijklmnoprstuwxyz").count == 20)
     }
 
     @Test("Pusta nazwa lub pusty tytuł → brak kodu")
@@ -195,6 +209,32 @@ struct PaymentQRCodeTests {
     @Test("Faktura w walucie obcej → brak kodu")
     func foreignCurrencyInvoiceNoCode() {
         #expect(PaymentQRCode.zbpTransferContent(for: salesInvoice(currency: "EUR")) == nil)
+    }
+
+    @Test("Własna nazwa odbiorcy (override) zastępuje nazwę sprzedawcy")
+    func recipientNameOverride() throws {
+        let content = try #require(PaymentQRCode.zbpTransferContent(
+            for: salesInvoice(), recipientNameOverride: "IT-KRAK"
+        ))
+        #expect(content.components(separatedBy: "|")[4] == "IT-KRAK")
+    }
+
+    @Test("Pusty override → pełna nazwa sprzedawcy (skracana)")
+    func blankOverrideFallsBackToSeller() throws {
+        let content = try #require(PaymentQRCode.zbpTransferContent(
+            for: salesInvoice(), recipientNameOverride: "   "
+        ))
+        #expect(content.components(separatedBy: "|")[4] == "Studio Północ")
+    }
+
+    @Test("configuredRecipientName: puste → nil, przycięte z białych znaków")
+    func configuredName() {
+        let defaults = UserDefaults(suiteName: "test.paymentQRName.\(UUID().uuidString)")!
+        #expect(PaymentQRCode.configuredRecipientName(defaults: defaults) == nil)
+        defaults.set("   ", forKey: AppSettingsKeys.paymentQRRecipientName)
+        #expect(PaymentQRCode.configuredRecipientName(defaults: defaults) == nil)
+        defaults.set("  IT-KRAK  ", forKey: AppSettingsKeys.paymentQRRecipientName)
+        #expect(PaymentQRCode.configuredRecipientName(defaults: defaults) == "IT-KRAK")
     }
 
     @Test("Częściowa wpłata: kwota kodu to saldo pozostałe do zapłaty")

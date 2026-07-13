@@ -62,7 +62,7 @@ public enum PaymentQRCode {
         let account = normalizedBankAccount(bankAccount)
         guard account.count == bankAccountLength else { return nil }
 
-        let name = truncated(recipientName, to: nameMaxLength)
+        let name = truncatedName(recipientName)
         guard !name.isEmpty else { return nil }
 
         let paymentTitle = truncated(title, to: titleMaxLength)
@@ -94,16 +94,33 @@ public enum PaymentQRCode {
     /// czemu faktura opłacona (saldo 0) nie dostaje kodu, a częściowo
     /// opłacona — kod na kwotę brakującą. Odbiorcą jest sprzedawca, a tytułem
     /// numer faktury.
-    public static func zbpTransferContent(for invoice: Invoice) -> String? {
+    /// - Parameter recipientNameOverride: własna, krótka nazwa odbiorcy
+    ///   z ustawień. Pole nazwy w standardzie 2D ZBP ma tylko 20 znaków, więc
+    ///   pełna nazwa firmy bywa ucinana — override pozwala podać czytelny skrót
+    ///   (np. „IT-KRAK”). Puste = pełna nazwa sprzedawcy (skracana na granicy
+    ///   słowa).
+    public static func zbpTransferContent(
+        for invoice: Invoice,
+        recipientNameOverride: String? = nil
+    ) -> String? {
         guard invoice.kind == .sales else { return nil }
+        let override = recipientNameOverride?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         return zbpTransferContent(
-            recipientName: invoice.sellerName,
+            recipientName: override.isEmpty ? invoice.sellerName : override,
             recipientNIP: invoice.sellerNIP,
             bankAccount: invoice.paymentBankAccount ?? "",
             amount: invoice.outstandingAmount,
             currency: invoice.currency,
             title: invoice.invoiceNumber
         )
+    }
+
+    /// Własna nazwa odbiorcy na kodzie QR z ustawień (skrócona), albo `nil`,
+    /// gdy pole jest puste — wtedy używana jest pełna nazwa sprzedawcy.
+    public static func configuredRecipientName(defaults: UserDefaults = .standard) -> String? {
+        let value = (defaults.string(forKey: AppSettingsKeys.paymentQRRecipientName) ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return value.isEmpty ? nil : value
     }
 
     // MARK: - Normalizacje pól
@@ -133,5 +150,21 @@ public enum PaymentQRCode {
     /// Przycina po przycięciu białych znaków do zadanego limitu.
     static func truncated(_ value: String, to limit: Int) -> String {
         String(value.trimmingCharacters(in: .whitespacesAndNewlines).prefix(limit))
+    }
+
+    /// Nazwa odbiorcy skrócona do 20 znaków (limit standardu 2D ZBP). Gdy
+    /// nazwa jest za długa, cięcie następuje na granicy słowa, o ile zostawia
+    /// sensowną długość (≥ połowa limitu) — inaczej twarde ucięcie. Dzięki temu
+    /// „Krzysztof Borek It-Krak” staje się „Krzysztof Borek”, a nie
+    /// „Krzysztof Borek It-K”.
+    static func truncatedName(_ value: String) -> String {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.count > nameMaxLength else { return trimmed }
+        let hardCut = String(trimmed.prefix(nameMaxLength))
+        if let space = hardCut.lastIndex(of: " ") {
+            let atWord = String(hardCut[..<space]).trimmingCharacters(in: .whitespaces)
+            if atWord.count >= nameMaxLength / 2 { return atWord }
+        }
+        return hardCut.trimmingCharacters(in: .whitespaces)
     }
 }
