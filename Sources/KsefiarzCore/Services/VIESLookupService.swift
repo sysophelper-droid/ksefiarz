@@ -57,6 +57,8 @@ public struct VIESLookupService {
         case invalidInput
         /// Krajowy rejestr VAT nie odpowiada (MS_UNAVAILABLE / TIMEOUT / limit).
         case memberStateUnavailable
+        /// VIES zwrócił niepełną albo wewnętrznie niespójną odpowiedź.
+        case invalidResponse
         /// Inny błąd usługi VIES (sieć, HTTP, nieznany kod).
         case serviceError(String)
 
@@ -66,6 +68,8 @@ public struct VIESLookupService {
                 return "VIES odrzucił zapytanie jako nieprawidłowe (błędny kod kraju lub numer VAT-UE)."
             case .memberStateUnavailable:
                 return "Krajowy rejestr VAT jest chwilowo niedostępny w VIES — spróbuj ponownie później."
+            case .invalidResponse:
+                return "VIES zwrócił nieprawidłową odpowiedź — spróbuj ponownie później."
             case .serviceError(let details):
                 return "Błąd usługi VIES: \(details)"
             }
@@ -107,14 +111,11 @@ public struct VIESLookupService {
         let cc = rawCC == "GR" ? "EL" : rawCC
 
         var url = baseURL.appending(path: "/ms/\(cc)/vat/\(number)")
-        if let requesterNIP {
-            let requesterNumber = requesterNIP.filter(\.isNumber)
-            if !requesterNumber.isEmpty {
-                url = url.appending(queryItems: [
-                    URLQueryItem(name: "requesterMemberStateCode", value: "PL"),
-                    URLQueryItem(name: "requesterNumber", value: requesterNumber),
-                ])
-            }
+        if let requesterNumber = Self.normalizedRequesterNIP(requesterNIP) {
+            url = url.appending(queryItems: [
+                URLQueryItem(name: "requesterMemberStateCode", value: "PL"),
+                URLQueryItem(name: "requesterNumber", value: requesterNumber),
+            ])
         }
         var request = URLRequest(url: url)
         request.setValue("application/json", forHTTPHeaderField: "Accept")
@@ -125,23 +126,41 @@ public struct VIESLookupService {
             throw LookupError.serviceError(message ?? "HTTP \(response.statusCode)")
         }
 
-        let decoded = try JSONDecoder().decode(VIESResponse.self, from: data)
+        let decoded: VIESResponse
+        do {
+            decoded = try JSONDecoder().decode(VIESResponse.self, from: data)
+        } catch {
+            throw LookupError.invalidResponse
+        }
 
         // `userError` inne niż VALID/INVALID to awaria po stronie usługi lub
         // krajowego rejestru — NIE wolno ich pomylić z „numer nieaktywny”.
         switch (decoded.userError ?? "").uppercased() {
-        case "VALID", "INVALID", "":
-            break
-        case "INVALID_INPUT", "INVALID_REQUESTER_INFO":
+        case "VALID":
+            guard decoded.isValid == true else { throw LookupError.invalidResponse }
+        case "INVALID":
+            guard decoded.isValid == false else { throw LookupError.invalidResponse }
+        case "INVALID_INPUT":
+            throw LookupError.invalidInput
+        case "INVALID_REQUESTER_INFO":
+            // Dane pytającego służą tylko uzyskaniu numeru potwierdzenia.
+            // Ich odrzucenie nie może blokować właściwego sprawdzenia numeru
+            // kontrahenta — ponawiamy zapytanie anonimowo.
+            if Self.normalizedRequesterNIP(requesterNIP) != nil {
+                return try await lookup(countryCode: cc, vatNumber: number)
+            }
             throw LookupError.invalidInput
         case "MS_UNAVAILABLE", "TIMEOUT", "MS_MAX_CONCURRENT_REQ", "MS_MAX_CONCURRENT_REQ_TIME":
             throw LookupError.memberStateUnavailable
+        case "":
+            throw LookupError.invalidResponse
         case let other:
             throw LookupError.serviceError(other)
         }
+        guard let isValid = decoded.isValid else { throw LookupError.invalidResponse }
 
         return VIESLookupResult(
-            isValid: decoded.isValid ?? false,
+            isValid: isValid,
             countryCode: cc,
             vatNumber: number,
             name: Self.normalizeField(decoded.name),
@@ -156,6 +175,14 @@ public struct VIESLookupService {
     static func normalizeField(_ raw: String?) -> String {
         let trimmed = (raw ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed == "---" ? "" : trimmed
+    }
+
+    /// Zwraca cyfry poprawnego polskiego NIP-u pytającego. Niepoprawny NIP
+    /// pomijamy, aby `INVALID_REQUESTER_INFO` nie zablokował anonimowego
+    /// sprawdzenia numeru kontrahenta.
+    static func normalizedRequesterNIP(_ raw: String?) -> String? {
+        guard let raw, InvoiceValidator.isValidNIP(raw) else { return nil }
+        return raw.filter(\.isNumber)
     }
 
     // MARK: DTO odpowiedzi API

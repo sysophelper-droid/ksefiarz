@@ -40,7 +40,10 @@ public struct VIESVerificationService {
                     consultationNumber: result.consultationNumber,
                     requestDate: result.requestDate
                 )
-                : .inactive(requestDate: result.requestDate)
+                : .inactive(
+                    consultationNumber: result.consultationNumber,
+                    requestDate: result.requestDate
+                )
         } catch {
             outcome = .error(error.localizedDescription)
         }

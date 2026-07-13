@@ -501,16 +501,20 @@ odpowiedzi z produkcyjnego endpointu):
   nieużywane). Gdy kraj nie udostępnia danych podmiotu, `name`/`address` = „---”
   (normalizowane do pustego napisu przez `VIESLookupService.normalizeField`).
 - **Numer potwierdzenia zapytania** (`requestIdentifier`, tzw. consultation
-  number, np. `WAPIAAAAZ9cWmQXG`) jest zwracany **wyłącznie**, gdy w zapytaniu
-  podano parametry pytającego: `?requesterMemberStateCode=PL&requesterNumber={NIP}`.
-  To dowód sprawdzenia do celów należytej staranności. Zapytanie anonimowe
-  zwraca pusty `requestIdentifier`.
+  number, np. `WAPIAAAAZ9cWmQXG`) może zostać zwrócony **wyłącznie**, gdy w
+  zapytaniu podano parametry pytającego:
+  `?requesterMemberStateCode=PL&requesterNumber={NIP}`. To dowód sprawdzenia do
+  celów należytej staranności. Zapytanie anonimowe zwraca pusty
+  `requestIdentifier`; sam NIP pytającego nie gwarantuje numeru potwierdzenia.
 - **`INVALID` to legalny wynik „numer nieaktywny”, NIE błąd** (zwracany w
   `isValid == false`) — serwis mapuje go na status `.inactive`. Inne wartości
-  `userError` to awarie: `INVALID_INPUT`/`INVALID_REQUESTER_INFO` → błąd danych
-  wejściowych, `MS_UNAVAILABLE`/`TIMEOUT`/`MS_MAX_CONCURRENT_REQ*` → niedostępny
+  `userError` to awarie: `INVALID_INPUT` → błąd danych wejściowych,
+  `INVALID_REQUESTER_INFO` → ponowienie bez danych pytającego,
+  `MS_UNAVAILABLE`/`TIMEOUT`/`MS_MAX_CONCURRENT_REQ*` → niedostępny
   krajowy rejestr (nie wolno pomylić z „nieaktywny”), pozostałe → ogólny błąd
-  usługi. Klasyfikacja w `VIESLookupService.lookup`.
+  usługi. Brak `isValid`/`userError` albo sprzeczność tych pól jest błędem
+  odpowiedzi, nigdy wynikiem „nieaktywny”. Klasyfikacja w
+  `VIESLookupService.lookup`.
 - **Grecja = kod `EL`** (nie `GR`) — normalizowane w ścieżce URL i wyniku;
   `XI` (Irlandia Płn.) jest obsługiwane przez VIES. `PL` jest technicznie
   obsługiwane, ale routing kieruje krajowych do Białej listy — `euIdentity`
@@ -523,6 +527,11 @@ odpowiedzi z produkcyjnego endpointu):
 - VIES potwierdza tylko aktywność numeru VAT-UE (kluczowe dla stawki 0% przy
   WDT) — nie zastępuje weryfikacji tożsamości ani rachunku. Nic nie jest
   utrwalane lokalnie; dane pobierane na żywo w `VIESVerificationView`.
+- Dane pytającego są dołączane tylko dla poprawnego polskiego NIP-u (suma
+  kontrolna). Niepoprawny lub pusty NIP nie blokuje sprawdzenia kontrahenta —
+  zapytanie pozostaje anonimowe i nie zwraca numeru potwierdzenia. Gdy VIES
+  odrzuci poprawny formalnie NIP pytającego, klient automatycznie ponawia
+  weryfikację anonimowo.
 
 ## JPK_V7M / JPK_V7K — ewidencja VAT z deklaracją
 

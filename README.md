@@ -60,7 +60,7 @@ Sources/
         ├── InvoiceAutomationView.swift # szablony, cykle i kolejka zatwierdzeń
         ├── HiddenInvoicesView.swift # archiwum „Nieuprawnione / Ukryte”
         └── SettingsView.swift    # NIP, token KSeF, środowisko
-Tests/KsefiarzCoreTests/          # 742 testów (Swift Testing) — model, parser, usługa, kryptografia, logika
+Tests/KsefiarzCoreTests/          # 781 testów (Swift Testing) — model, parser, usługa, kryptografia, logika
 ```
 
 ## Funkcje
@@ -136,8 +136,10 @@ Tests/KsefiarzCoreTests/          # 742 testów (Swift Testing) — model, parse
   zamiast krajowej: sprawdza w systemie VIES Komisji Europejskiej, czy numer
   VAT-UE jest aktywny do transakcji wewnątrzwspólnotowych (bez aktywnego numeru
   nabywcy nie zastosujesz stawki 0% do WDT). Gdy w Ustawieniach jest podany NIP
-  Twojej firmy, aplikacja pobiera z VIES **numer potwierdzenia zapytania**
+  Twojej firmy, aplikacja próbuje pobrać z VIES **numer potwierdzenia zapytania**
   (dowód sprawdzenia do celów należytej staranności). Publiczne API, bez klucza.
+  Niepoprawny lub odrzucony przez VIES NIP firmy nie blokuje anonimowego
+  sprawdzenia kontrahenta.
 - **Historia kontrahenta** — ze słownika kontrahentów można otworzyć jedną
   kartę z wszystkimi widocznymi dokumentami sprzedaży i zakupu, przejść
   podwójnym kliknięciem do szczegółów faktury oraz sprawdzić należności,

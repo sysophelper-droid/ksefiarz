@@ -123,7 +123,7 @@ struct VIESVerificationBuildTests {
         let result = VIESVerification.build(
             countryCode: "DE",
             vatNumber: "000000000",
-            outcome: .inactive(requestDate: "2026-07-13T10:00:00Z")
+            outcome: .inactive(consultationNumber: "CN-INACTIVE", requestDate: "2026-07-13T10:00:00Z")
         )
         #expect(result.status == .inactive)
         #expect(result.headline == "Numer VAT-UE nieaktywny w VIES")
@@ -131,6 +131,8 @@ struct VIESVerificationBuildTests {
         #expect(viesFinding?.severity == .warning)
         #expect(viesFinding?.detail?.contains("0%") == true)
         #expect(result.overallSeverity == .warning)
+        #expect(result.consultationNumber == "CN-INACTIVE")
+        #expect(result.findings.contains { $0.id == "consultation" })
     }
 
     @Test("Błąd usługi: status unknown, komunikat zapisany")
@@ -283,6 +285,46 @@ struct VIESLookupServiceTests {
         #expect(request.url?.query == nil)
     }
 
+    @Test("Niepoprawny NIP pytającego nie blokuje anonimowej weryfikacji")
+    func invalidRequesterIsOmitted() async throws {
+        let transport = MockTransport()
+        transport.routeOK("/ms/DE/vat/123456789", data: Data(#"{"isValid": true, "userError": "VALID"}"#.utf8))
+
+        let service = makeService(transport: transport)
+        let result = try await service.lookup(
+            countryCode: "DE",
+            vatNumber: "123456789",
+            requesterNIP: "123"
+        )
+
+        #expect(result.isValid)
+        let request = try #require(transport.request(matching: "/ms/DE/vat/123456789"))
+        #expect(request.url?.query == nil)
+    }
+
+    @Test("Odrzucone dane pytającego powodują ponowienie zapytania anonimowo")
+    func rejectedRequesterFallsBackToAnonymousLookup() async throws {
+        let transport = MockTransport()
+        transport.route("/ms/DE/vat/123456789") { request in
+            if request.url?.query != nil {
+                return (200, Data(#"{"isValid": false, "userError": "INVALID_REQUESTER_INFO"}"#.utf8))
+            }
+            return (200, Data(#"{"isValid": true, "userError": "VALID"}"#.utf8))
+        }
+
+        let service = makeService(transport: transport)
+        let result = try await service.lookup(
+            countryCode: "DE",
+            vatNumber: "123456789",
+            requesterNIP: "5260250274"
+        )
+
+        #expect(result.isValid)
+        #expect(transport.requests.count == 2)
+        #expect(transport.requests.first?.url?.query != nil)
+        #expect(transport.requests.last?.url?.query == nil)
+    }
+
     @Test("Grecki kod GR trafia do ścieżki jako EL")
     func greekMappedToEL() async throws {
         let transport = MockTransport()
@@ -323,6 +365,39 @@ struct VIESLookupServiceTests {
 
         let service = makeService(transport: transport)
         await #expect(throws: VIESLookupService.LookupError.serviceError("VAT_BLOCKED")) {
+            _ = try await service.lookup(countryCode: "DE", vatNumber: "123456789")
+        }
+    }
+
+    @Test("Brak userError nie jest mylony z nieaktywnym numerem")
+    func missingUserError() async {
+        let transport = MockTransport()
+        transport.routeOK("/ms/DE/vat/123456789", data: Data(#"{"isValid": false}"#.utf8))
+
+        let service = makeService(transport: transport)
+        await #expect(throws: VIESLookupService.LookupError.invalidResponse) {
+            _ = try await service.lookup(countryCode: "DE", vatNumber: "123456789")
+        }
+    }
+
+    @Test("Brak isValid nie jest mylony z nieaktywnym numerem")
+    func missingValidityFlag() async {
+        let transport = MockTransport()
+        transport.routeOK("/ms/DE/vat/123456789", data: Data(#"{"userError": "INVALID"}"#.utf8))
+
+        let service = makeService(transport: transport)
+        await #expect(throws: VIESLookupService.LookupError.invalidResponse) {
+            _ = try await service.lookup(countryCode: "DE", vatNumber: "123456789")
+        }
+    }
+
+    @Test("Sprzeczne isValid i userError są błędem odpowiedzi")
+    func inconsistentValidity() async {
+        let transport = MockTransport()
+        transport.routeOK("/ms/DE/vat/123456789", data: Data(#"{"isValid": false, "userError": "VALID"}"#.utf8))
+
+        let service = makeService(transport: transport)
+        await #expect(throws: VIESLookupService.LookupError.invalidResponse) {
             _ = try await service.lookup(countryCode: "DE", vatNumber: "123456789")
         }
     }
@@ -377,11 +452,12 @@ struct VIESVerificationServiceTests {
     @Test("Numer nieaktywny: status inactive")
     func inactive() async {
         let transport = MockTransport()
-        transport.routeOK("/ms/DE/vat/000000000", data: Data(#"{"isValid": false, "userError": "INVALID"}"#.utf8))
+        transport.routeOK("/ms/DE/vat/000000000", data: Data(#"{"isValid": false, "userError": "INVALID", "requestIdentifier": "CN-NEGATIVE"}"#.utf8))
 
         let service = VIESVerificationService(vies: viesService(transport: transport))
         let result = await service.verify(countryCode: "DE", vatNumber: "000000000")
         #expect(result.status == .inactive)
+        #expect(result.consultationNumber == "CN-NEGATIVE")
     }
 
     @Test("Błąd usługi nie rzuca — zapisany w wyniku")
@@ -415,6 +491,6 @@ struct VIESVerificationServiceTests {
         let result = await service.verify(countryCode: "DE", vatNumber: "123456789", requesterNIP: "5260250274")
         #expect(result.consultationNumber == "CN-1")
         let request = try #require(transport.request(matching: "/ms/DE/vat/123456789"))
-        #expect((request.url?.query ?? "").contains("requesterNumber=5260250274"))
+        #expect(request.url?.query?.contains("requesterNumber=5260250274") == true)
     }
 }

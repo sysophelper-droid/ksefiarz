@@ -25,8 +25,7 @@ public struct VIESVerificationView: View {
 
     /// NIP naszej firmy pozwala uzyskać numer potwierdzenia zapytania VIES.
     private var requesterNIP: String? {
-        let digits = myNIP.filter(\.isNumber)
-        return digits.isEmpty ? nil : digits
+        VIESLookupService.normalizedRequesterNIP(myNIP)
     }
 
     public var body: some View {
@@ -80,8 +79,8 @@ public struct VIESVerificationView: View {
                     ForEach(result.findings) { finding in
                         FindingRow(finding: finding)
                     }
-                    if requesterNIP == nil {
-                        Text("Aby uzyskać numer potwierdzenia zapytania (dowód sprawdzenia), uzupełnij NIP swojej firmy w Ustawieniach.")
+                    if let hint = consultationNumberHint(for: result) {
+                        Text(hint)
                             .font(.caption)
                             .foregroundStyle(.secondary)
                             .padding(.top, 4)
@@ -106,6 +105,16 @@ public struct VIESVerificationView: View {
         }
         .padding(12)
         .background(ContractorVerificationView.color(for: severity).opacity(0.12), in: RoundedRectangle(cornerRadius: 10))
+    }
+
+    private func consultationNumberHint(for result: VIESVerificationResult) -> String? {
+        guard result.isInputValid, result.error == nil, result.consultationNumber == nil else {
+            return nil
+        }
+        if requesterNIP == nil {
+            return "Aby uzyskać numer potwierdzenia zapytania (dowód sprawdzenia), uzupełnij poprawny NIP swojej firmy w Ustawieniach."
+        }
+        return "VIES nie zwrócił numeru potwierdzenia. Weryfikacja kontrahenta została wykonana, ale bez numeru dowodowego."
     }
 
     // MARK: Stopka

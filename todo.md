@@ -93,7 +93,8 @@ kolejność dowolna. ⚠️ operacje modyfikujące KSeF testować wyłącznie na
   stawki 0% WDT), a awarie rejestru (`MS_UNAVAILABLE`/`TIMEOUT`) NIE są mylone
   z „nieaktywny”. Czysta logika `VIESVerification` (status, werdykt z wagami,
   routing euIdentity) + `VIESLookupService` (klient REST) + koordynator
-  `VIESVerificationService`; 34 testy jednostkowe (atrapa transportu).
+  `VIESVerificationService`; 39 testów jednostkowych (atrapa transportu), w tym
+  regresje dla niepełnych/niespójnych odpowiedzi i błędnego NIP-u pytającego.
   Kontrakt API zweryfikowany u źródła na żywych odpowiedziach. Publiczne API,
   bez klucza; nic nie jest utrwalane lokalnie.
 

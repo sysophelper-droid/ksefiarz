@@ -192,8 +192,9 @@ public enum VIESVerification {
     public enum Outcome: Sendable, Equatable {
         /// Aktywny numer — opcjonalna nazwa/adres, numer potwierdzenia i data.
         case active(name: String, address: String, consultationNumber: String, requestDate: String)
-        /// Nieaktywny numer (`isValid == false`) z datą zapytania.
-        case inactive(requestDate: String)
+        /// Nieaktywny numer (`isValid == false`) z opcjonalnym numerem
+        /// potwierdzenia i datą zapytania.
+        case inactive(consultationNumber: String, requestDate: String)
         /// Błąd usługi — komunikat do pokazania.
         case error(String)
         /// Nie odpytano (błędne dane wejściowe — nie było sensu wołać VIES).
@@ -239,7 +240,7 @@ public enum VIESVerification {
                 requestDate: requestDate.isEmpty ? nil : requestDate,
                 error: nil
             )
-        case .inactive(let requestDate):
+        case .inactive(let consultationNumber, let requestDate):
             return VIESVerificationResult(
                 countryCode: cc,
                 vatNumber: number,
@@ -247,7 +248,7 @@ public enum VIESVerification {
                 status: .inactive,
                 name: nil,
                 address: nil,
-                consultationNumber: nil,
+                consultationNumber: consultationNumber.isEmpty ? nil : consultationNumber,
                 requestDate: requestDate.isEmpty ? nil : requestDate,
                 error: nil
             )
