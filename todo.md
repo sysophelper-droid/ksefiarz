@@ -43,8 +43,6 @@ kolejność dowolna. ⚠️ operacje modyfikujące KSeF testować wyłącznie na
 
 #### C. Płatności i windykacja
 
-- [ ] C2. Plik przelewów do banku (Elixir / przelew zbiorczy) — eksport
-  zobowiązań (zakupów) do pliku importowalnego w bankowości.
 - [ ] C3. Ścieżka windykacji — eskalacja: przypomnienie → wezwanie → nota →
   dane do EPU (e-sąd); status windykacji na fakturze (bazuje na wezwaniach).
 - [ ] C4. Automatyczne przypomnienia e-mail przed/po terminie — cykliczne
@@ -83,6 +81,23 @@ kolejność dowolna. ⚠️ operacje modyfikujące KSeF testować wyłącznie na
   (dziś zaszyte PL/EN).
 
 ## Zrealizowane
+
+### Plik przelewów do banku — Elixir-O (13.07.2026)
+
+- [x] C2. Lista zakupów eksportuje zaznaczone albo wszystkie widoczne
+  zobowiązania do pliku `.pli` importowanego jako paczka przelewów. Czysty
+  `ElixirPaymentExporter` tworzy bez nagłówka 16-polowe rekordy `110` z CRLF,
+  datą `RRRRMMDD`, kwotą salda w groszach, rachunkami NRB, numerami
+  rozliczeniowymi banków, nazwami/adresami i tytułem do 4×35 znaków. Kontrola
+  sumy NRB modulo 97; wyłącznie widoczne, nieopłacone zakupy w PLN; jawna
+  lista pominięć (opłacone, ukryte, walutowe, brak/błąd rachunku). MPP ma
+  kod `53` i komunikat `/VAT/…/IDC/…/INV/…`; kwota VAT jest edytowalna,
+  a dla płatności częściowej podpowiadana proporcjonalnie. Wybór rachunku
+  źródłowego, daty oraz kodowania UTF-8/Windows-1250/ISO-8859-2, limit 50
+  dyspozycji. Eksport nie ustawia `isPaid` — użytkownik weryfikuje i autoryzuje
+  przelewy w banku. Format zweryfikowany z instrukcjami mBanku i PKO BP;
+  osobny suite testów generatora, walidacji, MPP, kodowań i zabezpieczenia
+  struktury pliku.
 
 ### Kod QR płatności na PDF — standard 2D ZBP (13.07.2026)
 

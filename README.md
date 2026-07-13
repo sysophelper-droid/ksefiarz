@@ -42,6 +42,7 @@ Sources/
     │   ├── DashboardMetrics.swift# agregaty Kokpitu (ukryte faktury pomijane)
     │   ├── PermissionsEngine.swift # walidacja i normalizacja uprawnień KSeF
     │   ├── InvoiceAutomationEngine.swift # duplikaty i terminy cykli
+    │   ├── ElixirPaymentExporter.swift # walidacja i eksport paczki przelewów .pli
     │   ├── KPiREngine.swift       # KPiR 2026: klasyfikacja, sumy i CSV 1–19
     │   ├── RyczaltEngine.swift    # ryczałt 2026: stawki, przychód i CSV 1–17
     │   └── ContractorHistory.swift # salda i scoring płatniczy kontrahenta
@@ -54,10 +55,11 @@ Sources/
         ├── PermissionsView.swift # sekcja „Uprawnienia” + arkusz nadawania
         ├── ContractorVerificationView.swift # karta weryfikacji kontrahenta
         ├── ContractorHistoryView.swift # dokumenty, salda i terminowość kontrahenta
+        ├── BankTransferExportView.swift # zakupowe przelewy Elixir-O / MPP
         ├── InvoiceAutomationView.swift # szablony, cykle i kolejka zatwierdzeń
         ├── HiddenInvoicesView.swift # archiwum „Nieuprawnione / Ukryte”
         └── SettingsView.swift    # NIP, token KSeF, środowisko
-Tests/KsefiarzCoreTests/          # 706 testów (Swift Testing) — model, parser, usługa, kryptografia, logika
+Tests/KsefiarzCoreTests/          # 715 testów (Swift Testing) — model, parser, usługa, kryptografia, logika
 ```
 
 ## Funkcje
@@ -379,6 +381,17 @@ Tests/KsefiarzCoreTests/          # 706 testów (Swift Testing) — model, parse
   do KSeF, odrzucone, bez UPO, bez XML, offline w kolejce, brak NIP
   nabywcy). Faktury ukryte nie wchodzą do paczki. Archiwum ZIP powstaje
   w całości w aplikacji (bez zależności zewnętrznych).
+- **Przelewy do banku (Elixir-O)** — z listy zakupów można wyeksportować
+  zaznaczone faktury (albo wszystkie widoczne) do pliku `.pli` importowanego
+  jako paczka przelewów w polskiej bankowości. Arkusz wybiera rachunek
+  zleceniodawcy, datę i kodowanie (UTF-8, Windows-1250 lub ISO-8859-2),
+  pokazuje pominięte dokumenty i kontroluje NRB wraz z sumą kontrolną.
+  Eksport obejmuje wyłącznie widoczne, nieopłacone zakupy w PLN z poprawnym
+  rachunkiem sprzedawcy; kwotą jest pozostałe saldo. MPP tworzy komunikat
+  `/VAT/…/IDC/…/INV/…` (kod `53`), z edytowalną kwotą VAT — przy płatności
+  częściowej aplikacja podpowiada ją proporcjonalnie. Dla zgodności z bankami
+  jedna paczka ma maksymalnie 50 dyspozycji. Plik zawsze trzeba sprawdzić
+  i autoryzować w banku; samo zapisanie **nie oznacza faktur jako opłaconych**.
 - **Ewidencja płatności** — historia wpłat na każdej fakturze: płatności
   częściowe, saldo pozostałe do zapłaty, znacznik „Częściowo” na listach.
   Pełne pokrycie kwoty brutto oznacza fakturę jako opłaconą automatycznie;
