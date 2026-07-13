@@ -65,6 +65,8 @@ public struct MainContentView: View {
     @State private var selection: SidebarSection? = .dashboard
     /// Wspólny stan synchronizacji — dzielony z ikoną w pasku menu.
     @ObservedObject private var syncActivity = SyncActivity.shared
+    /// Publiczny status dostępności KSeF z API Latarni MF.
+    @ObservedObject private var availabilityMonitor = KSeFAvailabilityMonitor.shared
 
     @Environment(\.modelContext) private var modelContext
     /// Akcja otwierania okna — udostępniana AppKit-owej ikonie w pasku menu
@@ -189,6 +191,17 @@ public struct MainContentView: View {
             await postDeadlineNotifications()
             await renewCertificatesIfNeeded()
         }
+        // Latarnia MF nie wymaga uwierzytelnienia. Status i komunikaty są
+        // odświeżane co minutę; komunikat kończący uzupełnia termin tylko
+        // w dokumentach powiązanych z tym samym eventId.
+        .task(id: "ksef-availability-\(environmentRaw)") {
+            await refreshKSeFAvailability()
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(60))
+                guard !Task.isCancelled else { return }
+                await refreshKSeFAvailability()
+            }
+        }
         // Powiadomienia o terminach (płatności, dosłania offline) —
         // sprawdzane co 30 minut; deduplikacja gwarantuje jedno
         // powiadomienie danego rodzaju na fakturę dziennie.
@@ -230,6 +243,26 @@ public struct MainContentView: View {
                 guard !Task.isCancelled else { return }
                 await renewCertificatesIfNeeded()
             }
+        }
+    }
+
+    /// Pobiera oficjalny status Latarni i aktualizuje daty końca zdarzeń
+    /// w oczekujących fakturach offline. Demo nie ma własnej Latarni.
+    @MainActor
+    private func refreshKSeFAvailability() async {
+        let environment = KSeFEnvironment(rawValue: environmentRaw) ?? .test
+        guard let snapshot = await availabilityMonitor.refresh(environment: environment) else {
+            return
+        }
+        let invoices = (try? modelContext.fetch(FetchDescriptor<Invoice>())) ?? []
+        let changed = KSeFAvailabilityPolicy.reconcile(
+            invoices: invoices,
+            messages: snapshot.messages,
+            environmentRaw: environment.rawValue
+        )
+        if changed > 0 {
+            try? modelContext.save()
+            syncActivity.refreshMenuBarStatus(invoices: invoices)
         }
     }
 

@@ -32,6 +32,7 @@ public struct NewInvoiceView: View {
     @AppStorage(AppSettingsKeys.nip) private var sellerNIP = ""
     @AppStorage(AppSettingsKeys.bankAccount) private var defaultBankAccount = ""
     @ObservedObject private var tokenStore = TokenStore.shared
+    @ObservedObject private var availabilityMonitor = KSeFAvailabilityMonitor.shared
     private var ksefToken: String { tokenStore.token }
     @AppStorage(AppSettingsKeys.environment) private var environmentRaw = KSeFEnvironment.test.rawValue
     @AppStorage(AppSettingsKeys.numberPattern) private var numberPattern = InvoiceNumberGenerator.defaultPattern
@@ -143,10 +144,59 @@ public struct NewInvoiceView: View {
     /// Wybrany tryb wystawienia — tryby offline tworzą dokument lokalnie
     /// z kodami QR i kolejką dosłania (termin zależny od trybu).
     @State private var issueMode: IssueMode = .online
-    /// Komunikat po automatycznym przejściu w tryb offline24 (brak sieci).
+    /// Komunikat po automatycznym przejściu w tryb offline (brak sieci).
     @State private var offlineInfoMessage: String?
+    @State private var offlineInfoTitle = "Faktura wystawiona offline"
     @State private var showingTemplateName = false
     @State private var templateName = ""
+
+    /// Używamy wyłącznie odczytu dla aktualnie wybranego środowiska — wynik
+    /// sprzed przełączenia TEST/PRD nie może podpowiedzieć błędnego trybu.
+    private var availabilitySnapshot: KSeFAvailabilitySnapshot? {
+        guard let environment = KSeFEnvironment(rawValue: environmentRaw),
+              availabilityMonitor.lastError == nil,
+              let snapshot = availabilityMonitor.snapshot,
+              snapshot.environment == environment,
+              Date.now.timeIntervalSince(snapshot.fetchedAt) < 5 * 60
+        else { return nil }
+        return snapshot
+    }
+
+    private var availabilitySuggestion: KSeFOfflineSuggestion? {
+        availabilitySnapshot.flatMap(KSeFAvailabilityPolicy.currentSuggestion)
+    }
+
+    private var isTotalKSeFFailure: Bool {
+        availabilitySnapshot.map(KSeFAvailabilityPolicy.isTotalFailure) ?? false
+    }
+
+    private var upcomingMaintenance: KSeFAvailabilityMessage? {
+        availabilitySnapshot.flatMap { KSeFAvailabilityPolicy.upcomingMaintenance(from: $0) }
+    }
+
+    /// Jawny komunikat dla każdego przypadku, w którym automat nie może
+    /// bezpiecznie zinterpretować statusu (błąd, stary odczyt lub nowy kod MF).
+    private var availabilityWarning: String? {
+        guard let environment = KSeFEnvironment(rawValue: environmentRaw),
+              environment.availabilityBaseURL != nil
+        else { return nil }
+        if availabilityMonitor.isRefreshing { return nil }
+        if let error = availabilityMonitor.lastError { return error }
+        guard let snapshot = availabilityMonitor.snapshot,
+              snapshot.environment == environment
+        else { return "Brak aktualnego odczytu Latarni KSeF." }
+        guard Date.now.timeIntervalSince(snapshot.fetchedAt) < 5 * 60 else {
+            return "Ostatni odczyt Latarni KSeF jest nieaktualny."
+        }
+        if case .unknown(let code) = snapshot.status {
+            return "Latarnia KSeF zwróciła nieznany status „\(code)”."
+        }
+        if (snapshot.status == .maintenance || snapshot.status == .failure),
+           KSeFAvailabilityPolicy.currentSuggestion(from: snapshot) == nil {
+            return "Status Latarni wskazuje zdarzenie, ale brakuje rozpoznawalnego komunikatu MF."
+        }
+        return nil
+    }
 
     /// Kontrahent z historii wystawionych faktur (odrębny od słownika `Contractor`).
     private struct HistoryContractor: Identifiable {
@@ -541,6 +591,49 @@ public struct NewInvoiceView: View {
                         }
                     }
                 }
+
+                if let suggestion = availabilitySuggestion {
+                    Section("Status KSeF — komunikat MF") {
+                        Label(suggestion.title, systemImage: "exclamationmark.triangle.fill")
+                            .foregroundStyle(.orange)
+                        Text(suggestion.text)
+                            .font(.callout)
+                        if let deadline = suggestion.deadline {
+                            Text("Proponowany termin dosłania: \(deadline.formatted(date: .long, time: .omitted)).")
+                                .font(.callout.weight(.semibold))
+                        } else {
+                            Text(suggestion.reason.deadlineDescription.capitalized + ". Termin pojawi się automatycznie po komunikacie MF o zakończeniu zdarzenia.")
+                                .font(.callout)
+                                .foregroundStyle(.secondary)
+                        }
+                        Button("Użyj: \(suggestion.reason.displayName)") {
+                            issueMode = issueMode(for: suggestion.reason)
+                        }
+                        .buttonStyle(.borderedProminent)
+                    }
+                } else if isTotalKSeFFailure {
+                    Section("Status KSeF — awaria całkowita") {
+                        Label("MF ogłosiło awarię całkowitą KSeF", systemImage: "xmark.octagon.fill")
+                            .foregroundStyle(.red)
+                        Text("Nie wystawiaj tu faktury ustrukturyzowanej offline. Dokumentów z okresu awarii całkowitej nie dosyła się później do KSeF; Ksefiarz nie obsługuje tego odrębnego trybu.")
+                            .font(.callout)
+                    }
+                } else if let warning = availabilityWarning {
+                    Section("Status KSeF") {
+                        Label("Nie można automatycznie dobrać trybu", systemImage: "wifi.exclamationmark")
+                            .foregroundStyle(.orange)
+                        Text(warning + " W razie problemów wybierz tryb offline ręcznie po sprawdzeniu komunikatu MF.")
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                    }
+                } else if let maintenance = upcomingMaintenance {
+                    Section("Zaplanowana niedostępność KSeF") {
+                        Label(maintenance.title, systemImage: "calendar.badge.clock")
+                        Text("Od \(maintenance.start.formatted(date: .long, time: .shortened)) do \((maintenance.end ?? maintenance.start).formatted(date: .long, time: .shortened)). Podpowiedź trybu offline pojawi się automatycznie po rozpoczęciu przerwy.")
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                    }
+                }
             }
             .formStyle(.grouped)
 
@@ -589,7 +682,7 @@ public struct NewInvoiceView: View {
                 .fixedSize()
                 .keyboardShortcut(.defaultAction)
                 .buttonStyle(.borderedProminent)
-                .disabled(isSending)
+                .disabled(isSending || isTotalKSeFFailure)
             }
             .padding()
         }
@@ -645,6 +738,10 @@ public struct NewInvoiceView: View {
             prefillInvoiceNumber()
             loadContractors()
         }
+        .task(id: "invoice-ksef-availability-\(environmentRaw)") {
+            let environment = KSeFEnvironment(rawValue: environmentRaw) ?? .test
+            _ = await availabilityMonitor.refresh(environment: environment)
+        }
         .alert("Nazwa szablonu", isPresented: $showingTemplateName) {
             TextField("np. Miesięczna obsługa", text: $templateName)
             Button("Anuluj", role: .cancel) {}
@@ -665,7 +762,7 @@ public struct NewInvoiceView: View {
             Text(errorMessage ?? "")
         }
         .alert(
-            "Faktura wystawiona w trybie offline24",
+            offlineInfoTitle,
             isPresented: Binding(
                 get: { offlineInfoMessage != nil },
                 set: { if !$0 { offlineInfoMessage = nil; onCompleted?(); dismiss() } }
@@ -678,6 +775,14 @@ public struct NewInvoiceView: View {
     }
 
     // MARK: Akcje
+
+    private func issueMode(for reason: Invoice.OfflineReason) -> IssueMode {
+        switch reason {
+        case .offline24: return .offline24
+        case .unavailability: return .unavailability
+        case .failure: return .failure
+        }
+    }
 
     private var formTitle: String {
         if editingInvoice != nil {
@@ -962,13 +1067,20 @@ public struct NewInvoiceView: View {
         invoice.isOfflineMode = true
         invoice.offlineReason = reason
         invoice.offlineHashBase64 = KSeFCrypto.sha256Base64(Data(xml.utf8))
+        if let suggestion = availabilitySuggestion, suggestion.reason == reason {
+            KSeFAvailabilityPolicy.apply(suggestion, to: invoice)
+        }
         try? modelContext.save()
         onCreatedInvoice?(invoice)
 
         let deadline = invoice.offlineSendDeadline
             .map { FA2Format.dateFormatter.string(from: $0) } ?? reason.deadlineDescription
         if automatic {
-            offlineInfoMessage = "Wysyłka online nie powiodła się (brak połączenia z KSeF), więc dokument został wystawiony w trybie offline24. Zostanie dosłany automatycznie — termin: \(deadline). Na wydruku znajdą się wymagane kody QR. Jeżeli Ministerstwo Finansów ogłosiło awarię albo niedostępność KSeF, zmień tryb offline w szczegółach faktury — termin dosłania liczy się wtedy inaczej."
+            offlineInfoTitle = "Faktura wystawiona: \(reason.displayName)"
+            let source = reason == .offline24
+                ? "Brak połączenia z KSeF nie był potwierdzony aktywnym komunikatem MF, dlatego zastosowano offline24."
+                : "Aktywny komunikat Latarni MF potwierdził właściwy tryb i powiązał dokument ze zdarzeniem."
+            offlineInfoMessage = "Wysyłka online nie powiodła się, więc dokument został wystawiony offline. \(source) Zostanie dosłany automatycznie — termin: \(deadline). Na wydruku znajdą się wymagane kody QR."
         } else {
             onCompleted?()
             dismiss()
@@ -1023,9 +1135,10 @@ public struct NewInvoiceView: View {
             dismiss()
         } catch {
             // Brak łączności z KSeF nie blokuje wystawienia: dokument
-            // przechodzi w tryb offline24 i trafia do kolejki dosłania.
+            // przechodzi w tryb wskazany przez aktywny komunikat MF, a przy
+            // braku takiego komunikatu — w offline24.
             if isConnectivityError(error) {
-                issueOffline(reason: .offline24, automatic: true)
+                issueOffline(reason: availabilitySuggestion?.reason ?? .offline24, automatic: true)
             } else {
                 errorMessage = error.localizedDescription
             }

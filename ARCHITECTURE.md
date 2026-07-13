@@ -72,6 +72,10 @@ Sources/KsefiarzCore/
                jedno źródło VIES, izolacja awarii, składanie przez
                VIESVerification.build; opcjonalny requesterNIP → numer
                potwierdzenia zapytania),
+               KSeFAvailabilityService (publiczne API Latarni MF: `/status`
+               + `/messages`, bez autoryzacji; TEST i PRD, brak mapowania
+               Demo), KSeFAvailabilityMonitor (wspólny stan odświeżany co
+               minutę przez MainContentView),
                KSeFQRCode (linki weryfikacyjne KOD I/II + render QR),
                InvoiceEmailService (okno wiadomości Mail przez
                NSSharingService; załączniki PDF/XML z katalogu tymczasowego),
@@ -106,6 +110,9 @@ Sources/KsefiarzCore/
                przy starcie i cykliczny — automatyka w MainContentView),
                PolishBusinessCalendar (dni robocze/święta — terminy trybów
                offline), OfflineQueueEngine (kolejka dosłań offline),
+               KSeFAvailabilityPolicy (mapowanie MAINTENANCE/FAILURE na
+               podpowiedź trybu, TOTAL_FAILURE jako osobna blokada,
+               uzupełnianie końca zdarzenia po eventId),
                DeadlineNotificationEngine (powiadomienia o terminach
                płatności i dosłań; dedup po kluczach z datą w UserDefaults),
                SyncCenter (rejestracja przebiegów SyncRun, stany operacji,
@@ -512,9 +519,28 @@ Scripts/build-app.sh                   # składanie bundla .app
   (`Invoice.OfflineReason`, tabela w docs CIRFMF tryby-offline.md):
   offline24 (art. 106nda) — następny dzień roboczy po dacie wystawienia;
   niedostępność (art. 106nh) — następny dzień roboczy po jej zakończeniu;
-  awaria (art. 106nf) — 7 dni roboczych od jej zakończenia. Daty końca
-  zdarzenia NIE ma w API (komunikaty w BIP MF) — wpisuje ją użytkownik
-  (`offlineEventEndedAt`); do tego czasu termin jest nieznany (nil).
+  awaria (art. 106nf) — 7 dni roboczych od jej zakończenia.
+- **Latarnia KSeF**: oficjalne, publiczne API MF wskazane w BIP:
+  `https://api-latarnia.ksef.mf.gov.pl/status` i `/messages` (TEST:
+  `api-latarnia-test...`; Demo nie ma własnego źródła). `/status` jest
+  bieżącą decyzją: `AVAILABLE`, `MAINTENANCE`, `FAILURE`, `TOTAL_FAILURE`;
+  `/messages` zwraca ustrukturyzowane komunikaty przez 30 dni po zdarzeniu.
+  `MAINTENANCE_ANNOUNCEMENT` ma znane `start/end`; awaria ma osobne
+  `FAILURE_START` i `FAILURE_END`, powiązane przez `eventId`. Formularz
+  proponuje `.unavailability` albo `.failure`, lecz nie zmienia wyboru bez
+  akcji użytkownika. Po wystawieniu zapisuje na `Invoice` eventId i znany
+  koniec; cykl MainContentView co 60 s uzupełnia `offlineEventEndedAt` po
+  komunikacie kończącym, tylko dla tego samego zdarzenia i środowiska.
+  Ręczna zmiana trybu/daty zeruje eventId, więc automat jej nie nadpisze.
+  `TOTAL_FAILURE` świadomie nie ma odpowiednika `OfflineReason` — faktur
+  z art. 106ng nie dosyła się później do KSeF. Nieznane przyszłe kody oraz
+  nieświeży/nieudany odczyt nigdy nie włączają trybu automatycznie.
+  Kontrakt: repozytorium CIRFMF `ksef-latarnia` (`open-api.json`,
+  `scenariusze.md`); adresy: BIP MF „API Krajowego Systemu e-Faktur”.
+- `Invoice.offlineEventEndedAt` pozostaje opcjonalne: dla trwającej awarii
+  termin jest nieznany (nil). `Invoice.offlineEventId` wiąże tylko dane
+  pochodzące z Latarni; brak identyfikatora oznacza wpis ręczny. Kopia
+  zapasowa v13 utrwala to powiązanie.
 - Kody QR: hosty `qr{-test,-demo,}.ksef.mf.gov.pl`; KOD I
   `/invoice/{NIP}/{DD-MM-RRRR}/{skrót SHA-256 Base64URL bez dopełnienia}`;
   KOD II `/certificate/Nip/{ctx}/{NIP}/{seryjny HEX}/{skrót}/{podpis}` —

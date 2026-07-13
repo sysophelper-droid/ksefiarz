@@ -68,7 +68,7 @@ struct TaxCalendarEngineTests {
         #expect(TaxSettlementCycle.monthly.id == "monthly")
         #expect(KPiRIncomeTaxMethod.scale.displayName.contains("12%"))
         #expect(KPiRIncomeTaxMethod.linear.id == "linear")
-        #expect(BackupService.currentVersion == 12)
+        #expect(BackupService.currentVersion == 13)
         #expect(BackupService.backedUpSettingsKeys.contains(AppSettingsKeys.numberPatternPRO))
         #expect(BackupService.backedUpSettingsKeys.contains(AppSettingsKeys.numberPatternSF))
         #expect(BackupService.backedUpSettingsKeys.contains(AppSettingsKeys.kpirIncomeTaxMethod))

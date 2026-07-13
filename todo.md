@@ -23,10 +23,6 @@ kolejność dowolna. ⚠️ operacje modyfikujące KSeF testować wyłącznie na
   pojedynczej sesji interaktywnej (migracja/zaległości). ⚠️ tylko `test`.
 - [ ] A5. Anonimowy dostęp / pobranie faktury po numerze KSeF — wciągnięcie
   faktury zakupowej po numerze KSeF + danych, gdy nie przyszła synchronizacją.
-- [ ] ⭐ A6. Auto-wykrywanie trybu awaryjnego KSeF — pobieranie komunikatów MF
-  o niedostępności/awarii i automatyczne proponowanie trybu offline + terminu
-  (dziś datę zakończenia zdarzenia wpisuje użytkownik ręcznie).
-
 #### B. Podatki dochodowe / ewidencje
 
 - [ ] B4. JPK_FA na żądanie — pełny JPK faktur (nie ewidencja), format dla
@@ -68,6 +64,22 @@ kolejność dowolna. ⚠️ operacje modyfikujące KSeF testować wyłącznie na
   (dziś zaszyte PL/EN).
 
 ## Zrealizowane
+
+### Automatyczne wykrywanie awarii KSeF — Latarnia MF (13.07.2026)
+
+- [x] A6. Publiczny klient API Latarni KSeF (`/status` + `/messages`, bez
+  autoryzacji) odświeża komunikaty MF co minutę dla produkcji i TEST; Demo
+  świadomie nie dziedziczy zdarzeń testowych. Formularz pokazuje aktywną
+  niedostępność/awarię, treść komunikatu i wyliczony lub opisowy termin oraz
+  pozwala jednym przyciskiem użyć proponowanego trybu. Próba wysyłki przy
+  błędzie łączności korzysta z trybu potwierdzonego przez Latarnię, a bez
+  komunikatu bezpiecznie pozostaje w offline24. Faktura zapamiętuje `eventId`;
+  `FAILURE_END` albo zmieniony koniec przerwy automatycznie aktualizuje termin
+  wyłącznie powiązanego dokumentu, bez nadpisywania ręcznych decyzji.
+  Zapowiedzi przerw są widoczne do 7 dni wcześniej, błąd/stary odczyt jest
+  jawny, nieznane statusy są bezpieczne, a `TOTAL_FAILURE` jest blokowane jako
+  odrębny tryb bez późniejszego dosyłania. Kopia zapasowa v13; 10 nowych
+  testów klienta, dekodowania, mapowania, terminów i przypadków brzegowych.
 
 ### Samofakturowanie — wystawianie faktur w imieniu dostawcy (13.07.2026)
 

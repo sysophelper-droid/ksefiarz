@@ -247,6 +247,10 @@ public final class Invoice {
     /// Data zakończenia niedostępności/awarii KSeF (komunikat MF) — od niej
     /// liczy się termin dosłania; nil = zdarzenie trwa albo nie dotyczy.
     public var offlineEventEndedAt: Date? = nil
+    /// Identyfikator zdarzenia z publicznego API Latarni MF. Pozwala
+    /// automatycznie powiązać komunikat kończący awarię z fakturą, bez
+    /// zgadywania po dacie. `nil` oznacza wybór/daty ustawione ręcznie.
+    public var offlineEventId: Int? = nil
 
     /// Czy dokument jest fakturą korygującą.
     public var isCorrection: Bool {
