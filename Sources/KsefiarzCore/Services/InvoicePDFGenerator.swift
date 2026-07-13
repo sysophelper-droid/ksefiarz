@@ -340,6 +340,15 @@ struct InvoicePrintPageView: View {
                         .foregroundStyle(branding.isEnabled ? primaryColor : .black)
                     Text("\(labels.text("Nr", "No")) \(invoice.invoiceNumber)")
                         .font(.system(size: 14, weight: .semibold))
+                    if isProforma {
+                        Text(labels.text(
+                            "Dokument handlowy — nie jest fakturą VAT ani podstawą rozliczeń podatkowych.",
+                            "Commercial document — not a VAT invoice, not a basis for tax settlement."
+                        ))
+                        .font(.system(size: 8))
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
                 Spacer()
                 VStack(alignment: .trailing, spacing: 2) {
@@ -560,10 +569,15 @@ struct InvoicePrintPageView: View {
 
     private var documentTitle: String {
         switch invoice.documentTypeRaw {
+        case "PRO": return labels.text("Faktura PROFORMA", "Proforma Invoice")
         case "VAT_RR": return labels.text("Faktura VAT RR", "VAT RR Invoice")
         case "KOR_VAT_RR": return labels.text("Korekta faktury VAT RR", "VAT RR Correction")
         case "KOR", "KOR_ZAL", "KOR_ROZ": return labels.text("Faktura korygująca", "Correction Invoice")
         default: return labels.text("Faktura VAT", "VAT Invoice")
         }
     }
+
+    /// Adnotacja pod tytułem proformy — proforma NIE jest fakturą VAT ani
+    /// dokumentem księgowym (tylko dla dokumentów „PRO").
+    private var isProforma: Bool { invoice.documentTypeRaw == "PRO" }
 }

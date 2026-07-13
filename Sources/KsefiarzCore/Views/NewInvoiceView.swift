@@ -18,6 +18,10 @@ public struct NewInvoiceView: View {
     private let initialDraft: InvoiceDraft?
     private let sourceTitle: String?
     private let onCompleted: (() -> Void)?
+    /// Wywoływane z utworzoną/zaktualizowaną fakturą po zapisie (lokalnym,
+    /// wysyłce online lub offline). Używane m.in. przez konwersję proformy —
+    /// pozwala oznaczyć proformę jako rozliczoną numerem powstałej faktury.
+    private let onCreatedInvoice: ((Invoice) -> Void)?
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
@@ -154,13 +158,15 @@ public struct NewInvoiceView: View {
         editing: Invoice? = nil,
         initialDraft: InvoiceDraft? = nil,
         sourceTitle: String? = nil,
-        onCompleted: (() -> Void)? = nil
+        onCompleted: (() -> Void)? = nil,
+        onCreatedInvoice: ((Invoice) -> Void)? = nil
     ) {
         self.correctingInvoice = correcting
         self.editingInvoice = editing
         self.initialDraft = initialDraft
         self.sourceTitle = sourceTitle
         self.onCompleted = onCompleted
+        self.onCreatedInvoice = onCreatedInvoice
     }
 
     /// Czy formularz dotyczy dokumentu korygującego (nowa korekta
@@ -825,7 +831,8 @@ public struct NewInvoiceView: View {
     private func saveLocally() {
         guard validate() else { return }
         let xml = FA2XMLGenerator.generateXML(for: draft)
-        _ = persist(ksefId: nil, sessionReference: nil, xml: xml)
+        let invoice = persist(ksefId: nil, sessionReference: nil, xml: xml)
+        onCreatedInvoice?(invoice)
         onCompleted?()
         dismiss()
     }
@@ -854,6 +861,7 @@ public struct NewInvoiceView: View {
         invoice.offlineReason = reason
         invoice.offlineHashBase64 = KSeFCrypto.sha256Base64(Data(xml.utf8))
         try? modelContext.save()
+        onCreatedInvoice?(invoice)
 
         let deadline = invoice.offlineSendDeadline
             .map { FA2Format.dateFormatter.string(from: $0) } ?? reason.deadlineDescription
@@ -908,6 +916,7 @@ public struct NewInvoiceView: View {
                 _ = try? await InvoiceSubmissionStatusEngine.refresh(invoice, using: service)
                 try? modelContext.save()
             }
+            onCreatedInvoice?(invoice)
             onCompleted?()
             dismiss()
         } catch {

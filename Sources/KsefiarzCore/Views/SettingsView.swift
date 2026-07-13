@@ -60,6 +60,7 @@ public struct SettingsView: View {
     @AppStorage(AppSettingsKeys.numberPatternUPR) private var numberPatternUPR = ""
     @AppStorage(AppSettingsKeys.numberPatternKOR) private var numberPatternKOR = ""
     @AppStorage(AppSettingsKeys.numberPatternRR) private var numberPatternRR = ""
+    @AppStorage(AppSettingsKeys.numberPatternPRO) private var numberPatternPRO = ""
     @AppStorage(AppSettingsKeys.prepaidForms) private var prepaidFormsRaw = PaymentFormPolicy.encode(PaymentFormPolicy.defaultPrepaidForms)
     @AppStorage(AppSettingsKeys.dueSoonDays) private var dueSoonDays = 7
 
@@ -479,6 +480,24 @@ public struct SettingsView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
+            Section {
+                TextField("Wzorzec numeru proform", text: $numberPatternPRO, prompt: Text(InvoiceNumberGenerator.defaultProformaPattern))
+                LabeledContent("Przykładowy numer") {
+                    Text(InvoiceNumberGenerator.preview(
+                        pattern: numberPatternPRO.trimmingCharacters(in: .whitespaces).isEmpty
+                            ? InvoiceNumberGenerator.defaultProformaPattern
+                            : numberPatternPRO
+                    ))
+                    .monospaced()
+                    .foregroundStyle(.secondary)
+                }
+            } header: {
+                Text("Numeracja proform")
+            } footer: {
+                Text("Faktury proforma mają własną, niezależną serię. Puste pole oznacza domyślny wzorzec „\(InvoiceNumberGenerator.defaultProformaPattern)” (a NIE serię faktur VAT — proforma to osobny dokument handlowy).")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
             paymentFormsSection
     }
 
@@ -809,6 +828,16 @@ public struct SettingsView: View {
                 from: backup, existing: try modelContext.fetch(FetchDescriptor<RecurringInvoice>())
             )
             newSchedules.compactMap(BackupService.makeSchedule(from:)).forEach(modelContext.insert)
+
+            // Faktury proforma (kopie od wersji 11) — duplikaty po id/numerze.
+            let newProformas = BackupService.proformasToImport(
+                from: backup, existing: try modelContext.fetch(FetchDescriptor<Proforma>())
+            )
+            for entry in newProformas {
+                let proforma = BackupService.makeProforma(from: entry)
+                modelContext.insert(proforma)
+                proforma.lines = BackupService.makeProformaLines(for: entry)
+            }
             try? modelContext.save()
 
             let skipped = backup.invoices.count - toImport.count
@@ -818,6 +847,7 @@ public struct SettingsView: View {
                 + (skipped > 0 ? ", pominięto \(skipped) duplikatów" : "")
                 + (dictionariesCount > 0 ? ", \(dictionariesCount) pozycji słowników." : ".")
                 + (automationCount > 0 ? " Przywrócono \(automationCount) szablonów i harmonogramów." : "")
+                + (newProformas.count > 0 ? " Zaimportowano \(newProformas.count) proform." : "")
         } catch {
             backupStatus = "Błąd importu: nieprawidłowy plik kopii zapasowej."
         }

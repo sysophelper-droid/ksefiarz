@@ -100,6 +100,50 @@ public struct BackupInvoice: Codable, Equatable, Sendable {
     public var ryczaltNotes: String?
 }
 
+/// Pozycja proformy w kopii zapasowej.
+public struct BackupProformaLine: Codable, Equatable, Sendable {
+    public var index: Int
+    public var name: String
+    public var unit: String
+    public var quantity: Double
+    public var unitNetPrice: Double
+    public var netAmount: Double
+    public var vatRate: String
+    public var vatAmount: Double
+    public var cnPkwiu: String?
+}
+
+/// Faktura proforma w kopii zapasowej (osobny model, od wersji 11).
+public struct BackupProforma: Codable, Equatable, Sendable {
+    public var id: UUID
+    public var proformaNumber: String
+    public var issueDate: Date
+    public var validUntil: Date?
+    public var sellerName: String
+    public var sellerNIP: String
+    public var sellerAddress: String
+    public var buyerName: String
+    public var buyerNIP: String
+    public var buyerAddress: String
+    public var netAmount: Double
+    public var vatAmount: Double
+    public var grossAmount: Double
+    public var currency: String
+    public var exchangeRate: Double
+    public var isPaid: Bool
+    public var paymentDate: Date?
+    public var paymentDueDate: Date?
+    public var paymentFormRaw: String?
+    public var paymentBankAccount: String?
+    public var notes: String
+    public var createdAt: Date
+    public var convertedInvoiceNumber: String
+    public var convertedAt: Date?
+    public var emailSentAt: Date?
+    public var emailSentTo: String?
+    public var lines: [BackupProformaLine]
+}
+
 /// Wpłata do faktury w kopii zapasowej.
 public struct BackupPayment: Codable, Equatable, Sendable {
     public var id: UUID
@@ -207,6 +251,8 @@ public struct BackupFile: Codable, Sendable {
     /// Szablony i harmonogramy — opcjonalne dla kopii sprzed wersji 4.
     public var invoiceTemplates: [BackupInvoiceTemplate]?
     public var recurringInvoices: [BackupRecurringInvoice]?
+    /// Faktury proforma — opcjonalne (brak w kopiach sprzed wersji 11).
+    public var proformas: [BackupProforma]?
 }
 
 // MARK: - Usługa kopii zapasowej
@@ -216,10 +262,11 @@ public struct BackupFile: Codable, Sendable {
 /// pobierania wszystkiego z KSeF.
 public enum BackupService {
 
-    /// Bieżąca wersja formatu pliku (10: + ustawienia kalendarza i prognozy
-    /// podatkowej; 9 dodała klasyfikację ryczałtu i formę opodatkowania).
+    /// Bieżąca wersja formatu pliku (11: + faktury proforma i wzorzec ich
+    /// numeracji; 10 dodała ustawienia kalendarza i prognozy podatkowej;
+    /// 9 — klasyfikację ryczałtu i formę opodatkowania).
     /// Starsze pliki są nadal poprawnie importowane.
-    public static let currentVersion = 10
+    public static let currentVersion = 11
 
     /// Klucze ustawień obejmowane kopią zapasową.
     /// Tokenu KSeF celowo tu nie ma — sekret żyje w pęku kluczy i nie może
@@ -250,6 +297,7 @@ public enum BackupService {
         AppSettingsKeys.numberPatternUPR,
         AppSettingsKeys.numberPatternKOR,
         AppSettingsKeys.numberPatternRR,
+        AppSettingsKeys.numberPatternPRO,
         AppSettingsKeys.rangeMode,
     ]
 
@@ -271,7 +319,8 @@ public enum BackupService {
             products: try context.fetch(FetchDescriptor<Product>()),
             bankAccounts: try context.fetch(FetchDescriptor<BankAccount>()),
             invoiceTemplates: try context.fetch(FetchDescriptor<InvoiceTemplate>()),
-            recurringInvoices: try context.fetch(FetchDescriptor<RecurringInvoice>())
+            recurringInvoices: try context.fetch(FetchDescriptor<RecurringInvoice>()),
+            proformas: try context.fetch(FetchDescriptor<Proforma>())
         )
     }
 
@@ -284,6 +333,7 @@ public enum BackupService {
         bankAccounts: [BankAccount] = [],
         invoiceTemplates: [InvoiceTemplate] = [],
         recurringInvoices: [RecurringInvoice] = [],
+        proformas: [Proforma] = [],
         exportedAt: Date = .now
     ) throws -> Data {
         let file = BackupFile(
@@ -305,7 +355,8 @@ public enum BackupService {
                     nextIssueDate: $0.nextIssueDate, dueDays: $0.dueDays,
                     isActive: $0.isActive, lastApprovedAt: $0.lastApprovedAt,
                     presetData: $0.presetData)
-            }
+            },
+            proformas: proformas.map(backupProforma(from:))
         )
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
@@ -580,6 +631,72 @@ public enum BackupService {
         return result
     }
 
+    // MARK: Faktury proforma (od wersji 11)
+
+    /// Proformy z kopii nieobecne w bazie (duplikaty po `id` oraz numerze).
+    public static func proformasToImport(
+        from backup: BackupFile,
+        existing: [Proforma]
+    ) -> [BackupProforma] {
+        let ids = Set(existing.map(\.id))
+        let numbers = Set(existing.map { InvoiceValidator.normalizedNumber($0.proformaNumber) })
+        return (backup.proformas ?? []).filter {
+            !ids.contains($0.id)
+                && !numbers.contains(InvoiceValidator.normalizedNumber($0.proformaNumber))
+        }
+    }
+
+    /// Buduje model SwiftData z wpisu kopii zapasowej. Pozycje należy przypisać
+    /// po wstawieniu do kontekstu — patrz `makeProformaLines(for:)`.
+    public static func makeProforma(from backup: BackupProforma) -> Proforma {
+        let proforma = Proforma(
+            id: backup.id,
+            proformaNumber: backup.proformaNumber,
+            issueDate: backup.issueDate,
+            validUntil: backup.validUntil,
+            sellerName: backup.sellerName,
+            sellerNIP: backup.sellerNIP,
+            sellerAddress: backup.sellerAddress,
+            buyerName: backup.buyerName,
+            buyerNIP: backup.buyerNIP,
+            buyerAddress: backup.buyerAddress,
+            netAmount: backup.netAmount,
+            vatAmount: backup.vatAmount,
+            grossAmount: backup.grossAmount,
+            currency: backup.currency,
+            exchangeRate: backup.exchangeRate,
+            isPaid: backup.isPaid,
+            paymentDate: backup.paymentDate,
+            paymentDueDate: backup.paymentDueDate,
+            paymentForm: backup.paymentFormRaw.flatMap(PaymentForm.init(rawValue:)),
+            paymentBankAccount: backup.paymentBankAccount,
+            notes: backup.notes,
+            createdAt: backup.createdAt,
+            convertedInvoiceNumber: backup.convertedInvoiceNumber,
+            convertedAt: backup.convertedAt
+        )
+        proforma.emailSentAt = backup.emailSentAt
+        proforma.emailSentTo = backup.emailSentTo ?? ""
+        return proforma
+    }
+
+    /// Modele pozycji dla zaimportowanej proformy.
+    public static func makeProformaLines(for backup: BackupProforma) -> [ProformaLine] {
+        backup.lines.map { line in
+            ProformaLine(
+                index: line.index,
+                name: line.name,
+                unit: line.unit,
+                quantity: line.quantity,
+                unitNetPrice: line.unitNetPrice,
+                netAmount: line.netAmount,
+                vatRate: line.vatRate,
+                vatAmount: line.vatAmount,
+                cnPkwiu: line.cnPkwiu ?? ""
+            )
+        }
+    }
+
     /// Odwzorowanie modelu SwiftData na wpis kopii zapasowej.
     private static func backupInvoice(from invoice: Invoice) -> BackupInvoice {
         BackupInvoice(
@@ -674,6 +791,51 @@ public enum BackupService {
             ryczaltEventDate: invoice.ryczaltEventDate,
             ryczaltAmountOverride: invoice.ryczaltAmountOverride,
             ryczaltNotes: invoice.ryczaltNotes.isEmpty ? nil : invoice.ryczaltNotes
+        )
+    }
+
+    /// Odwzorowanie proformy na wpis kopii zapasowej.
+    private static func backupProforma(from proforma: Proforma) -> BackupProforma {
+        BackupProforma(
+            id: proforma.id,
+            proformaNumber: proforma.proformaNumber,
+            issueDate: proforma.issueDate,
+            validUntil: proforma.validUntil,
+            sellerName: proforma.sellerName,
+            sellerNIP: proforma.sellerNIP,
+            sellerAddress: proforma.sellerAddress,
+            buyerName: proforma.buyerName,
+            buyerNIP: proforma.buyerNIP,
+            buyerAddress: proforma.buyerAddress,
+            netAmount: proforma.netAmount,
+            vatAmount: proforma.vatAmount,
+            grossAmount: proforma.grossAmount,
+            currency: proforma.currency,
+            exchangeRate: proforma.exchangeRate,
+            isPaid: proforma.isPaid,
+            paymentDate: proforma.paymentDate,
+            paymentDueDate: proforma.paymentDueDate,
+            paymentFormRaw: proforma.paymentFormRaw,
+            paymentBankAccount: proforma.paymentBankAccount,
+            notes: proforma.notes,
+            createdAt: proforma.createdAt,
+            convertedInvoiceNumber: proforma.convertedInvoiceNumber,
+            convertedAt: proforma.convertedAt,
+            emailSentAt: proforma.emailSentAt,
+            emailSentTo: proforma.emailSentTo.isEmpty ? nil : proforma.emailSentTo,
+            lines: proforma.sortedLines.map { line in
+                BackupProformaLine(
+                    index: line.index,
+                    name: line.name,
+                    unit: line.unit,
+                    quantity: line.quantity,
+                    unitNetPrice: line.unitNetPrice,
+                    netAmount: line.netAmount,
+                    vatRate: line.vatRate,
+                    vatAmount: line.vatAmount,
+                    cnPkwiu: line.cnPkwiu.isEmpty ? nil : line.cnPkwiu
+                )
+            }
         )
     }
 

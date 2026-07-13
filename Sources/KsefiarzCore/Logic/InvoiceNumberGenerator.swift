@@ -13,6 +13,9 @@ public enum InvoiceNumberGenerator {
     /// Domyślny wzorzec numeracji.
     public static let defaultPattern = "FV/{RRRR}/{MM}/{NNN}"
 
+    /// Domyślny wzorzec numeracji faktur proforma (osobna seria „PF").
+    public static let defaultProformaPattern = "PF/{RRRR}/{MM}/{NNN}"
+
     /// Proponuje kolejny numer faktury według wzorca, na podstawie
     /// już istniejących numerów. Licznik rośnie w obrębie numerów
     /// pasujących do wzorca po podstawieniu dat (czyli np. resetuje się

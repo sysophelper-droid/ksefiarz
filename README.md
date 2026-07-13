@@ -78,6 +78,14 @@ Tests/KsefiarzCoreTests/          # 715 testów (Swift Testing) — model, parse
   `KOR_VAT_RR`, odczyt pobranego XML, tryby offline oraz osobny wzorzec
   numeracji RR w Ustawieniach. Funkcja wymaga wcześniejszego uprawnienia
   `RRInvoicing`; specyfikacja: [struktura logiczna FA_RR(1)](https://ksef.podatki.gov.pl/informacje-ogolne-ksef-20/struktura-logiczna-fa_rr/).
+- **Faktury proforma** — osobna sekcja „Faktury proforma" na dokumenty
+  handlowe, które **nie idą do KSeF** i nie wchodzą do rozliczeń podatkowych
+  (proforma nie jest fakturą VAT). Wystawianie z lekkiego formularza (NIP
+  nabywcy opcjonalny — np. konsument), wydruk PDF „Faktura PROFORMA" z adnotacją
+  i kodem QR płatności, wysyłka e-mailem. Po zapłacie jednym kliknięciem
+  **„Konwertuj na fakturę VAT"** — otwiera formularz faktury wypełniony danymi
+  proformy (numer z serii VAT); po wystawieniu proforma zostaje oznaczona jako
+  rozliczona. Osobna numeracja (wzorzec `PF/…`) i objęcie kopią zapasową.
 - **Uwierzytelnianie certyfikatem KSeF (preferowane)** — podpis XAdES-BES
   dokumentu AuthTokenRequest wykonywany w całości lokalnie (własna
   kanonikalizacja i podpis RSA/ECDSA, bez zewnętrznych bibliotek).
@@ -433,7 +441,7 @@ Wszystkie dane pozostają lokalnie na Twoim komputerze:
 
 | Dane | Lokalizacja |
 | --- | --- |
-| Baza aplikacji (SwiftData/SQLite): faktury, pozycje, statusy wysyłki, surowe XML i UPO, szablony i harmonogramy | `~/Library/Application Support/Ksefiarz/Ksefiarz.store` (+ pliki `-wal`, `-shm`) |
+| Baza aplikacji (SwiftData/SQLite): faktury, pozycje, statusy wysyłki, surowe XML i UPO, faktury proforma, szablony i harmonogramy | `~/Library/Application Support/Ksefiarz/Ksefiarz.store` (+ pliki `-wal`, `-shm`) |
 | Ustawienia: dane firmy, branding PDF (w tym pomniejszone logo), środowisko, numeracja, filtry | `~/Library/Preferences/pl.itkrak.ksefiarz.plist` |
 | **Token KSeF** | pęk kluczy macOS (Keychain), pozycja `pl.itkrak.ksefiarz` |
 | **Certyfikaty KSeF (typ 1 i 2) z kluczami prywatnymi** | pęk kluczy macOS, pozycje `ksef.cert.*` w usłudze `pl.itkrak.ksefiarz` (osobno per środowisko) |

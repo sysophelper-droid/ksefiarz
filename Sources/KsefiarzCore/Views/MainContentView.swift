@@ -7,6 +7,7 @@ public enum SidebarSection: String, CaseIterable, Identifiable, Hashable {
     case dashboard
     case sales
     case purchases
+    case proformas
     case reports
     case kpir
     case ryczalt
@@ -24,6 +25,7 @@ public enum SidebarSection: String, CaseIterable, Identifiable, Hashable {
         case .dashboard: return "Kokpit"
         case .sales: return "Faktury Sprzedaży"
         case .purchases: return "Faktury Zakupu"
+        case .proformas: return "Faktury proforma"
         case .reports: return "Raporty"
         case .kpir: return "KPiR"
         case .ryczalt: return "Ewidencja przychodów"
@@ -41,6 +43,7 @@ public enum SidebarSection: String, CaseIterable, Identifiable, Hashable {
         case .dashboard: return "gauge.with.dots.needle.50percent"
         case .sales: return "arrow.up.doc"
         case .purchases: return "arrow.down.doc"
+        case .proformas: return "doc.plaintext"
         case .reports: return "chart.bar.xaxis"
         case .kpir: return "books.vertical"
         case .ryczalt: return "list.bullet.rectangle.portrait"
@@ -147,6 +150,8 @@ public struct MainContentView: View {
                 InvoiceListView(kind: .sales)
             case .purchases:
                 InvoiceListView(kind: .purchase)
+            case .proformas:
+                ProformaListView()
             case .reports:
                 ReportsView()
             case .kpir:
