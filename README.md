@@ -79,6 +79,22 @@ Tests/KsefiarzCoreTests/          # 834 testy (Swift Testing) — model, parser,
   `KOR_VAT_RR`, odczyt pobranego XML, tryby offline oraz osobny wzorzec
   numeracji RR w Ustawieniach. Funkcja wymaga wcześniejszego uprawnienia
   `RRInvoicing`; specyfikacja: [struktura logiczna FA_RR(1)](https://ksef.podatki.gov.pl/informacje-ogolne-ksef-20/struktura-logiczna-fa_rr/).
+- **Samofakturowanie (wystawianie faktur w imieniu dostawcy)** — przełącznik
+  „Samofakturowanie” w formularzu wystawiania (oraz wejście „Wystaw
+  samofakturę” pod „+” na liście zakupów) wystawia zwykłą fakturę FA(3)
+  z adnotacją `P_17 = 1` (art. 106d ustawy o VAT), w której sprzedawcą
+  (Podmiot1) jest dostawca, a nabywcą (Podmiot2) firma użytkownika. Dokument
+  jest zapisywany jako **zakup** (koszt w KPiR, VAT naliczony w JPK), ale ma
+  pełny cykl wysyłki do KSeF jak sprzedaż: edycja/usuwanie póki lokalny,
+  wysyłka we własnym kontekście firmy, statusy, UPO, tryby offline i korekty
+  (korekta dziedziczy adnotację i role stron). Wysyłka wymaga uprawnienia
+  podmiotowego `SelfInvoicing`, które dostawca nadaje firmie użytkownika
+  w swoim KSeF — relację weryfikuje KSeF przy przyjęciu pliku. Osobna seria
+  numeracji samofaktur w Ustawieniach (pusty wzorzec dziedziczy serię VAT);
+  na PDF drukowana jest wymagana adnotacja „samofakturowanie”, a rachunek
+  płatności to rachunek dostawcy. Faktury sprzedaży pobrane z KSeF
+  z adnotacją P_17 (wystawione przez klienta w imieniu użytkownika) dostają
+  znacznik „Samofakturowanie” na liście i w szczegółach.
 - **Faktury proforma** — osobna sekcja „Faktury proforma" na dokumenty
   handlowe, które **nie idą do KSeF** i nie wchodzą do rozliczeń podatkowych
   (proforma nie jest fakturą VAT). Wystawianie z lekkiego formularza (NIP
@@ -227,16 +243,18 @@ Tests/KsefiarzCoreTests/          # 834 testy (Swift Testing) — model, parser,
   stronie. Logo jest automatycznie skalowane, a konfiguracja trafia do kopii
   zapasowej. Branding obejmuje wyłącznie dokumenty własnej firmy (dla VAT RR:
   firmy jako nabywcy/wystawcy), więc pobrane faktury kosztowe nie dostają
-  omyłkowo obcego znaku.
+  omyłkowo obcego znaku. Dokumenty samofakturowania (P_17) są wyłączone
+  w obie strony: samofaktura jest formalnie fakturą dostawcy, a sprzedaż
+  z tą adnotacją wystawił klient.
 - **Dwujęzyczny PDF (PL/EN)** — dla kontrahentów zagranicznych: wariant
   wydruku z etykietami w obu językach („Sprzedawca / Seller”, „Do zapłaty /
   Total due”…, angielskie nazwy form płatności). Wybór w menu „Eksportuj
   PDF” w szczegółach faktury i przełącznikiem w arkuszu e-mail; kontrahent
   z włączonym polem „Dokumenty dwujęzyczne (PL/EN)” w słowniku dostaje ten
   wariant automatycznie.
-- **Numeracja per rodzaj dokumentu** — każdy rodzaj (VAT/ZAL/ROZ/UPR/VAT RR/korekty)
-  może mieć w Ustawieniach własny wzorzec i niezależną serię numeracji;
-  na listach faktur dostępny jest filtr rodzaju dokumentu.
+- **Numeracja per rodzaj dokumentu** — każdy rodzaj (VAT/ZAL/ROZ/UPR/VAT RR/
+  samofaktury/korekty) może mieć w Ustawieniach własny wzorzec i niezależną
+  serię numeracji; na listach faktur dostępny jest filtr rodzaju dokumentu.
 - **Standardy fakturowania** — automatyczna numeracja według konfigurowalnego
   wzorca ({RRRR}/{MM}/{N…} w Ustawieniach), wybór kontrahenta z historii,
   kwota słownie po polsku.

@@ -60,6 +60,7 @@ public struct SettingsView: View {
     @AppStorage(AppSettingsKeys.numberPatternUPR) private var numberPatternUPR = ""
     @AppStorage(AppSettingsKeys.numberPatternKOR) private var numberPatternKOR = ""
     @AppStorage(AppSettingsKeys.numberPatternRR) private var numberPatternRR = ""
+    @AppStorage(AppSettingsKeys.numberPatternSF) private var numberPatternSF = ""
     @AppStorage(AppSettingsKeys.numberPatternPRO) private var numberPatternPRO = ""
     @AppStorage(AppSettingsKeys.prepaidForms) private var prepaidFormsRaw = PaymentFormPolicy.encode(PaymentFormPolicy.defaultPrepaidForms)
     @AppStorage(AppSettingsKeys.dueSoonDays) private var dueSoonDays = 7
@@ -473,10 +474,11 @@ public struct SettingsView: View {
                 patternRow("Uproszczone (UPR)", text: $numberPatternUPR, example: "UPR/{NN}/{MM}/{RRRR}")
                 patternRow("Korekty (KOR…)", text: $numberPatternKOR, example: "KOR/{NN}/{MM}/{RRRR}")
                 patternRow("Rolnik ryczałtowy (VAT RR)", text: $numberPatternRR, example: "RR/{NN}/{MM}/{RRRR}")
+                patternRow("Samofaktury (samofakturowanie)", text: $numberPatternSF, example: "SF/{NN}/{MM}/{RRRR}")
             } header: {
                 Text("Numeracja faktur")
             } footer: {
-                Text("Pierwszy wzorzec dotyczy faktur VAT. Każdy rodzaj dokumentu może mieć własny wzorzec i własną serię numeracji — puste pole oznacza użycie wzorca faktur VAT. Dostępne symbole: {RRRR} rok, {RR} rok dwucyfrowy, {MM} miesiąc, {DD} dzień, {N}/{NN}/{NNN}… kolejny numer z zerami wiodącymi. Licznik rośnie w obrębie numerów pasujących do wzorca — np. z {MM} resetuje się co miesiąc.")
+                Text("Pierwszy wzorzec dotyczy faktur VAT. Każdy rodzaj dokumentu może mieć własny wzorzec i własną serię numeracji — puste pole oznacza użycie wzorca faktur VAT. Dostępne symbole: {RRRR} rok, {RR} rok dwucyfrowy, {MM} miesiąc, {DD} dzień, {N}/{NN}/{NNN}… kolejny numer z zerami wiodącymi. Licznik rośnie w obrębie numerów pasujących do wzorca — np. z {MM} resetuje się co miesiąc. Serię samofaktur zwykle określa umowa o samofakturowaniu z dostawcą.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

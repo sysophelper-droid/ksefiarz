@@ -176,6 +176,9 @@ public struct KSeFInvoiceMetadata: Decodable, Sendable {
     let netAmount: Double?
     let vatAmount: Double?
     let grossAmount: Double?
+    /// Samofakturowanie (P_17 = 1) — flaga wprost z metadanych KSeF,
+    /// dostępna zanim pobierzemy pełny dokument XML.
+    let isSelfInvoicing: Bool?
 }
 
 struct InvoiceQueryResponseDTO: Decodable {
@@ -585,6 +588,7 @@ public final class KSeFService {
             vatAmount: metadata.vatAmount ?? 0,
             grossAmount: metadata.grossAmount ?? 0,
             paymentDueDate: nil,
+            isSelfInvoicing: metadata.isSelfInvoicing ?? false,
             rawXML: rawXML
         )
     }

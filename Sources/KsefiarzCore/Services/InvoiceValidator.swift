@@ -27,6 +27,7 @@ public enum InvoiceValidationError: LocalizedError, Equatable, Hashable, Sendabl
     case invalidStandardInvoiceRate(Int)
     case emptyRRQuality(Int)
     case unsupportedRRAttachment
+    case selfInvoicingUnsupportedForRR
 
     public var errorDescription: String? {
         switch self {
@@ -55,6 +56,7 @@ public enum InvoiceValidationError: LocalizedError, Equatable, Hashable, Sendabl
         case .invalidStandardInvoiceRate(let index): return "Pozycja \(index): stawki 7% i 6,5% są przeznaczone wyłącznie dla faktur VAT RR."
         case .emptyRRQuality(let index): return "Pozycja \(index): klasa lub jakość produktu/usługi rolniczej jest wymagana (P_6C)."
         case .unsupportedRRAttachment: return "Struktura FA_RR(1) nie obsługuje załączników FA(3)."
+        case .selfInvoicingUnsupportedForRR: return "Samofakturowanie (P_17) nie dotyczy faktur VAT RR — struktura FA_RR(1) jest z natury wystawiana przez nabywcę i nie ma tej adnotacji."
         }
     }
 }
@@ -171,6 +173,9 @@ public enum InvoiceValidator {
         }
         if draft.isRR, !draft.attachments.isEmpty {
             errors.append(.unsupportedRRAttachment)
+        }
+        if draft.isRR, draft.isSelfInvoicing {
+            errors.append(.selfInvoicingUnsupportedForRR)
         }
         return errors
     }

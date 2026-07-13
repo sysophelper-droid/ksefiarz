@@ -41,15 +41,24 @@ public struct InvoiceDetailView: View {
     }
 
     /// Wystawiany przez nas dokument zapisany tylko lokalnie — zwykła
-    /// sprzedaż lub zakupowa VAT RR.
+    /// sprzedaż lub zakupowy dokument wystawiany przez nas
+    /// (VAT RR, samofaktura).
     private var isEditableLocal: Bool {
-        (invoice.kind == .sales || invoice.isRR) && invoice.isLocalOnly
+        (invoice.kind == .sales || invoice.isSelfIssuedPurchase) && invoice.isLocalOnly
     }
 
     public var body: some View {
         Form {
             Section("Faktura") {
                 LabeledContent("Numer faktury", value: invoice.invoiceNumber)
+                if invoice.isSelfInvoicing {
+                    LabeledContent("Samofakturowanie") {
+                        Text(invoice.kind == .purchase
+                            ? "Wystawiona przez nas (nabywcę) w imieniu dostawcy — art. 106d"
+                            : "Wystawiona przez nabywcę w naszym imieniu — art. 106d")
+                            .foregroundStyle(.teal)
+                    }
+                }
                 LabeledContent("Numer KSeF") {
                     if let ksefId = invoice.ksefId {
                         Text(ksefId)
@@ -434,7 +443,7 @@ public struct InvoiceDetailView: View {
                         )
                     }
 
-                    if (invoice.kind == .sales || invoice.isRR), !invoice.isCorrection {
+                    if (invoice.kind == .sales || invoice.isSelfIssuedPurchase), !invoice.isCorrection {
                         Button {
                             showingCorrectionForm = true
                         } label: {

@@ -392,6 +392,28 @@ Scripts/build-app.sh                   # składanie bundla .app
   Zarządzanie uprawnieniami wymaga zakresu `CredentialsManage`, przegląd —
   `CredentialsRead` (właściciel NIP ma oba); token dostępowy wystarcza
   (nie trzeba XAdES).
+- **Samofakturowanie (A3)**: uprawnienia podmiotowe (`SelfInvoicing`,
+  `RRInvoicing`, `TaxRepresentative`) NIE zmieniają kontekstu uwierzytelnienia —
+  są weryfikowane **przy walidacji wysyłanego pliku faktury** („weryfikowana
+  jest zależność pomiędzy podmiotem a danymi na fakturach”, ksef-docs
+  uprawnienia.md; przykład w OpenAPI: „działanie w imieniu {NIP nadającego}
+  w kontekście {NIP uprawnionego}”). Nabywca z uprawnieniem `SelfInvoicing`
+  od dostawcy wysyła zwykłą FA(3) **we własnym kontekście** (zwykła sesja
+  interaktywna, ten sam formCode), z Podmiot1 = dostawca, Podmiot2 = nabywca
+  i `Adnotacje/P_17 = 1`. Podmiot3 z rolą „Wystawca faktury” jawnie NIE
+  dotyczy samofakturowania („Nie dotyczy przypadku, gdy wystawcą faktury
+  jest nabywca” — XSD FA(3)). Metadane zapytania o faktury mają gotową
+  flagę `isSelfInvoicing` (mapowana w `KSeFInvoiceMetadata`). W aplikacji:
+  `Invoice.isSelfInvoicing` (P_17), `Invoice.isSelfIssuedPurchase`
+  (= zakup i (RR albo samofaktura) — dokument wystawiony przez nas jako
+  nabywcę, z pełnym cyklem KSeF), tryb w `NewInvoiceView` z zamianą ról jak
+  RR, osobna seria numeracji (`AppSettingsKeys.numberPatternSF`), adnotacja
+  „samofakturowanie” na PDF (art. 106e ust. 1 pkt 17), wyłączony branding,
+  kopia zapasowa v12. `isManualPurchase` wyklucza RR i samofaktury (lokalny,
+  jeszcze niewysłany dokument nie jest ręcznym zakupem). KOD II QR dla
+  dokumentów `isSelfIssuedPurchase` używa kontekstu = NIP nabywcy (nasz),
+  nie NIP-u sprzedawcy z dokumentu. Nieprzetestowane na żywo (wymaga
+  kontrahenta, który nadał uprawnienie; polityka „tylko odczyt na żywo”).
 - **Weryfikacja kontrahenta**: KSeF 2.0 NIE ma endpointu „aktywne konto”
   podmiotu — pojęcie nie istnieje (system jest powszechny; każdy ważny NIP
   odbiera faktury po NIP automatycznie). Zweryfikowano pełną listą 73 ścieżek
@@ -457,6 +479,7 @@ kodSystemowy "FA (3)", wariant 3; sesja interaktywna otwierana z formCode
 "FA (3)"). Źródło prawdy: oficjalna XSD (CIRFMF/ksef-api). **Kolejność
 elementów musi odpowiadać sekwencji XSD** — Fa: KodWaluty, P_1, P_2, P_6?,
 P_13_x/P_14_x (+P_14_xW dla waluty obcej), P_15, Adnotacje (obowiązkowe!,
+P_17: 1=samofakturowanie/2=brak — z `InvoiceDraft.isSelfInvoicing`,
 P_18A: 1=MPP/2=brak), RodzajFaktury (VAT/KOR/ZAL/ROZ), [korekta:
 PrzyczynaKorekty?, TypKorekty, DaneFaKorygowanej], FakturaZaliczkowa* (ROZ),
 FaWiersz*, Platnosc. Podmiot1 wymaga Adres; **Podmiot2 wymaga JST i GV**

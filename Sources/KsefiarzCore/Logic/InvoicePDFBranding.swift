@@ -49,8 +49,12 @@ public struct InvoicePDFBranding: Equatable, Sendable {
 
     /// Branding dotyczy wyłącznie dokumentów firmy użytkownika. Dla VAT RR
     /// wystawcą dokumentu jest nabywca, dlatego sprawdzamy jego NIP.
+    /// Samofakturowanie jest wyłączone w obie strony: samofaktura, którą
+    /// wystawiamy, jest formalnie fakturą DOSTAWCY (nasze logo by ją
+    /// przekłamywało), a naszą sprzedaż z adnotacją P_17 wystawił klient.
     public func applies(to invoice: Invoice) -> Bool {
         guard isEnabled else { return false }
+        guard !invoice.isSelfInvoicing else { return false }
         let ownNIP = Self.onlyDigits(companyNIP)
         guard !ownNIP.isEmpty else { return false }
         if invoice.isRR {
