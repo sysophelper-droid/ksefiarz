@@ -148,6 +148,16 @@ public final class Proforma {
         lines.sorted { $0.index < $1.index }
     }
 
+    /// Zastępuje pozycje podczas edycji i jawnie usuwa poprzednie modele.
+    /// Samo przypisanie nowej tablicy odłącza stare `ProformaLine`, ale ich nie
+    /// kasuje, przez co kolejne edycje zostawiały osierocone rekordy w bazie.
+    public func replaceLines(with newLines: [ProformaLine], in context: ModelContext) {
+        let previousLines = lines
+        lines = []
+        previousLines.forEach(context.delete)
+        lines = newLines
+    }
+
     /// Czy proforma została już rozliczona właściwą fakturą VAT.
     public var isConverted: Bool {
         !convertedInvoiceNumber.trimmingCharacters(in: .whitespaces).isEmpty
@@ -162,7 +172,9 @@ public final class Proforma {
     /// Proforma po terminie płatności (nieopłacona) na wskazany moment.
     public func isOverdue(asOf date: Date = .now) -> Bool {
         guard !isPaid, let due = paymentDueDate else { return false }
-        return due < date
+        // Termin wskazany w DatePickerze jest datą kalendarzową: dokument
+        // staje się zaległy dopiero następnego dnia, a nie o północy terminu.
+        return Calendar.current.compare(date, to: due, toGranularity: .day) == .orderedDescending
     }
 
     /// Zaległość względem chwili bieżącej.
@@ -171,13 +183,26 @@ public final class Proforma {
     /// Czy proforma utraciła ważność (minęła data „ważna do") na dany moment.
     public func isExpired(asOf date: Date = .now) -> Bool {
         guard !isConverted, let validUntil else { return false }
-        return validUntil < date
+        // „Ważna do" obejmuje cały wskazany dzień kalendarzowy.
+        return Calendar.current.compare(date, to: validUntil, toGranularity: .day) == .orderedDescending
     }
 
     /// Oznacza proformę jako rozliczoną wskazaną fakturą VAT.
     public func markConverted(toInvoiceNumber number: String, at date: Date = .now) {
         convertedInvoiceNumber = number
         convertedAt = date
+    }
+
+    /// Oznacza konwersję i przenosi ręcznie potwierdzony status zapłaty na
+    /// właściwą fakturę. Status może zostać wyłącznie ustawiony — nie cofamy
+    /// opłacenia nadanego fakturze np. przez `PaymentFormPolicy`.
+    public func markConverted(to invoice: Invoice, at date: Date = .now) {
+        markConverted(toInvoiceNumber: invoice.invoiceNumber, at: date)
+        guard isPaid else { return }
+        invoice.isPaid = true
+        if invoice.paymentDate == nil {
+            invoice.paymentDate = paymentDate
+        }
     }
 
     /// PRZEJŚCIOWA (nieutrwalona!) faktura sprzedaży zbudowana z proformy —

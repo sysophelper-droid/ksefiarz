@@ -99,7 +99,11 @@ kolejność dowolna. ⚠️ operacje modyfikujące KSeF testować wyłącznie na
   otwiera `NewInvoiceView` wypełniony danymi proformy (numer z serii VAT), a po
   zapisie/wysyłce proforma zostaje oznaczona jako rozliczona z numerem faktury
   (nowy `onCreatedInvoice` na `NewInvoiceView`). Osobna numeracja (wzorzec
-  `PF/…`, klucz `numberPatternPRO`) i kopia zapasowa v11.
+  `PF/…`, klucz `numberPatternPRO`) i kopia zapasowa v11. Review doprecyzował
+  semantykę konwersji: status zapłaty przechodzi na fakturę, walutowy kurs
+  proformy nie jest kopiowany do dokumentu z nową datą, a daty ważności i
+  płatności obejmują cały wskazany dzień. Edycja jawnie usuwa stare pozycje,
+  żeby nie zostawiać osieroconych rekordów `ProformaLine` w SwiftData.
 
 ### Plik przelewów do banku — Elixir-O (13.07.2026)
 

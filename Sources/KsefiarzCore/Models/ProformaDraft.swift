@@ -118,7 +118,9 @@ public extension ProformaDraft {
     /// Szkic właściwej faktury VAT zbudowany z proformy — punkt wyjścia do
     /// konwersji (proforma → faktura). Numer jest celowo pusty: `NewInvoiceView`
     /// nadaje go z serii VAT. Termin płatności domyślnie 14 dni od dziś, gdy
-    /// proforma nie miała własnego terminu.
+    /// proforma nie miała własnego terminu. Kurs waluty obcej jest zerowany,
+    /// ponieważ faktura dostaje nową datę i wymaga kursu właściwego dla niej;
+    /// walidacja nie pozwoli zapisać dokumentu z VAT bez uzupełnienia kursu.
     func invoiceDraft(issueDate: Date = .now) -> InvoiceDraft {
         InvoiceDraft(
             invoiceNumber: "",
@@ -137,7 +139,7 @@ public extension ProformaDraft {
             notes: notes,
             invoiceType: "VAT",
             currency: currency,
-            exchangeRate: exchangeRate
+            exchangeRate: currency == "PLN" ? exchangeRate : 0
         )
     }
 }

@@ -106,7 +106,7 @@ public struct ProformaListView: View {
                     initialDraft: proforma.invoiceDraft(),
                     sourceTitle: "Faktura z proformy \(proforma.proformaNumber)",
                     onCreatedInvoice: { invoice in
-                        proforma.markConverted(toInvoiceNumber: invoice.invoiceNumber)
+                        proforma.markConverted(to: invoice)
                         try? modelContext.save()
                     }
                 )

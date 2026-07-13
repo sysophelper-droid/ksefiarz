@@ -139,6 +139,30 @@ struct ProformaTests {
         #expect(proforma.convertedAt != nil)
     }
 
+    @Test("Konwersja opłaconej proformy przenosi zapłatę na fakturę")
+    func paidConversionCarriesPayment() {
+        let paymentDate = Date(timeIntervalSince1970: 1_770_100_000)
+        let proforma = makeProforma(isPaid: true)
+        proforma.paymentDate = paymentDate
+        let invoice = makeInvoice(isPaid: false)
+
+        proforma.markConverted(to: invoice)
+
+        #expect(proforma.convertedInvoiceNumber == invoice.invoiceNumber)
+        #expect(invoice.isPaid)
+        #expect(invoice.paymentDate == paymentDate)
+    }
+
+    @Test("Konwersja nie cofa opłacenia ustawionego już na fakturze")
+    func conversionNeverClearsInvoicePayment() {
+        let proforma = makeProforma(isPaid: false)
+        let invoice = makeInvoice(isPaid: true)
+
+        proforma.markConverted(to: invoice)
+
+        #expect(invoice.isPaid)
+    }
+
     @Test("Proforma po terminie ważności; rozliczona nie jest wygasła")
     func expiry() {
         let issue = Date(timeIntervalSince1970: 1_770_000_000)
@@ -149,6 +173,26 @@ struct ProformaTests {
         #expect(proforma.isExpired(asOf: after))
         proforma.markConverted(toInvoiceNumber: "FV/1")
         #expect(proforma.isExpired(asOf: after) == false)
+    }
+
+    @Test("Ważność i termin płatności obejmują cały wskazany dzień")
+    func calendarDatesAreInclusive() throws {
+        let calendar = Calendar.current
+        let due = try #require(calendar.date(from: DateComponents(year: 2026, month: 7, day: 13)))
+        let sameDay = try #require(calendar.date(from: DateComponents(
+            year: 2026, month: 7, day: 13, hour: 23, minute: 59
+        )))
+        let nextDay = try #require(calendar.date(from: DateComponents(
+            year: 2026, month: 7, day: 14, hour: 0, minute: 1
+        )))
+        let proforma = makeProforma()
+        proforma.validUntil = due
+        proforma.paymentDueDate = due
+
+        #expect(!proforma.isExpired(asOf: sameDay))
+        #expect(!proforma.isOverdue(asOf: sameDay))
+        #expect(proforma.isExpired(asOf: nextDay))
+        #expect(proforma.isOverdue(asOf: nextDay))
     }
 
     // MARK: Most do faktury (konwersja)
@@ -164,6 +208,19 @@ struct ProformaTests {
         #expect(draft.buyerName == proforma.buyerName)
         #expect(draft.lines.count == proforma.lines.count)
         #expect(draft.paymentDueDate != nil)          // domyślnie 14 dni
+    }
+
+    @Test("Konwersja walutowej proformy wymaga kursu właściwego dla nowej faktury")
+    func foreignInvoiceDraftResetsRate() {
+        let proforma = makeProforma(gross: 123)
+        proforma.currency = "EUR"
+        proforma.exchangeRate = 4.25
+
+        let draft = proforma.invoiceDraft(issueDate: proforma.issueDate.addingTimeInterval(86_400))
+
+        #expect(draft.currency == "EUR")
+        #expect(draft.exchangeRate == 0)
+        #expect(InvoiceValidator.validate(draft).contains(.missingExchangeRate))
     }
 
     @Test("ProformaDraft(from:) odtwarza pola zapisanej proformy")
@@ -230,6 +287,41 @@ struct ProformaTests {
 
     // MARK: Persystencja + kopia zapasowa
 
+    @Test("Dodanie modeli proform migruje istniejący plik bazy bez utraty faktur")
+    func existingStoreMigration() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appending(path: "Ksefiarz-ProformaMigration-\(UUID().uuidString)", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let storeURL = directory.appending(path: "Ksefiarz.store")
+
+        // Schemat aplikacji sprzed PR #29 — bez Proforma i ProformaLine.
+        func createLegacyStore() throws {
+            let schema = Schema([
+                Invoice.self, PaymentRecord.self, Contractor.self, Product.self,
+                BankAccount.self, InvoiceTemplate.self, RecurringInvoice.self, SyncRun.self,
+            ])
+            let configuration = ModelConfiguration(schema: schema, url: storeURL)
+            let container = try ModelContainer(for: schema, configurations: [configuration])
+            let context = ModelContext(container)
+            context.insert(makeInvoice(isPaid: false))
+            try context.save()
+        }
+        try createLegacyStore()
+
+        let currentSchema = Schema([
+            Invoice.self, PaymentRecord.self, Contractor.self, Product.self,
+            BankAccount.self, InvoiceTemplate.self, RecurringInvoice.self, SyncRun.self,
+            Proforma.self, ProformaLine.self,
+        ])
+        let configuration = ModelConfiguration(schema: currentSchema, url: storeURL)
+        let container = try ModelContainer(for: currentSchema, configurations: [configuration])
+        let context = ModelContext(container)
+
+        #expect(try context.fetch(FetchDescriptor<Invoice>()).map(\.invoiceNumber) == ["FV/2026/07/010"])
+        #expect(try context.fetch(FetchDescriptor<Proforma>()).isEmpty)
+    }
+
     @Test("Zapis i odczyt proformy z bazy zachowuje pozycje")
     func persistence() throws {
         let context = try makeContext()
@@ -242,6 +334,26 @@ struct ProformaTests {
         #expect(fetched.count == 1)
         #expect(fetched.first?.sortedLines.count == 1)
         #expect(fetched.first?.sortedLines.first?.name == "Usługa")
+    }
+
+    @Test("Zastąpienie pozycji proformy nie zostawia osieroconych wierszy")
+    func lineReplacementDoesNotLeaveOrphans() throws {
+        let context = try makeContext()
+        let proforma = makeProforma(gross: 123)
+        proforma.lines = []
+        context.insert(proforma)
+        proforma.lines = [ProformaLine(index: 1, name: "Stara pozycja")]
+        try context.save()
+
+        proforma.replaceLines(
+            with: [ProformaLine(index: 1, name: "Nowa pozycja")],
+            in: context
+        )
+        try context.save()
+
+        let lines = try context.fetch(FetchDescriptor<ProformaLine>())
+        #expect(lines.count == 1)
+        #expect(lines.first?.name == "Nowa pozycja")
     }
 
     @Test("Kopia zapasowa proformy: round-trip zachowuje dane i pozycje")
@@ -297,5 +409,21 @@ struct ProformaTests {
         )
         proforma.lines = [ProformaLine(index: 1, name: "Usługa", quantity: 1, unitNetPrice: net, netAmount: net, vatRate: "23", vatAmount: gross - net)]
         return proforma
+    }
+
+    private func makeInvoice(isPaid: Bool) -> Invoice {
+        Invoice(
+            invoiceNumber: "FV/2026/07/010",
+            issueDate: Date(timeIntervalSince1970: 1_770_200_000),
+            sellerName: "Moja Firma",
+            sellerNIP: "5260250274",
+            buyerName: "Klient Sp. z o.o.",
+            buyerNIP: "5260250274",
+            netAmount: 100,
+            vatAmount: 23,
+            grossAmount: 123,
+            isPaid: isPaid,
+            kind: .sales
+        )
     }
 }

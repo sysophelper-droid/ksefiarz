@@ -59,7 +59,7 @@ Sources/
         ├── InvoiceAutomationView.swift # szablony, cykle i kolejka zatwierdzeń
         ├── HiddenInvoicesView.swift # archiwum „Nieuprawnione / Ukryte”
         └── SettingsView.swift    # NIP, token KSeF, środowisko
-Tests/KsefiarzCoreTests/          # 715 testów (Swift Testing) — model, parser, usługa, kryptografia, logika
+Tests/KsefiarzCoreTests/          # 742 testów (Swift Testing) — model, parser, usługa, kryptografia, logika
 ```
 
 ## Funkcje
@@ -85,7 +85,9 @@ Tests/KsefiarzCoreTests/          # 715 testów (Swift Testing) — model, parse
   i kodem QR płatności, wysyłka e-mailem. Po zapłacie jednym kliknięciem
   **„Konwertuj na fakturę VAT"** — otwiera formularz faktury wypełniony danymi
   proformy (numer z serii VAT); po wystawieniu proforma zostaje oznaczona jako
-  rozliczona. Osobna numeracja (wzorzec `PF/…`) i objęcie kopią zapasową.
+  rozliczona, a potwierdzony status zapłaty jest przenoszony na fakturę.
+  Kurs waluty obcej trzeba uzupełnić dla daty nowej faktury. Osobna numeracja
+  (wzorzec `PF/…`) i objęcie kopią zapasową.
 - **Uwierzytelnianie certyfikatem KSeF (preferowane)** — podpis XAdES-BES
   dokumentu AuthTokenRequest wykonywany w całości lokalnie (własna
   kanonikalizacja i podpis RSA/ECDSA, bez zewnętrznych bibliotek).

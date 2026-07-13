@@ -424,7 +424,7 @@ public struct NewProformaView: View {
 
     private func update(_ proforma: Proforma) {
         applyScalars(to: proforma)
-        proforma.lines = makeLines()
+        proforma.replaceLines(with: makeLines(), in: modelContext)
     }
 }
 

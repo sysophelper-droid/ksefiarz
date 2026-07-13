@@ -525,7 +525,10 @@ oficjalną XSD (xmllint, 12.07.2026).
   otwierają `NewInvoiceView(initialDraft: proforma.invoiceDraft(), …)` — numer
   nadawany z serii VAT, pełna walidacja faktury; po zapisie/wysyłce nowy
   callback `onCreatedInvoice` oznacza proformę jako rozliczoną z numerem
-  powstałej faktury (`Proforma.markConverted`).
+  powstałej faktury (`Proforma.markConverted`). Ręcznie potwierdzone opłacenie
+  proformy jest przenoszone na fakturę (nigdy nie cofa statusu już ustawionego
+  na fakturze). Dla waluty obcej kurs informacyjny proformy nie jest kopiowany:
+  nowa data faktury wymaga uzupełnienia właściwego kursu przed zapisem.
 - PDF i e-mail reużywają infrastruktury faktur przez **przejściową
   (nieutrwaloną) `Invoice`** — `Proforma.transientInvoice()` buduje obiekt
   `kind == .sales`, `documentTypeRaw == "PRO"`, bez `ksefId`. Generator PDF
@@ -538,6 +541,12 @@ oficjalną XSD (xmllint, 12.07.2026).
   faktury VAT **NIP nabywcy jest opcjonalny** (proforma bywa dla konsumenta
   albo kontrahenta zagranicznego) — sprawdzany tylko, gdy podany. NIP
   sprzedawcy (nasza firma) wymagany.
+- Daty proformy są datami kalendarzowymi: „ważna do" i termin płatności
+  obejmują cały wskazany dzień; status wygasłej/zaległej pojawia się od dnia
+  następnego.
+- Edycja pozycji używa `Proforma.replaceLines(with:in:)`, które jawnie usuwa
+  poprzednie `ProformaLine`; samo przypisanie relacji zostawia w SwiftData
+  osierocone rekordy mimo reguły kaskadowej na usunięcie całej proformy.
 - Numeracja: osobna seria (domyślny wzorzec `PF/{RRRR}/{MM}/{NNN}`,
   `InvoiceNumberGenerator.defaultProformaPattern`, klucz `numberPatternPRO`;
   puste pole = domyślny wzorzec PF, a NIE seria VAT). Kopia zapasowa v11
