@@ -70,25 +70,29 @@ public enum FileExportService {
 
     /// Otwiera panel wyboru pliku i zwraca jego zawartość (np. import kopii zapasowej).
     public static func importData(allowedTypes: [UTType]) -> Data? {
-        let panel = NSOpenPanel()
-        panel.allowedContentTypes = allowedTypes
-        panel.allowsMultipleSelection = false
-        panel.canChooseDirectories = false
-
-        guard panel.runModal() == .OK, let url = panel.url else { return nil }
+        guard let url = importFileURL(allowedTypes: allowedTypes) else { return nil }
         return try? Data(contentsOf: url)
     }
 
     /// Panel wyboru pliku bez ograniczenia typu — np. wyciągi MT940, które
     /// banki zapisują pod różnymi rozszerzeniami (.sta, .mt940, .txt, .940).
     public static func importAnyData(message: String = "") -> Data? {
+        guard let url = importFileURL(message: message) else { return nil }
+        return try? Data(contentsOf: url)
+    }
+
+    /// Panel wyboru pliku zwracający URL zamiast zawartości — np. skan/PDF
+    /// faktury do OCR, gdzie plik czytają PDFKit/Vision. Pusta lista typów
+    /// oznacza brak ograniczenia.
+    public static func importFileURL(allowedTypes: [UTType] = [], message: String = "") -> URL? {
         let panel = NSOpenPanel()
+        if !allowedTypes.isEmpty { panel.allowedContentTypes = allowedTypes }
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = false
         if !message.isEmpty { panel.message = message }
 
-        guard panel.runModal() == .OK, let url = panel.url else { return nil }
-        return try? Data(contentsOf: url)
+        guard panel.runModal() == .OK else { return nil }
+        return panel.url
     }
 
     /// Numer faktury bez znaków niedozwolonych w nazwie pliku.

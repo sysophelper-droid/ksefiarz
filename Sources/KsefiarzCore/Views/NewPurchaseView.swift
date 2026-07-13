@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import UniformTypeIdentifiers
 
 /// Formularz faktury kosztowej spoza KSeF — ręczne dodawanie zakupów
 /// (faktury zagraniczne, paragony z NIP) dla pełnego obrazu VAT
@@ -42,6 +43,10 @@ public struct NewPurchaseView: View {
     @State private var isFetchingRate = false
     @State private var nbpRateInfo: String?
     @State private var prefilled = false
+    // OCR skanu/PDF (macOS Vision) — wstępne wypełnienie pól formularza.
+    @State private var isRecognizingScan = false
+    @State private var ocrSummary: String?
+    @State private var ocrError: String?
     /// Kategorie użyte na dotychczasowych zakupach — do podpowiedzi.
     @State private var usedCategories: [String] = []
 
@@ -87,6 +92,8 @@ public struct NewPurchaseView: View {
     public var body: some View {
         VStack(spacing: 0) {
             Form {
+                ocrSection
+
                 Section("Dokument") {
                     TextField("Numer dokumentu", text: $documentNumber,
                               prompt: Text("np. numer faktury albo paragonu z NIP"))
@@ -231,6 +238,88 @@ public struct NewPurchaseView: View {
             prefillIfNeeded()
             loadUsedCategories()
         }
+        .dropDestination(for: URL.self) { urls, _ in
+            guard let url = urls.first else { return false }
+            recognizeScan(at: url)
+            return true
+        }
+    }
+
+    /// Sekcja OCR — wczytanie skanu/PDF papierowej faktury i wstępne
+    /// wypełnienie pól (macOS Vision, przetwarzanie w całości lokalne).
+    private var ocrSection: some View {
+        Section {
+            HStack {
+                Button {
+                    guard let url = FileExportService.importFileURL(
+                        allowedTypes: [.pdf, .png, .jpeg, .tiff, .heic],
+                        message: "Wybierz PDF albo zdjęcie/skan faktury kosztowej"
+                    ) else { return }
+                    recognizeScan(at: url)
+                } label: {
+                    if isRecognizingScan {
+                        HStack(spacing: 6) {
+                            ProgressView().controlSize(.small)
+                            Text("Rozpoznawanie…")
+                        }
+                    } else {
+                        Label("Wczytaj ze skanu / PDF (OCR)", systemImage: "doc.viewfinder")
+                    }
+                }
+                .disabled(isRecognizingScan)
+                .help("Rozpoznaje dane z papierowej faktury (PDF, PNG, JPEG, TIFF, HEIC) i wstępnie wypełnia formularz. Plik można też upuścić na okno. Przetwarzanie odbywa się lokalnie (macOS Vision).")
+                Spacer()
+                Text("Rozpoznane dane zweryfikuj przed zapisem.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            if let ocrSummary {
+                Label(ocrSummary, systemImage: "text.viewfinder")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            if let ocrError {
+                Label(ocrError, systemImage: "exclamationmark.triangle")
+                    .font(.callout)
+                    .foregroundStyle(.orange)
+            }
+        }
+    }
+
+    /// Uruchamia OCR pliku i nanosi rozpoznane pola na formularz.
+    private func recognizeScan(at url: URL) {
+        guard !isRecognizingScan else { return }
+        isRecognizingScan = true
+        ocrSummary = nil
+        ocrError = nil
+        Task { @MainActor in
+            defer { isRecognizingScan = false }
+            do {
+                let lines = try await InvoiceOCRService.recognizeTextLines(at: url)
+                let extraction = InvoiceOCRParser.parse(lines: lines, ownNIP: myNIP)
+                apply(extraction)
+            } catch {
+                ocrError = error.localizedDescription
+            }
+        }
+    }
+
+    /// Nanosi rozpoznane pola na stan formularza — tylko pola rozpoznane;
+    /// reszta (nabywca, status opłacenia, uwagi, kategoria) bez zmian.
+    private func apply(_ extraction: InvoiceOCRExtraction) {
+        guard !extraction.isEmpty else {
+            ocrError = "Nie rozpoznano żadnych pól faktury — uzupełnij dane ręcznie."
+            return
+        }
+        let current = draft
+        var merged = extraction.applied(to: current)
+        // Zmiana waluty unieważnia kurs — dotyczył poprzedniej waluty.
+        if merged.currency != current.currency {
+            merged.exchangeRate = 0
+            nbpRateInfo = nil
+        }
+        fill(from: merged)
+        ocrSummary = "Rozpoznano: \(extraction.recognizedFieldNames.joined(separator: ", "))."
     }
 
     /// Pole kategorii kosztu z podpowiedziami (użyte + typowe).
@@ -274,7 +363,12 @@ public struct NewPurchaseView: View {
         guard !prefilled else { return }
         prefilled = true
         guard let editing = editingInvoice else { return }
-        let draft = ManualPurchaseDraft(from: editing)
+        fill(from: ManualPurchaseDraft(from: editing))
+    }
+
+    /// Wypełnia pola formularza wartościami szkicu — wspólne dla prefillu
+    /// edycji i wyniku OCR.
+    private func fill(from draft: ManualPurchaseDraft) {
         documentNumber = draft.documentNumber
         issueDate = draft.issueDate
         if let sale = draft.saleDate { hasSaleDate = true; saleDate = sale }

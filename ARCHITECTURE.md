@@ -69,6 +69,10 @@ Sources/KsefiarzCore/
                KSeFQRCode (linki weryfikacyjne KOD I/II + render QR),
                InvoiceEmailService (okno wiadomości Mail przez
                NSSharingService; załączniki PDF/XML z katalogu tymczasowego),
+               InvoiceOCRService (rozpoznawanie tekstu skanu/PDF faktury
+               kosztowej: PDF z warstwą tekstową wprost przez PDFKit,
+               skan przez Vision VNRecognizeTextRequest — szczegóły
+               w sekcji „OCR faktur kosztowych"),
                InvoicePDFGenerator ma wariant dwujęzyczny
                (pdfData(for:bilingual:branding:), etykiety w InvoicePDFLabels);
                PDFBrandingLogoProcessor skaluje importowane logo do maks.
@@ -163,6 +167,11 @@ Sources/KsefiarzCore/
                zbiór viesCountryCodes 27 państw UE + XI, GR→EL, PL wykluczone),
                ContractorHistory (dopasowanie dokumentów po znormalizowanym
                NIP, salda per waluta, średni czas płatności i scoring),
+               InvoiceOCRParser (czysta logika wyciągania pól polskiej
+               faktury z linii tekstu OCR: InvoiceOCRExtraction —
+               opcjonalne pola, resolvedAmounts, applied(to:) na
+               ManualPurchaseDraft; heurystyki po etykietach odporne
+               na brak diakrytyków),
                ProformaValidator (czysta walidacja proformy — NIP nabywcy
                opcjonalny, walidowany gdy podany; osobny ProformaValidationError)
   Views/       MainContentView (NavigationSplitView), InvoiceListView, InvoiceDetailView,
@@ -572,6 +581,59 @@ kwoty per kontrahent, zaokrąglenie do złotych. **Import usług** (zakup usług
 z UE) i **procedura OSS** świadomie POZA VAT-UE (tylko JPK_V7 / procedura
 unijna). Wygenerowany dokument (WDT+WNT+usługi, EL, XI) zweryfikowany
 oficjalną XSD (xmllint, 12.07.2026).
+
+## OCR faktur kosztowych — macOS Vision (D1)
+
+- Cel: skan/zdjęcie albo PDF papierowej faktury → wstępnie wypełniony
+  formularz „zakupu spoza KSeF" (`NewPurchaseView`). Przetwarzanie w całości
+  lokalne (Vision + PDFKit), bez zależności zewnętrznych. OCR jest
+  heurystyczny — UI zawsze każe zweryfikować dane przed zapisem, a wynik
+  nadpisuje wyłącznie pola rozpoznane (nabywca, status opłacenia, uwagi,
+  kategoria i kurs zostają nietknięte — `InvoiceOCRExtraction.applied(to:)`).
+- **Podział warstw**: `InvoiceOCRService` (Services) zamienia plik na linie
+  tekstu; `InvoiceOCRParser` (Logic, czysta funkcja z pełnymi testami)
+  zamienia linie na `InvoiceOCRExtraction`. PDF z warstwą tekstową
+  (≥ 32 znaki na stronę) czytany jest wprost przez `PDFPage.string` — bez
+  strat OCR; strona-skan jest renderowana do bitmapy (300 DPI, limit 4000 px).
+  Obrazy są przed OCR obracane zgodnie z orientacją EXIF i skalowane do
+  maks. 4000 px dłuższego boku, żeby nie dekodować dużych zdjęć do pełnej
+  bitmapy. Obraz przechodzi przez `VNRecognizeTextRequest` (`.accurate`, korekcja
+  językowa). Limit 4 stron PDF. Języki żądania filtrowane przez
+  `supportedRecognitionLanguages()` (pl/en) — żądanie niewspieranego języka
+  kończy się błędem `perform`. Obserwacje sortowane w kolejność czytania
+  (współrzędne Vision są znormalizowane z początkiem w lewym dolnym rogu).
+- **Heurystyki parsera** (wszystkie odporne na zgubione diakrytyki —
+  `normalized` foldinguje, `ł` zamieniane jawnie, bo nie jest znakiem
+  składanym): numer po „Faktura … nr"/etykietach (ucinany przed „z dnia"
+  i datami); daty `dd.MM.yyyy`/ISO/słownie z polskimi miesiącami (etykieta
+  w tej samej albo następnej linii; jedyna data w dokumencie = data
+  wystawienia); NIP z walidacją sumy kontrolnej (`InvoiceValidator`),
+  z pominięciem NIP własnej firmy i wyborem najbliższego od etykiety
+  „Sprzedawca"; zagraniczny VAT ID tylko z prefiksem z
+  `VIESVerification.viesCountryCodes` i tylko w linii z „VAT"/„NIP";
+  kwoty najpierw z wiersza podsumowania (netto+VAT=brutto uwiarygodnia
+  komplet; brutto = ostatnia kwota wiersza, a para bezpośrednio przed nią
+  ma pierwszeństwo — klasyczny układ „netto VAT brutto"), potem z etykiet;
+  rachunek NRB przez `ElixirPaymentExporter.isValidNRB` (numer w kontekście
+  „nabywcy" tylko jako ostateczność). `resolvedAmounts()` wyprowadza
+  brakującą kwotę z równania netto+VAT=brutto (samo brutto → netto=brutto,
+  VAT=0 — przypadek paragonu); **para netto+VAT ma pierwszeństwo przed
+  brutto**, a jawna etykieta „Suma/Wartość brutto” wygrywa z „Do zapłaty”,
+  bo to ostatnie bywa saldem po częściowej wpłacie (ujemna różnica nigdy
+  nie jest ufana). Nazwa z łączonej linii „Sprzedawca: …, NIP: …” jest
+  odcinana przed identyfikatorem; kody walut, VAT ID i prefiks IBAN są
+  niewrażliwe na wielkość liter. Pułapki pokryte testami: „Do zapłaty:
+  0,00", numer faktury `1/07/2026` (nie jest datą — daty odrzucane tylko
+  w zapisie kropkowym/ISO), „Rachunek bankowy nr" ≠ numer dokumentu,
+  prefiks IBAN „PL61" ≠ VAT ID (fallback UE pomija PL i wymaga ≥ 7 znaków
+  numeru), „Stawka VAT: 23,00" ≠ kwota VAT, NIP z nagłówka papieru
+  firmowego (nad etykietą „Sprzedawca") lepszy niż NIP nabywcy. Samo
+  brutto zgodne z brutto edytowanego szkicu nie zeruje istniejącego
+  podziału netto/VAT.
+- Testy e2e prawdziwego Vision (syntetyczny „skan" rysowany Core Text →
+  PNG oraz PDF-obraz bez warstwy tekstowej) są w `InvoiceOCRServiceTests`
+  i przechodzą lokalnie w ~1 s; treść syntetyczna bez polskich znaków,
+  bo zestaw języków Vision zależy od wersji systemu.
 
 ## Faktura proforma (E2)
 
