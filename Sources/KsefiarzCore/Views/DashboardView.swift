@@ -245,12 +245,25 @@ public struct DashboardView: View {
 
 extension DashboardView {
 
+    /// Poprawna polska odmiana rzeczownika „ostrzeżenie” dla licznika.
+    static func warningsNoun(_ count: Int) -> String {
+        if count == 1 { return "ostrzeżenie" }
+        let lastTwo = count % 100
+        let last = count % 10
+        if (2...4).contains(last) && !(12...14).contains(lastTwo) { return "ostrzeżenia" }
+        return "ostrzeżeń"
+    }
+
     /// Najbliższe obowiązki oraz prognoza trwającego miesiąca/kwartału.
     private var taxCalendarSection: some View {
-        GroupBox {
+        // Migawkę liczymy raz na render — silnik iteruje wszystkie faktury,
+        // więc nie powielamy tej pracy przy każdym odczycie `forecast`.
+        let snapshot = taxSnapshot
+        let forecast = snapshot.forecast
+        return GroupBox {
             VStack(alignment: .leading, spacing: 14) {
                 LazyVGrid(columns: columns, spacing: 12) {
-                    ForEach(taxSnapshot.deadlines) { deadline in
+                    ForEach(snapshot.deadlines) { deadline in
                         HStack(spacing: 12) {
                             Image(systemName: deadline.kind.systemImage)
                                 .font(.title3)
@@ -277,7 +290,6 @@ extension DashboardView {
                 Text("Prognoza bieżącego okresu")
                     .font(.headline)
                 LazyVGrid(columns: columns, spacing: 12) {
-                    let forecast = taxSnapshot.forecast
                     StatCard(
                         title: forecast.vatApplies
                             ? (forecast.vatBalance >= 0 ? "VAT do zapłaty — " : "Nadwyżka VAT — ")
@@ -296,7 +308,6 @@ extension DashboardView {
                         color: .purple
                     )
                 }
-                let forecast = taxSnapshot.forecast
                 let outputVATLabel = forecast.outputVAT.formatted(.currency(code: "PLN"))
                 let inputVATLabel = forecast.inputVAT.formatted(.currency(code: "PLN"))
                 let incomeBaseLabel = forecast.incomeTaxBase.formatted(.currency(code: "PLN"))
@@ -309,7 +320,7 @@ extension DashboardView {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 if !forecast.warnings.isEmpty {
-                    Label("Prognoza zawiera \(forecast.warnings.count) ostrzeżeń danych (np. brak kursu lub uproszczenia JPK).", systemImage: "exclamationmark.triangle")
+                    Label("Prognoza zawiera \(forecast.warnings.count) \(Self.warningsNoun(forecast.warnings.count)) danych (np. brak kursu lub uproszczenia JPK).", systemImage: "exclamationmark.triangle")
                         .font(.caption)
                         .foregroundStyle(.orange)
                         .help(forecast.warnings.joined(separator: "\n"))
