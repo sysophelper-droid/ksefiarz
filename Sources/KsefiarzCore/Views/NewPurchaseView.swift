@@ -311,19 +311,14 @@ public struct NewPurchaseView: View {
             ocrError = "Nie rozpoznano żadnych pól faktury — uzupełnij dane ręcznie."
             return
         }
-        let merged = extraction.applied(to: draft)
-        documentNumber = merged.documentNumber
-        issueDate = merged.issueDate
-        if let sale = merged.saleDate { hasSaleDate = true; saleDate = sale }
-        sellerName = merged.sellerName
-        sellerTaxID = merged.sellerTaxID
-        sellerAddress = merged.sellerAddress
-        netAmount = merged.netAmount
-        vatAmount = merged.vatAmount
-        currency = merged.currency
-        if let due = merged.paymentDueDate { hasDueDate = true; dueDate = due }
-        if let form = merged.paymentForm { paymentForm = form }
-        paymentBankAccount = merged.paymentBankAccount
+        let current = draft
+        var merged = extraction.applied(to: current)
+        // Zmiana waluty unieważnia kurs — dotyczył poprzedniej waluty.
+        if merged.currency != current.currency {
+            merged.exchangeRate = 0
+            nbpRateInfo = nil
+        }
+        fill(from: merged)
         ocrSummary = "Rozpoznano: \(extraction.recognizedFieldNames.joined(separator: ", "))."
     }
 
@@ -368,7 +363,12 @@ public struct NewPurchaseView: View {
         guard !prefilled else { return }
         prefilled = true
         guard let editing = editingInvoice else { return }
-        let draft = ManualPurchaseDraft(from: editing)
+        fill(from: ManualPurchaseDraft(from: editing))
+    }
+
+    /// Wypełnia pola formularza wartościami szkicu — wspólne dla prefillu
+    /// edycji i wyniku OCR.
+    private func fill(from draft: ManualPurchaseDraft) {
         documentNumber = draft.documentNumber
         issueDate = draft.issueDate
         if let sale = draft.saleDate { hasSaleDate = true; saleDate = sale }

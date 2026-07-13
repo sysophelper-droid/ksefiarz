@@ -104,6 +104,21 @@ struct InvoiceOCRParserTests {
         #expect(result.documentNumber == nil)
     }
 
+    @Test("Numer n/miesiąc/rok (1/07/2026) nie jest odrzucany jako data")
+    func slashDateLikeNumberAccepted() {
+        #expect(InvoiceOCRParser.parse(lines: ["Faktura nr 1/07/2026"]).documentNumber == "1/07/2026")
+    }
+
+    @Test("„Rachunek bankowy nr …” nie jest brany za numer dokumentu")
+    func bankAccountLineNotDocumentNumber() {
+        let result = InvoiceOCRParser.parse(lines: [
+            "Faktura VAT FV/1/2026",
+            "Rachunek bankowy nr: 61 1090 1014 0000 0712 1981 2874",
+        ])
+        #expect(result.documentNumber == "FV/1/2026")
+        #expect(result.bankAccount == "61109010140000071219812874")
+    }
+
     // MARK: - Daty
 
     @Test("Formaty dat: kropki, myślniki, ISO i słownie")
@@ -144,6 +159,16 @@ struct InvoiceOCRParserTests {
         #expect(result.issueDate == nil)
     }
 
+    @Test("Jedyna data będąca terminem płatności nie staje się datą wystawienia")
+    func dueDateNotStolenAsIssueDate() {
+        let labeled = InvoiceOCRParser.parse(lines: ["Rachunek nr 7/2026", "Zapłata do: 24.07.2026"])
+        #expect(labeled.paymentDueDate == day("2026-07-24"))
+        #expect(labeled.issueDate == nil)
+        // Etykieta spoza słownika, ale kontekst terminu/zapłaty w linii.
+        let hinted = InvoiceOCRParser.parse(lines: ["Płatność do dnia 20.07.2026"])
+        #expect(hinted.issueDate == nil)
+    }
+
     // MARK: - Kwoty
 
     @Test("Formaty kwot: spacje, kropki tysięcy, przecinek i kropka dziesiętna")
@@ -169,6 +194,24 @@ struct InvoiceOCRParserTests {
         let result = InvoiceOCRParser.parse(lines: ["Razem 23,00 1 000,00 230,00 1 230,00"])
         #expect(result.netAmount == 1000.00)
         #expect(result.vatAmount == 230.00)
+        #expect(result.grossAmount == 1230.00)
+    }
+
+    @Test("Wiersz podsumowania: para tuż przed brutto wygrywa z przypadkową kombinacją")
+    func summaryRowTrailingPairWins() {
+        // 23,00 + 1 207,00 też daje 1 230,00, ale klasyczny układ kolumn
+        // to „… netto VAT brutto” — decyduje para bezpośrednio przed brutto.
+        let result = InvoiceOCRParser.parse(lines: ["Razem 23,00 1 207,00 1 000,00 230,00 1 230,00"])
+        #expect(result.netAmount == 1000.00)
+        #expect(result.vatAmount == 230.00)
+        #expect(result.grossAmount == 1230.00)
+    }
+
+    @Test("Stawka VAT (też z podwójną spacją przed %) nie jest kwotą VAT")
+    func vatRateNotAmount() {
+        #expect(InvoiceOCRParser.amounts(in: "VAT 23,00  %").isEmpty)
+        let result = InvoiceOCRParser.parse(lines: ["Stawka VAT: 23,00", "Do zapłaty: 1 230,00 zł"])
+        #expect(result.vatAmount == nil)
         #expect(result.grossAmount == 1230.00)
     }
 
@@ -214,10 +257,37 @@ struct InvoiceOCRParserTests {
         #expect(InvoiceOCRExtraction().resolvedAmounts() == nil)
     }
 
-    @Test("resolvedAmounts: niespójny komplet — ufamy brutto i netto")
+    @Test("resolvedAmounts: para netto+VAT ma pierwszeństwo przed brutto (brutto bywa saldem)")
     func resolvedAmountsInconsistentTriple() {
         let extraction = InvoiceOCRExtraction(netAmount: 100, vatAmount: 8, grossAmount: 123)
-        #expect(extraction.resolvedAmounts()! == (net: 100, vat: 23))
+        #expect(extraction.resolvedAmounts()! == (net: 100, vat: 8))
+    }
+
+    @Test("Opłacona faktura z „Do zapłaty: 0,00” nie daje ujemnego VAT")
+    func paidInvoiceZeroDue() {
+        let result = InvoiceOCRParser.parse(lines: [
+            "Suma netto: 1000,00",
+            "Kwota VAT: 230,00",
+            "Do zapłaty: 0,00",
+        ])
+        #expect(result.resolvedAmounts()! == (net: 1000, vat: 230))
+        // Samo netto + zerowe „do zapłaty” — ujemna różnica nie jest VAT-em.
+        let netOnly = InvoiceOCRParser.parse(lines: ["Suma netto: 1000,00", "Do zapłaty: 0,00"])
+        #expect(netOnly.resolvedAmounts()! == (net: 1000, vat: 0))
+    }
+
+    @Test("Samo brutto zgodne z istniejącym podziałem netto/VAT nie zeruje VAT (edycja)")
+    func grossOnlyKeepsExistingSplit() {
+        var draft = ManualPurchaseDraft()
+        draft.netAmount = 100
+        draft.vatAmount = 23
+        let merged = InvoiceOCRExtraction(grossAmount: 123).applied(to: draft)
+        #expect(merged.netAmount == 100)
+        #expect(merged.vatAmount == 23)
+        // Inne brutto = inny dokument — nadpisuje.
+        let other = InvoiceOCRExtraction(grossAmount: 200).applied(to: draft)
+        #expect(other.netAmount == 200)
+        #expect(other.vatAmount == 0)
     }
 
     // MARK: - Sprzedawca
@@ -254,6 +324,25 @@ struct InvoiceOCRParserTests {
         #expect(InvoiceOCRParser.parse(lines: ["VAT ID: XX123456789"]).sellerTaxID == nil)
         // Bez kontekstu VAT/NIP w linii — brak rozpoznania.
         #expect(InvoiceOCRParser.parse(lines: ["DE123456789"]).sellerTaxID == nil)
+    }
+
+    @Test("Prefiks IBAN „PL61…” w linii „Rachunek VAT” nie jest identyfikatorem VAT")
+    func ibanPrefixNotVATID() {
+        let result = InvoiceOCRParser.parse(lines: ["Rachunek VAT: PL61 1090 1014 0000 0712 1981 2874"])
+        #expect(result.sellerTaxID == nil)
+        #expect(result.bankAccount == "61109010140000071219812874")
+    }
+
+    @Test("NIP z nagłówka papieru firmowego wygrywa z NIP nabywcy")
+    func headerNIPBeatsBuyerNIP() {
+        let result = InvoiceOCRParser.parse(lines: [
+            "ACME Sp. z o.o. NIP 5261040828",
+            "Sprzedawca: ACME Sp. z o.o.",
+            "Nabywca:",
+            "Klient Sp. k.",
+            "NIP: 1234563218",
+        ])
+        #expect(result.sellerTaxID == "5261040828")
     }
 
     @Test("Nazwa sprzedawcy z linii etykiety albo spod niej; adres z kodem pocztowym")
@@ -300,6 +389,20 @@ struct InvoiceOCRParserTests {
         // Błędna suma kontrolna IBAN — brak rachunku.
         let invalid = InvoiceOCRParser.parse(lines: ["62 1090 1014 0000 0712 1981 2874"])
         #expect(invalid.bankAccount == nil)
+    }
+
+    @Test("Rachunek w kontekście nabywcy ustępuje rachunkowi do wpłaty")
+    func buyerAccountDeprioritized() {
+        let result = InvoiceOCRParser.parse(lines: [
+            "Zaliczka z rachunku nabywcy 14 1020 1026 0000 0000 0000 1234",
+            "Wpłata na konto: 61 1090 1014 0000 0712 1981 2874",
+        ])
+        #expect(result.bankAccount == "61109010140000071219812874")
+        // Gdy jest tylko rachunek nabywcy — lepszy niż nic.
+        let onlyBuyer = InvoiceOCRParser.parse(lines: [
+            "Zaliczka z rachunku nabywcy 14 1020 1026 0000 0000 0000 1234",
+        ])
+        #expect(onlyBuyer.bankAccount == "14102010260000000000001234")
     }
 
     @Test("Forma płatności z etykiety oraz domyślny przelew ze wzmianki")

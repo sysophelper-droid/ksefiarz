@@ -610,11 +610,21 @@ oficjalną XSD (xmllint, 12.07.2026).
   „Sprzedawca"; zagraniczny VAT ID tylko z prefiksem z
   `VIESVerification.viesCountryCodes` i tylko w linii z „VAT"/„NIP";
   kwoty najpierw z wiersza podsumowania (netto+VAT=brutto uwiarygodnia
-  komplet, brutto = ostatnia kwota wiersza), potem z etykiet; rachunek
-  NRB przez `ElixirPaymentExporter.isValidNRB`. `resolvedAmounts()`
-  wyprowadza brakującą kwotę z równania netto+VAT=brutto (samo brutto →
-  netto=brutto, VAT=0 — przypadek paragonu); przy niespójnym komplecie
-  ufa brutto i netto.
+  komplet; brutto = ostatnia kwota wiersza, a para bezpośrednio przed nią
+  ma pierwszeństwo — klasyczny układ „netto VAT brutto"), potem z etykiet;
+  rachunek NRB przez `ElixirPaymentExporter.isValidNRB` (numer w kontekście
+  „nabywcy" tylko jako ostateczność). `resolvedAmounts()` wyprowadza
+  brakującą kwotę z równania netto+VAT=brutto (samo brutto → netto=brutto,
+  VAT=0 — przypadek paragonu); **para netto+VAT ma pierwszeństwo przed
+  brutto**, bo „Do zapłaty" bywa saldem po częściowej wpłacie (ujemna
+  różnica nigdy nie jest ufana). Pułapki pokryte testami: „Do zapłaty:
+  0,00", numer faktury `1/07/2026` (nie jest datą — daty odrzucane tylko
+  w zapisie kropkowym/ISO), „Rachunek bankowy nr" ≠ numer dokumentu,
+  prefiks IBAN „PL61" ≠ VAT ID (fallback UE pomija PL i wymaga ≥ 7 znaków
+  numeru), „Stawka VAT: 23,00" ≠ kwota VAT, NIP z nagłówka papieru
+  firmowego (nad etykietą „Sprzedawca") lepszy niż NIP nabywcy. Samo
+  brutto zgodne z brutto edytowanego szkicu nie zeruje istniejącego
+  podziału netto/VAT.
 - Testy e2e prawdziwego Vision (syntetyczny „skan" rysowany Core Text →
   PNG oraz PDF-obraz bez warstwy tekstowej) są w `InvoiceOCRServiceTests`
   i przechodzą lokalnie w ~1 s; treść syntetyczna bez polskich znaków,

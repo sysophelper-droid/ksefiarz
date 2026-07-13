@@ -93,8 +93,11 @@ kolejność dowolna. ⚠️ operacje modyfikujące KSeF testować wyłącznie na
   numer, daty (też słownie), sprzedawca z NIP (suma kontrolna, NIP własnej
   firmy pomijany) / VAT ID UE, adres, kwoty (wiersz podsumowania
   netto+VAT=brutto), waluta, NRB (IBAN mod 97), termin i forma płatności.
-  38 testów, w tym e2e prawdziwego Vision na syntetycznym skanie (PNG
-  i PDF-obraz). Heurystyki odporne na zgubione diakrytyki OCR.
+  48 testów, w tym e2e prawdziwego Vision na syntetycznym skanie (PNG
+  i PDF-obraz). Heurystyki odporne na zgubione diakrytyki OCR oraz na
+  pułapki dokumentów: „Do zapłaty: 0,00” po wpłacie, numery n/MM/RRRR,
+  rachunek bankowy vs numer dokumentu, prefiks IBAN vs VAT ID, stawka
+  VAT vs kwota VAT, rachunek nabywcy vs rachunek do wpłaty.
 
 ### Weryfikacja VIES — kontrahenci UE (13.07.2026)
 

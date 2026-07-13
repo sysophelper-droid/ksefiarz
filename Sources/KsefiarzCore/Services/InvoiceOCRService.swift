@@ -129,10 +129,13 @@ public enum InvoiceOCRService {
 
         // Vision zwraca współrzędne znormalizowane z początkiem w lewym
         // dolnym rogu — sortowanie od góry, w obrębie wiersza od lewej.
+        // Wiersz to skwantyzowane midY (klucz, nie komparator z tolerancją —
+        // ten nie byłby przechodni, a `sorted` wymaga spójnego porządku).
+        let rowHeight: CGFloat = 0.012
         let sorted = observations.sorted { lhs, rhs in
-            let lhsY = lhs.boundingBox.midY
-            let rhsY = rhs.boundingBox.midY
-            if abs(lhsY - rhsY) > 0.01 { return lhsY > rhsY }
+            let lhsRow = ((1 - lhs.boundingBox.midY) / rowHeight).rounded(.down)
+            let rhsRow = ((1 - rhs.boundingBox.midY) / rowHeight).rounded(.down)
+            if lhsRow != rhsRow { return lhsRow < rhsRow }
             return lhs.boundingBox.minX < rhs.boundingBox.minX
         }
         return sorted.compactMap { $0.topCandidates(1).first?.string }

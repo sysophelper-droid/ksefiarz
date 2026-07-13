@@ -57,22 +57,23 @@ public struct InvoiceOCRExtraction: Equatable, Sendable {
     }
 
     /// Kwoty netto i VAT wyprowadzone z rozpoznanych wartości.
-    /// Gdy znane są dwie z trzech kwot, trzecia wynika z równania
-    /// netto + VAT = brutto. Przy niespójnym komplecie trzech kwot
-    /// zaufanie mają brutto i netto (VAT = różnica) — patrz testy.
+    /// Etykietowana para netto+VAT jest najbardziej wiarygodna — „do
+    /// zapłaty" bywa saldem po częściowej wpłacie, nie kwotą brutto,
+    /// więc przy komplecie kwot brutto nie nadpisuje pary. Gdy znana jest
+    /// jedna kwota z pary, druga wynika z równania netto + VAT = brutto;
+    /// ujemny wynik odejmowania (brutto = saldo) nie jest ufany.
     /// Samo brutto (np. paragon) trafia w całości do netto z VAT = 0.
     public func resolvedAmounts() -> (net: Double, vat: Double)? {
         func rounded(_ value: Double) -> Double { (value * 100).rounded() / 100 }
         switch (netAmount, vatAmount, grossAmount) {
-        case let (net?, vat?, gross?):
-            if abs(net + vat - gross) <= 0.02 { return (rounded(net), rounded(vat)) }
-            return (rounded(net), rounded(gross - net))
-        case let (net?, vat?, nil):
+        case let (net?, vat?, _):
             return (rounded(net), rounded(vat))
         case let (net?, nil, gross?):
-            return (rounded(net), rounded(gross - net))
+            let vat = gross - net
+            return (rounded(net), vat >= 0 ? rounded(vat) : 0)
         case let (nil, vat?, gross?):
-            return (rounded(gross - vat), rounded(vat))
+            let net = gross - vat
+            return net >= 0 ? (rounded(net), rounded(vat)) : (rounded(gross), 0)
         case let (net?, nil, nil):
             return (rounded(net), 0)
         case let (nil, nil, gross?):
@@ -93,7 +94,7 @@ public struct InvoiceOCRExtraction: Equatable, Sendable {
         if let sellerName { result.sellerName = sellerName }
         if let sellerTaxID { result.sellerTaxID = sellerTaxID }
         if let sellerAddress { result.sellerAddress = sellerAddress }
-        if let amounts = resolvedAmounts() {
+        if let amounts = resolvedAmounts(), !keepsExistingSplit(of: draft) {
             result.netAmount = amounts.net
             result.vatAmount = amounts.vat
         }
@@ -102,6 +103,13 @@ public struct InvoiceOCRExtraction: Equatable, Sendable {
         if let paymentDueDate { result.paymentDueDate = paymentDueDate }
         if let paymentForm { result.paymentForm = paymentForm }
         return result
+    }
+
+    /// Rozpoznane samo brutto zgodne z brutto edytowanego szkicu nie może
+    /// zniszczyć istniejącego podziału netto/VAT (zerując VAT).
+    private func keepsExistingSplit(of draft: ManualPurchaseDraft) -> Bool {
+        guard netAmount == nil, vatAmount == nil, let gross = grossAmount else { return false }
+        return abs(draft.grossAmount) > 0.005 && abs(draft.grossAmount - gross) <= 0.01
     }
 
     /// Polskie nazwy rozpoznanych pól — do komunikatu w formularzu.
@@ -147,7 +155,7 @@ public enum InvoiceOCRParser {
         parseSeller(into: &extraction, lines: lines, folded: folded, ownNIP: ownNIP)
         parseAmounts(into: &extraction, lines: lines, folded: folded)
         extraction.currency = currency(lines: lines)
-        extraction.bankAccount = bankAccount(lines: lines)
+        extraction.bankAccount = bankAccount(lines: lines, folded: folded)
         extraction.paymentForm = paymentForm(lines: lines, folded: folded)
         return extraction
     }
@@ -189,19 +197,26 @@ public enum InvoiceOCRParser {
     // MARK: - Numer dokumentu
 
     private static let numberLabels = ["numer faktury", "nr faktury", "numer dokumentu", "nr dokumentu", "numer paragonu", "nr paragonu"]
+    private static let numberHeaderRegex = try? NSRegularExpression(pattern: #"(nr\.?|numer)[:\s]"#)
 
     private static func documentNumber(lines: [String], folded: [String]) -> String? {
-        // 1. "Faktura (VAT) nr <numer>" — najczęstszy nagłówek.
-        for (idx, fold) in folded.enumerated() where fold.contains("faktura") || fold.contains("paragon") || fold.contains("rachunek") {
-            if let range = fold.range(of: #"(nr\.?|numer)[:\s]"#, options: .regularExpression) {
-                let labelEnd = fold.distance(from: fold.startIndex, to: range.upperBound)
-                let original = lines[idx]
-                guard labelEnd <= original.count else { continue }
-                let tail = String(original[original.index(original.startIndex, offsetBy: labelEnd)...])
-                if let number = numberToken(from: tail) { return number }
-                // Etykieta na końcu linii — numer w linii następnej.
-                if idx + 1 < lines.count, let number = numberToken(from: lines[idx + 1]) { return number }
-            }
+        // 1. "Faktura (VAT) nr <numer>" — najczęstszy nagłówek. „Rachunek”
+        //    bywa dokumentem sprzedaży, ale „rachunek bankowy nr …”
+        //    to numer konta, nie dokumentu.
+        for (idx, fold) in folded.enumerated() {
+            guard fold.contains("faktura") || fold.contains("paragon")
+                || (fold.contains("rachunek") && !fold.contains("bankow") && !fold.contains("konto")) else { continue }
+            guard let regex = numberHeaderRegex else { break }
+            let foldNS = fold as NSString
+            guard let match = regex.firstMatch(in: fold, range: NSRange(location: 0, length: foldNS.length)),
+                  let matchRange = Range(match.range, in: fold) else { continue }
+            let labelEnd = fold.distance(from: fold.startIndex, to: matchRange.upperBound)
+            let original = lines[idx]
+            guard labelEnd <= original.count else { continue }
+            let tail = String(original[original.index(original.startIndex, offsetBy: labelEnd)...])
+            if let number = numberToken(from: tail) { return number }
+            // Etykieta na końcu linii — numer w linii następnej.
+            if idx + 1 < lines.count, let number = numberToken(from: lines[idx + 1]) { return number }
         }
         // 2. Etykieta "Numer faktury:" z wartością w tej samej albo następnej linii.
         for (idx, fold) in folded.enumerated() {
@@ -234,6 +249,14 @@ public enum InvoiceOCRParser {
         return nil
     }
 
+    private static let numberTokenRegex = try? NSRegularExpression(pattern: #"^[A-Za-z0-9/\-\._#]+$"#)
+    /// Cała-datowe tokeny z kropkami/myślnikami — to daty, nie numery.
+    /// Zapis z ukośnikami ("1/07/2026") jest typowym polskim numerem
+    /// faktury (nr/miesiąc/rok), więc NIE jest odrzucany.
+    private static let dottedDateTokenRegex = try? NSRegularExpression(
+        pattern: #"^(\d{1,2}[.-]\d{1,2}[.-]\d{4}|\d{4}-\d{2}-\d{2})$"#
+    )
+
     /// Wyciąga numer dokumentu z tekstu: słowa z dozwolonego zestawu znaków
     /// do pierwszego słowa-daty albo spójnika ("z dnia ..."). Numer musi
     /// zawierać cyfrę; czysta data nie jest numerem.
@@ -243,8 +266,8 @@ public enum InvoiceOCRParser {
         for word in text.split(separator: " ") {
             let token = String(word).trimmingCharacters(in: CharacterSet(charactersIn: ":,;"))
             if stopWords.contains(normalized(token)) { break }
-            guard token.range(of: #"^[A-Za-z0-9/\-\._]+$"#, options: .regularExpression) != nil else { break }
-            if date(in: token) != nil { break } // data zamiast numeru
+            guard matches(numberTokenRegex, token) else { break }
+            if matches(dottedDateTokenRegex, token) { break } // data zamiast numeru
             tokens.append(token)
             if tokens.count >= 3 { break }
         }
@@ -253,11 +276,19 @@ public enum InvoiceOCRParser {
         return joined
     }
 
+    private static func matches(_ regex: NSRegularExpression?, _ text: String) -> Bool {
+        guard let regex else { return false }
+        return regex.firstMatch(in: text, range: NSRange(location: 0, length: (text as NSString).length)) != nil
+    }
+
     // MARK: - Daty
 
     private static let issueLabels = ["data wystawienia", "wystawiono dnia", "wystawiona dnia", "data faktury"]
     private static let saleLabels = ["data sprzedazy", "data dostawy", "data wykonania", "data zakonczenia dostawy"]
     private static let dueLabels = ["termin platnosci", "termin zaplaty", "platne do", "zaplata do", "data platnosci"]
+    /// Słowa sugerujące, że data w linii NIE jest datą wystawienia
+    /// (termin/zapłata) — używane przez fallback jedynej daty.
+    private static let nonIssueDateHints = ["termin", "platnos", "zaplat", "do dnia"]
 
     private static func parseDates(into extraction: inout InvoiceOCRExtraction, lines: [String], folded: [String]) {
         extraction.issueDate = labeledDate(labels: issueLabels, lines: lines, folded: folded)
@@ -265,10 +296,18 @@ public enum InvoiceOCRParser {
         extraction.paymentDueDate = labeledDate(labels: dueLabels, lines: lines, folded: folded)
 
         // Bez etykiety: jedyna data w dokumencie to niemal na pewno
-        // data wystawienia (np. "Kraków, 12.03.2026").
+        // data wystawienia (np. "Kraków, 12.03.2026") — o ile nie została
+        // już rozpoznana jako inna data i nie stoi przy słowach
+        // sugerujących termin/zapłatę.
         if extraction.issueDate == nil {
-            let allDates = Set(lines.compactMap { date(in: $0) })
-            if allDates.count == 1 { extraction.issueDate = allDates.first }
+            let consumed = Set([extraction.saleDate, extraction.paymentDueDate].compactMap { $0 })
+            var candidates: Set<Date> = []
+            for (idx, line) in lines.enumerated() {
+                guard let found = date(in: line), !consumed.contains(found) else { continue }
+                guard !nonIssueDateHints.contains(where: { folded[idx].contains($0) }) else { continue }
+                candidates.insert(found)
+            }
+            if candidates.count == 1 { extraction.issueDate = candidates.first }
         }
     }
 
@@ -288,31 +327,35 @@ public enum InvoiceOCRParser {
         return nil
     }
 
+    /// Wzorce dat: numeryczne z kolejnością grup (dzień, miesiąc, rok).
+    private static let numericDateRegexes: [(regex: NSRegularExpression, order: (day: Int, month: Int, year: Int))] = {
+        var result: [(regex: NSRegularExpression, order: (day: Int, month: Int, year: Int))] = []
+        if let dmy = try? NSRegularExpression(pattern: #"(?<!\d)(\d{1,2})[./-](\d{1,2})[./-](\d{4})(?!\d)"#) {
+            result.append((regex: dmy, order: (day: 1, month: 2, year: 3)))
+        }
+        if let ymd = try? NSRegularExpression(pattern: #"(?<!\d)(\d{4})[./-](\d{1,2})[./-](\d{1,2})(?!\d)"#) {
+            result.append((regex: ymd, order: (day: 3, month: 2, year: 1)))
+        }
+        return result
+    }()
+    private static let wordDateRegex = try? NSRegularExpression(pattern: #"(?<!\d)(\d{1,2})\s+([a-z]+)\s+(\d{4})(?!\d)"#)
+
     /// Pierwsza data w tekście: `dd.MM.yyyy` (kropki/myślniki/ukośniki),
     /// `yyyy-MM-dd` albo słownie "12 czerwca 2026".
     static func date(in text: String) -> Date? {
         let ns = text as NSString
-        // dd.MM.yyyy / dd-MM-yyyy / dd/MM/yyyy
-        if let regex = try? NSRegularExpression(pattern: #"(?<!\d)(\d{1,2})[./-](\d{1,2})[./-](\d{4})(?!\d)"#),
-           let match = regex.firstMatch(in: text, range: NSRange(location: 0, length: ns.length)) {
-            var day = Int(ns.substring(with: match.range(at: 1))) ?? 0
-            var month = Int(ns.substring(with: match.range(at: 2))) ?? 0
-            let year = Int(ns.substring(with: match.range(at: 3))) ?? 0
+        for (regex, order) in numericDateRegexes {
+            guard let match = regex.firstMatch(in: text, range: NSRange(location: 0, length: ns.length)) else { continue }
+            var day = Int(ns.substring(with: match.range(at: order.day))) ?? 0
+            var month = Int(ns.substring(with: match.range(at: order.month))) ?? 0
+            let year = Int(ns.substring(with: match.range(at: order.year))) ?? 0
             if month > 12, day <= 12 { swap(&day, &month) } // zapis amerykański
-            if let date = makeDate(year: year, month: month, day: day) { return date }
-        }
-        // yyyy-MM-dd (ISO)
-        if let regex = try? NSRegularExpression(pattern: #"(?<!\d)(\d{4})[./-](\d{1,2})[./-](\d{1,2})(?!\d)"#),
-           let match = regex.firstMatch(in: text, range: NSRange(location: 0, length: ns.length)) {
-            let year = Int(ns.substring(with: match.range(at: 1))) ?? 0
-            let month = Int(ns.substring(with: match.range(at: 2))) ?? 0
-            let day = Int(ns.substring(with: match.range(at: 3))) ?? 0
             if let date = makeDate(year: year, month: month, day: day) { return date }
         }
         // "12 czerwca 2026"
         let foldedText = normalized(text)
         let foldedNS = foldedText as NSString
-        if let regex = try? NSRegularExpression(pattern: #"(?<!\d)(\d{1,2})\s+([a-z]+)\s+(\d{4})(?!\d)"#),
+        if let regex = wordDateRegex,
            let match = regex.firstMatch(in: foldedText, range: NSRange(location: 0, length: foldedNS.length)) {
             let day = Int(foldedNS.substring(with: match.range(at: 1))) ?? 0
             let monthWord = foldedNS.substring(with: match.range(at: 2))
@@ -352,7 +395,11 @@ public enum InvoiceOCRParser {
 
     private static func parseSeller(into extraction: inout InvoiceOCRExtraction, lines: [String], folded: [String], ownNIP: String?) {
         let sellerLabelIdx = folded.firstIndex { fold in sellerLabels.contains { fold.hasPrefix($0) } }
-        extraction.sellerTaxID = sellerTaxID(lines: lines, folded: folded, ownNIP: ownNIP, sellerLabelIdx: sellerLabelIdx)
+        let buyerLabelIdx = folded.firstIndex { fold in buyerLabels.contains { fold.hasPrefix($0) } }
+        extraction.sellerTaxID = sellerTaxID(
+            lines: lines, folded: folded, ownNIP: ownNIP,
+            sellerLabelIdx: sellerLabelIdx, buyerLabelIdx: buyerLabelIdx
+        )
 
         guard let labelIdx = sellerLabelIdx else { return }
         // Nazwa: reszta linii etykiety albo pierwsza sensowna linia poniżej.
@@ -399,12 +446,20 @@ public enum InvoiceOCRParser {
         return !labelPrefixes.contains { fold.hasPrefix($0) }
     }
 
-    private static func sellerTaxID(lines: [String], folded: [String], ownNIP: String?, sellerLabelIdx: Int?) -> String? {
+    private static let nipRegex = try? NSRegularExpression(
+        pattern: #"(?<![\dA-Za-z])(?:PL[ -]?)?(\d{3}[- ]?\d{3}[- ]?\d{2}[- ]?\d{2}|\d{3}[- ]?\d{2}[- ]?\d{2}[- ]?\d{3}|\d{10})(?!\d)"#
+    )
+    /// Zagraniczny VAT ID: prefiks kraju UE + min. 7 znaków numeru —
+    /// krótsze dopasowania to zwykle fragmenty IBAN ("PL61") albo skróty.
+    private static let euVatRegex = try? NSRegularExpression(
+        pattern: #"(?<![A-Za-z0-9])([A-Z]{2})[ -]?([0-9A-Z]{7,13})(?![A-Za-z0-9])"#
+    )
+
+    private static func sellerTaxID(lines: [String], folded: [String], ownNIP: String?, sellerLabelIdx: Int?, buyerLabelIdx: Int?) -> String? {
         let ownDigits = (ownNIP ?? "").filter(\.isNumber)
         // Kandydaci: poprawne polskie NIP-y (suma kontrolna) z pozycjami.
         var candidates: [(line: Int, nip: String)] = []
-        let pattern = #"(?<![\dA-Za-z])(?:PL[ -]?)?(\d{3}[- ]?\d{3}[- ]?\d{2}[- ]?\d{2}|\d{3}[- ]?\d{2}[- ]?\d{2}[- ]?\d{3}|\d{10})(?!\d)"#
-        guard let regex = try? NSRegularExpression(pattern: pattern) else { return nil }
+        guard let regex = nipRegex else { return nil }
         for (idx, line) in lines.enumerated() {
             let ns = line as NSString
             for match in regex.matches(in: line, range: NSRange(location: 0, length: ns.length)) {
@@ -416,23 +471,31 @@ public enum InvoiceOCRParser {
             }
         }
         if let sellerIdx = sellerLabelIdx {
-            // Najbliższy NIP od etykiety "Sprzedawca" w dół.
-            if let nearest = candidates.filter({ $0.line >= sellerIdx }).min(by: { $0.line < $1.line }) {
-                return nearest.nip
+            // Sekcja sprzedawcy: od etykiety „Sprzedawca” do etykiety
+            // „Nabywca” (jeśli następuje po niej); NIP z nagłówka papieru
+            // firmowego (nad etykietą) jest lepszy niż NIP nabywcy.
+            let sectionEnd = (buyerLabelIdx.map { $0 > sellerIdx ? $0 : lines.count }) ?? lines.count
+            if let inSection = candidates.first(where: { $0.line >= sellerIdx && $0.line < sectionEnd }) {
+                return inSection.nip
+            }
+            if let header = candidates.last(where: { $0.line < sellerIdx }) {
+                return header.nip
             }
         }
         if let first = candidates.first { return first.nip }
 
         // Zagraniczny VAT ID (prefiks kraju UE) — tylko w linii z "VAT"/"NIP".
-        let euPattern = #"(?<![A-Za-z0-9])([A-Z]{2})[ -]?([0-9A-Z]{2,13})(?![A-Za-z0-9])"#
-        guard let euRegex = try? NSRegularExpression(pattern: euPattern) else { return nil }
+        // Polskie numery muszą przejść walidację sumy kontrolnej powyżej,
+        // więc prefiks PL jest tu pomijany.
+        guard let euRegex = euVatRegex else { return nil }
         for (idx, line) in lines.enumerated() {
             guard folded[idx].contains("vat") || folded[idx].contains("nip") else { continue }
             let ns = line as NSString
             for match in euRegex.matches(in: line, range: NSRange(location: 0, length: ns.length)) {
                 let prefix = ns.substring(with: match.range(at: 1))
                 let number = ns.substring(with: match.range(at: 2))
-                guard VIESVerification.viesCountryCodes.contains(prefix),
+                guard prefix != "PL",
+                      VIESVerification.viesCountryCodes.contains(prefix),
                       number.contains(where: \.isNumber) else { continue }
                 return prefix + number
             }
@@ -446,7 +509,7 @@ public enum InvoiceOCRParser {
     /// i opcjonalnymi separatorami tysięcy (spacja, twarda spacja, kropka).
     /// Wyklucza fragmenty dat, dłuższych liczb i stawek procentowych.
     private static let amountRegex = try? NSRegularExpression(
-        pattern: #"(?<![\d,.])(\d{1,3}(?:[ \x{00A0}.]\d{3})+|\d+)[,.](\d{2})(?!\s?%|[.,]?\d)"#
+        pattern: #"(?<![\d,.])(\d{1,3}(?:[ \x{00A0}.]\d{3})+|\d+)[,.](\d{2})(?!\s*%|[.,]?\d)"#
     )
 
     /// Wszystkie kwoty w linii, w kolejności występowania.
@@ -470,25 +533,31 @@ public enum InvoiceOCRParser {
     private static func parseAmounts(into extraction: inout InvoiceOCRExtraction, lines: [String], folded: [String]) {
         // 1. Wiersz podsumowania tabeli: "Razem 1 000,00 230,00 1 230,00" —
         //    netto + VAT = brutto (ostatnia kwota) uwiarygodnia cały komplet.
+        //    Klasyczny układ kolumn to „… netto VAT brutto”, więc para
+        //    bezpośrednio przed brutto ma pierwszeństwo przed dalszymi
+        //    kombinacjami (wiersz może zawierać też stawkę albo sumy
+        //    częściowe, które przypadkiem spełnią równanie).
         for (idx, fold) in folded.enumerated() where fold.contains("razem") || fold.contains("suma") || fold.contains("ogolem") {
             let found = amounts(in: lines[idx])
             guard found.count >= 3, let gross = found.last else { continue }
-            let rest = found.dropLast()
+            let rest = Array(found.dropLast())
+            var pairs: [(Double, Double)] = [(rest[rest.count - 2], rest[rest.count - 1])]
             for i in rest.indices {
                 for j in rest.indices where j > i {
-                    if abs(rest[i] + rest[j] - gross) <= 0.02 {
-                        extraction.netAmount = max(rest[i], rest[j])
-                        extraction.vatAmount = min(rest[i], rest[j])
-                        extraction.grossAmount = gross
-                        return
-                    }
+                    pairs.append((rest[i], rest[j]))
                 }
+            }
+            for (a, b) in pairs where abs(a + b - gross) <= 0.02 {
+                extraction.netAmount = max(a, b)
+                extraction.vatAmount = min(a, b)
+                extraction.grossAmount = gross
+                return
             }
         }
         // 2. Osobno etykietowane kwoty (wartość w tej samej albo następnej linii).
         extraction.grossAmount = labeledAmount(labels: grossLabels, lines: lines, folded: folded)
         extraction.netAmount = labeledAmount(labels: netLabels, lines: lines, folded: folded, excluding: ["brutto"])
-        extraction.vatAmount = labeledAmount(labels: vatLabels, lines: lines, folded: folded, excluding: ["nip", "faktura", "netto", "brutto"])
+        extraction.vatAmount = labeledAmount(labels: vatLabels, lines: lines, folded: folded, excluding: ["nip", "faktura", "netto", "brutto", "stawka"])
     }
 
     /// Kwota z linii zawierającej etykietę — ostatnia kwota w linii
@@ -512,23 +581,36 @@ public enum InvoiceOCRParser {
 
     // MARK: - Waluta
 
-    private static let knownCurrencies = ["PLN", "EUR", "USD", "GBP", "CHF", "CZK", "SEK", "NOK", "DKK"]
+    private static let currencyRegexes: [(code: String, regex: NSRegularExpression)] = {
+        ["PLN", "EUR", "USD", "GBP", "CHF", "CZK", "SEK", "NOK", "DKK"].compactMap { code in
+            (try? NSRegularExpression(pattern: "(?<![A-Za-z])\(code)(?![A-Za-z])"))
+                .map { (code: code, regex: $0) }
+        }
+    }()
+    private static let zlotyRegex = try? NSRegularExpression(pattern: #"(?<![a-złó])(zł|zl)(?![a-z])"#)
 
     private static func currency(lines: [String]) -> String? {
         var counts: [String: Int] = [:]
         var firstSeen: [String: Int] = [:]
         for (idx, line) in lines.enumerated() {
-            for code in knownCurrencies {
-                let occurrences = matchCount(of: #"(?<![A-Za-z])\#(code)(?![A-Za-z])"#, in: line)
+            let ns = line as NSString
+            let range = NSRange(location: 0, length: ns.length)
+            for (code, regex) in currencyRegexes {
+                let occurrences = regex.numberOfMatches(in: line, range: range)
                 if occurrences > 0 {
                     counts[code, default: 0] += occurrences
                     if firstSeen[code] == nil { firstSeen[code] = idx }
                 }
             }
-            let zlCount = matchCount(of: #"(?<![A-Za-złó])(zł|zl)(?![A-Za-z])"#, in: line.lowercased())
-            if zlCount > 0 {
-                counts["PLN", default: 0] += zlCount
-                if firstSeen["PLN"] == nil { firstSeen["PLN"] = idx }
+            if let zlotyRegex {
+                let lowered = line.lowercased()
+                let zlCount = zlotyRegex.numberOfMatches(
+                    in: lowered, range: NSRange(location: 0, length: (lowered as NSString).length)
+                )
+                if zlCount > 0 {
+                    counts["PLN", default: 0] += zlCount
+                    if firstSeen["PLN"] == nil { firstSeen["PLN"] = idx }
+                }
             }
         }
         return counts.max { lhs, rhs in
@@ -538,24 +620,29 @@ public enum InvoiceOCRParser {
         }?.key
     }
 
-    private static func matchCount(of pattern: String, in text: String) -> Int {
-        guard let regex = try? NSRegularExpression(pattern: pattern) else { return 0 }
-        return regex.numberOfMatches(in: text, range: NSRange(location: 0, length: (text as NSString).length))
-    }
-
     // MARK: - Rachunek bankowy
 
-    private static func bankAccount(lines: [String]) -> String? {
-        let pattern = #"(?<![\dA-Za-z])(?:PL[ ]?)?(\d{2}(?:[ -]?\d{4}){6})(?!\d)"#
-        guard let regex = try? NSRegularExpression(pattern: pattern) else { return nil }
-        for line in lines {
+    private static let nrbRegex = try? NSRegularExpression(
+        pattern: #"(?<![\dA-Za-z])(?:PL[ ]?)?(\d{2}(?:[ -]?\d{4}){6})(?!\d)"#
+    )
+    private static func bankAccount(lines: [String], folded: [String]) -> String? {
+        guard let regex = nrbRegex else { return nil }
+        // Rachunek w kontekście nabywcy ("z rachunku nabywcy...") to nasze
+        // własne konto — używane tylko, gdy nie ma innego numeru.
+        var buyerContextFallback: String?
+        for (idx, line) in lines.enumerated() {
             let ns = line as NSString
             for match in regex.matches(in: line, range: NSRange(location: 0, length: ns.length)) {
                 let account = ElixirPaymentExporter.normalizedNRB(ns.substring(with: match.range(at: 1)))
-                if ElixirPaymentExporter.isValidNRB(account) { return account }
+                guard ElixirPaymentExporter.isValidNRB(account) else { continue }
+                if folded[idx].contains("nabywc") {
+                    if buyerContextFallback == nil { buyerContextFallback = account }
+                    continue
+                }
+                return account
             }
         }
-        return nil
+        return buyerContextFallback
     }
 
     // MARK: - Forma płatności
@@ -564,7 +651,7 @@ public enum InvoiceOCRParser {
 
     private static func paymentForm(lines: [String], folded: [String]) -> PaymentForm? {
         for (idx, fold) in folded.enumerated() {
-            guard paymentFormLabels.contains(where: fold.contains) else { continue }
+            guard paymentFormLabels.contains(where: { fold.contains($0) }) else { continue }
             if let form = paymentForm(fromFolded: fold) { return form }
             if idx + 1 < lines.count, let form = paymentForm(fromFolded: folded[idx + 1]) { return form }
         }
