@@ -106,6 +106,12 @@ Sources/KsefiarzCore/
                kolumny 1–19, klasyfikacja faktur do kol. 9/10/12–15,
                przeliczenie PLN, podsumowania okresu i KPiRCSVExporter;
                ukryte faktury zawsze pomijane),
+               RyczaltEngine (ewidencja przychodów — ryczałt, wzór od 2026 r.
+               Dz.U. 2025 poz. 1294: enum RyczaltRate 9 stawek, tylko
+               sprzedaż, przychód netto w PLN, podsumowanie i szacunek
+               ryczałtu per stawka, RyczaltCSVExporter 17 kolumn + wiersz
+               sumy; enum TaxForm wybiera KPiR albo ryczałt — obie
+               wykluczające, AppSettingsKeys.taxForm),
                ReportsEngine (raporty: top kontrahenci, przychody per
                towar/usługa, koszty per kategoria; CostCategories —
                podpowiedzi kategorii), MenuBarStatus (liczniki dosłań
@@ -127,6 +133,9 @@ Sources/KsefiarzCore/
                PermissionsView (sekcja Uprawnienia — nadawanie/odbieranie
                i przegląd dostępów KSeF),
                KPiRView (tabela, edycja lokalnej klasyfikacji i CSV),
+               RyczaltView (ewidencja przychodów: tabela ze stawką, podział
+               przychodu/ryczałtu per stawka, edycja wpisu i CSV — pokazywana
+               zamiast KPiRView przy formie „ryczałt”),
                JPKExportView i VATUEExportView (eksport ewidencji VAT
                z menu „Ewidencje” na listach faktur),
                DictionariesView (+ ContractorsView/ProductsView/BankAccountsView)
@@ -152,6 +161,35 @@ Scripts/build-app.sh                   # składanie bundla .app
   bezwarunkowo pomijane; wykluczone można roboczo pokazać i przywrócić.
 - CSV jest pełnym, 19-kolumnowym eksportem roboczym, nie strukturą
   JPK_PKPIR. Metadane KPiR są objęte `BackupService` od wersji 8.
+
+## Ewidencja przychodów (ryczałt, wzór od 2026 r.)
+
+- Źródłem układu jest rozporządzenie Ministra Finansów i Gospodarki
+  z 6 września 2025 r. (Dz.U. 2025 poz. 1294), obowiązujące od 1.01.2026.
+  Kolumny 1–17: Lp., data wpisu, data uzyskania przychodu, numer KSeF, numer
+  dowodu księgowego, identyfikator podatkowy kontrahenta, kol. 7–15 przychód
+  wg stawki 17/15/14/12,5/12/10/8,5/5,5/3%, ogółem przychody, uwagi. Wzór NIE
+  ma kolumny 2% (rzadka stawka rolna) — świadome ograniczenie.
+- `TaxForm` (enum w `RyczaltEngine.swift`) wybiera formę opodatkowania: `.kpir`
+  albo `.ryczalt`. Wzajemnie wykluczające — `MainContentView` pokazuje w pasku
+  bocznym tylko odpowiadającą sekcję (`SidebarSection.kpir` lub `.ryczalt`),
+  a po zmianie formy resetuje zaznaczenie na Kokpit. Klucz `taxForm`, domyślnie
+  KPiR (zgodność z istniejącymi instalacjami).
+- Ryczałt dotyczy WYŁĄCZNIE przychodów, więc `RyczaltEngine.rows` bierze tylko
+  `kind == .sales`. Przychód domyślny = netto w PLN (`DashboardAnalytics.inPLN`);
+  `ryczaltAmountOverride` pozwala ująć brutto (podatnik zwolniony z VAT) lub
+  korektę. Stawka: `ryczaltRateRaw` na fakturze, a przy pustej — domyślna
+  z ustawień (`ryczaltDefaultRate`, fallback 8,5%). Data przychodu:
+  `ryczaltEventDate ?? saleDate ?? issueDate`. Osobna data wpisu (kol. 2) to
+  `ryczaltEntryDate`, z fallbackiem do daty przychodu; decyduje o kolejności
+  pozycji i może być skorygowana w edytorze.
+- Podsumowanie liczy przychód i szacowany ryczałt (przychód × stawka) łącznie
+  i per stawka; szacunek jest bez odliczeń składek ZUS/zdrowotnej (etykieta
+  „szac.”). Ostrzeżenie o braku kursu waluty jak w KPiR. Ukryte i wykluczone
+  (`isExcludedFromRyczalt`) pomijane; wykluczone można roboczo pokazać.
+- CSV (`RyczaltCSVExporter`) to pełny 17-kolumnowy eksport roboczy z wierszem
+  sumy przychodów per stawka — nie struktura JPK_EWP. Metadane ryczałtu objęte
+  `BackupService` od wersji 9 (klucze `taxForm`/`ryczaltDefaultRate` też).
 
 ## API KSeF 2.0 — fakty krytyczne
 

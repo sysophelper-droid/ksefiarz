@@ -14,6 +14,13 @@ public enum AppSettingsKeys {
     public static let nip = "ksef.nip"
     /// Numer rachunku bankowego do płatności (na wystawianych fakturach).
     public static let bankAccount = "ksef.bankAccount"
+    /// Forma opodatkowania podatkiem dochodowym (rawValue `TaxForm`) —
+    /// decyduje, czy w pasku bocznym jest KPiR czy ewidencja przychodów
+    /// (ryczałt). Nie można prowadzić obu równocześnie.
+    public static let taxForm = "ksef.taxForm"
+    /// Domyślna stawka ryczałtu (rawValue `RyczaltRate`) — używana dla wpisów
+    /// ewidencji bez własnej stawki. Można ją nadpisać na każdym wpisie.
+    public static let ryczaltDefaultRate = "ksef.ryczaltDefaultRate"
     /// Czy wydruki własnych faktur mają używać brandingu firmy.
     public static let pdfBrandingEnabled = "pdf.branding.enabled"
     /// Logo firmy jako znormalizowany PNG zakodowany Base64.

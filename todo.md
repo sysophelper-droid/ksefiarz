@@ -33,7 +33,6 @@ kolejność dowolna. ⚠️ operacje modyfikujące KSeF testować wyłącznie na
 
 #### B. Podatki dochodowe / ewidencje
 
-- [ ] B2. Ewidencja przychodów (ryczałt) — z podziałem na stawki ryczałtu.
 - [ ] ⭐ B3. Kalendarz i prognoza podatkowa — terminarz (JPK do 25., VAT,
   zaliczka PIT, ZUS) + szacunek kwot VAT/PIT do zapłaty za bieżący okres.
 - [ ] B4. JPK_FA na żądanie — pełny JPK faktur (nie ewidencja), format dla
@@ -92,6 +91,21 @@ kolejność dowolna. ⚠️ operacje modyfikujące KSeF testować wyłącznie na
   (dziś zaszyte PL/EN).
 
 ## Zrealizowane
+
+### Ewidencja przychodów — ryczałt (13.07.2026)
+
+- [x] B2. Ewidencja przychodów dla ryczałtu od przychodów ewidencjonowanych
+  według 17-kolumnowego wzoru obowiązującego od 2026 r. (Dz.U. 2025 poz. 1294),
+  z podziałem na stawki 17/15/14/12,5/12/10/8,5/5,5/3%. W Ustawieniach → Firma
+  wybór formy opodatkowania (KPiR albo ryczałt — wzajemnie wykluczające, w pasku
+  bocznym widoczna tylko wybrana ewidencja) oraz domyślna stawka ryczałtu.
+  Ewidencja obejmuje wyłącznie sprzedaż, przelicza kwoty walutowe na PLN,
+  pokazuje przychód i szacowany ryczałt (bez odliczeń składek) łącznie i per
+  stawka; użytkownik może na wpisie nadpisać stawkę, datę wpisu, datę uzyskania
+  przychodu, kwotę i uwagi lub wykluczyć dokument. Eksport CSV zawiera pełne
+  kolumny 1–17 (numer KSeF, identyfikator kontrahenta) oraz wiersz sumy per
+  stawka. Faktury ukryte poza ewidencją, klasyfikacja ryczałtu w kopii
+  zapasowej (v9).
 
 ### KPiR — Księga Przychodów i Rozchodów (13.07.2026)
 
