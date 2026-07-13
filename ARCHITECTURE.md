@@ -296,7 +296,10 @@ Scripts/build-app.sh                   # składanie bundla .app
   po 35 znaków rozdzielone `|`; znaki sterujące są normalizowane. Struktura
   i limity pól zostały zweryfikowane 13.07.2026 w instrukcjach bankowych:
   [mBank — opis płatności Elixir](https://www.mbank.pl/indywidualny/konta/pytania-i-odpowiedzi/platnosci-elixir/)
-  oraz [PKO BP — struktura pliku wejściowego ELIXIR](https://www.pkobp.pl/media_files/720a6ec8-a070-4dbd-a569-20bca44469d2.pdf).
+  oraz [PKO BP (iPKO biznes) — struktura pliku wejściowego ELIXIR-O](https://www.pkobp.pl/media_files/f624fb66-22a9-4a90-80b0-aae09b8afd29.pdf)
+  (pola 1–16: bank zleceniodawcy w polu 4, stała `0` w polach 5 i 10, bank
+  odbiorcy w polu 11, szczegóły w polu 12, typ dokumentu `51`/`53` w polu 15;
+  Przelew Split w polu 12 ma strukturę `/VAT/…/IDC/…/INV/…`).
 - Kandydatem jest wyłącznie widoczna faktura zakupowa w PLN z dodatnim
   `outstandingAmount`, nazwą sprzedawcy i poprawnym 26-cyfrowym NRB (łącznie
   z kontrolą IBAN modulo 97). Opłacone, ukryte, walutowe i błędne dokumenty
