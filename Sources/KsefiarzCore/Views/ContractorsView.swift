@@ -56,10 +56,15 @@ struct ContractorsListView: View {
                 Button("Edytuj") {
                     editedContractor = contractors.first { ids.contains($0.id) }
                 }
-                if ids.count == 1, let contractor = contractors.first(where: { ids.contains($0.id) }),
-                   !contractor.nip.filter(\.isNumber).isEmpty {
-                    Button("Zweryfikuj w KSeF i wykazie VAT") {
-                        verifyingContractor = contractor
+                if ids.count == 1, let contractor = contractors.first(where: { ids.contains($0.id) }) {
+                    if VIESVerification.euIdentity(uePrefix: contractor.uePrefix, identifier: contractor.nip) != nil {
+                        Button("Zweryfikuj w VIES (VAT-UE)") {
+                            verifyingContractor = contractor
+                        }
+                    } else if !contractor.nip.filter(\.isNumber).isEmpty {
+                        Button("Zweryfikuj w KSeF i wykazie VAT") {
+                            verifyingContractor = contractor
+                        }
                     }
                 }
                 Button("Usuń ze słownika", role: .destructive) {
@@ -106,6 +111,16 @@ struct ContractorsListView: View {
             ContractorHistoryView(contractor: contractor)
         }
         .sheet(item: $verifyingContractor) { contractor in
+            verificationSheet(for: contractor)
+        }
+    }
+
+    /// Kieruje weryfikację: kontrahent UE → VIES, krajowy → Biała lista + KSeF.
+    @ViewBuilder
+    private func verificationSheet(for contractor: Contractor) -> some View {
+        if let eu = VIESVerification.euIdentity(uePrefix: contractor.uePrefix, identifier: contractor.nip) {
+            VIESVerificationView(countryCode: eu.countryCode, vatNumber: eu.vatNumber, expectedName: contractor.displayName)
+        } else {
             ContractorVerificationView(nip: contractor.nip, expectedName: contractor.displayName)
         }
     }
@@ -160,6 +175,17 @@ struct ContractorEditorView: View {
             && !working.nip.trimmingCharacters(in: .whitespaces).isEmpty
     }
 
+    /// Rozpoznaje kontrahenta UE (do routingu weryfikacji VIES vs krajowej).
+    private var euIdentity: (countryCode: String, vatNumber: String)? {
+        VIESVerification.euIdentity(uePrefix: working.uePrefix, identifier: working.nip)
+    }
+
+    /// Weryfikacja jest dostępna dla kontrahenta UE (VIES) albo krajowego
+    /// (10-cyfrowy NIP → Biała lista + KSeF).
+    private var canVerify: Bool {
+        euIdentity != nil || working.nip.filter(\.isNumber).count == 10
+    }
+
     var body: some View {
         @Bindable var working = working
         VStack(spacing: 0) {
@@ -185,8 +211,10 @@ struct ContractorEditorView: View {
                         } label: {
                             Label("Zweryfikuj", systemImage: "checkmark.shield")
                         }
-                        .disabled(working.nip.filter(\.isNumber).count != 10)
-                        .help("Sprawdza status VAT (Biała lista) i relację uprawnień w KSeF")
+                        .disabled(!canVerify)
+                        .help(euIdentity != nil
+                            ? "Sprawdza aktywność numeru VAT-UE w systemie VIES"
+                            : "Sprawdza status VAT (Biała lista) i relację uprawnień w KSeF")
                     }
                     if let lookupMessage {
                         Text(lookupMessage)
@@ -261,6 +289,16 @@ struct ContractorEditorView: View {
             if let original { working.copy(from: original) }
         }
         .sheet(isPresented: $showingVerification) {
+            verificationSheet
+        }
+    }
+
+    /// Kieruje weryfikację: kontrahent UE → VIES, krajowy → Biała lista + KSeF.
+    @ViewBuilder
+    private var verificationSheet: some View {
+        if let eu = euIdentity {
+            VIESVerificationView(countryCode: eu.countryCode, vatNumber: eu.vatNumber, expectedName: working.displayName)
+        } else {
             ContractorVerificationView(nip: working.nip, expectedName: working.displayName)
         }
     }
