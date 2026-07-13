@@ -270,3 +270,129 @@ struct KSeFAvailabilityPolicyTests {
         #expect(KSeFAvailabilityPolicy.upcomingMaintenance(from: snapshot, now: now)?.eventId == 10)
     }
 }
+
+/// Transport, którego żądania wiszą do jawnego zwolnienia — pozwala zbadać
+/// zachowanie monitora, gdy odświeżanie wciąż trwa.
+private final class WiszacyTransport: HTTPTransport, @unchecked Sendable {
+    private let zamek = NSLock()
+    private var kontynuacje: [CheckedContinuation<Void, Never>] = []
+    private var zwolniony = false
+
+    var czyCosWisi: Bool {
+        zamek.lock(); defer { zamek.unlock() }
+        return !kontynuacje.isEmpty
+    }
+
+    func zwolnij() {
+        zamek.lock()
+        zwolniony = true
+        let wznawiane = kontynuacje
+        kontynuacje = []
+        zamek.unlock()
+        wznawiane.forEach { $0.resume() }
+    }
+
+    func send(_ request: URLRequest) async throws -> (Data, HTTPURLResponse) {
+        await withCheckedContinuation { kontynuacja in
+            zamek.lock()
+            if zwolniony {
+                zamek.unlock()
+                kontynuacja.resume()
+            } else {
+                kontynuacje.append(kontynuacja)
+                zamek.unlock()
+            }
+        }
+        let sciezka = request.url?.path ?? ""
+        let dane = sciezka.contains("status")
+            ? Data(#"{"status":"AVAILABLE"}"#.utf8)
+            : Data("[]".utf8)
+        return (dane, HTTPURLResponse(
+            url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil
+        )!)
+    }
+}
+
+private func availabilityOKTransport() -> MockTransport {
+    let transport = MockTransport()
+    transport.routeOK("/status", data: Data(#"{"status":"AVAILABLE"}"#.utf8))
+    transport.routeOK("/messages", data: Data("[]".utf8))
+    return transport
+}
+
+@Suite("Latarnia KSeF — monitor współdzielonego stanu")
+@MainActor
+struct KSeFAvailabilityMonitorTests {
+
+    private static func monitor(
+        transport: @escaping () -> HTTPTransport
+    ) -> KSeFAvailabilityMonitor {
+        KSeFAvailabilityMonitor { environment in
+            KSeFAvailabilityService(
+                environment: environment,
+                transport: transport(),
+                baseURL: URL(string: "https://latarnia.example")!
+            )
+        }
+    }
+
+    @Test("Udany odczyt ustawia snapshot; Demo czyści go i zgłasza jawny błąd")
+    func demoCzysciSnapshot() async {
+        let monitor = Self.monitor { availabilityOKTransport() }
+
+        let pierwszy = await monitor.refresh(environment: .test)
+        #expect(pierwszy?.environment == .test)
+        #expect(monitor.snapshot?.environment == .test)
+        #expect(monitor.lastError == nil)
+
+        let demo = await monitor.refresh(environment: .demo)
+        #expect(demo == nil)
+        #expect(monitor.snapshot == nil)
+        #expect(monitor.lastError == KSeFAvailabilityError.unsupportedEnvironment.localizedDescription)
+    }
+
+    @Test("Błąd sieci zachowuje poprzedni odczyt i ustawia czytelny komunikat")
+    func bladZachowujePoprzedniOdczyt() async {
+        let zepsuty = MockTransport()
+        zepsuty.route("/messages") { _ in (503, Data()) }
+        var transport: HTTPTransport = availabilityOKTransport()
+        let monitor = Self.monitor { transport }
+
+        _ = await monitor.refresh(environment: .production)
+        #expect(monitor.snapshot != nil)
+
+        transport = zepsuty
+        let wynik = await monitor.refresh(environment: .production)
+        #expect(wynik == nil)
+        #expect(monitor.lastError == KSeFAvailabilityError.badStatus(503).localizedDescription)
+        // Poprzedni snapshot zostaje — formularz sam ocenia jego świeżość.
+        #expect(monitor.snapshot?.environment == .production)
+    }
+
+    @Test("Trwające odświeżanie nie oddaje snapshotu innego środowiska")
+    func trwajaceOdswiezanieNieMieszaSrodowisk() async {
+        let wiszacy = WiszacyTransport()
+        var transport: HTTPTransport = availabilityOKTransport()
+        let monitor = Self.monitor { transport }
+
+        // Udany odczyt TEST, potem drugie odświeżanie TEST zawisa na sieci…
+        _ = await monitor.refresh(environment: .test)
+        transport = wiszacy
+        let wTrakcie = Task { await monitor.refresh(environment: .test) }
+        while !wiszacy.czyCosWisi { await Task.yield() }
+        #expect(monitor.isRefreshing)
+
+        // …i w tym oknie produkcja NIE może dostać snapshotu z TEST
+        // (eventId to niezależne liczniki środowisk), a TEST nadal
+        // dostaje swój ostatni znany odczyt.
+        let produkcja = await monitor.refresh(environment: .production)
+        #expect(produkcja == nil)
+        let test = await monitor.refresh(environment: .test)
+        #expect(test?.environment == .test)
+
+        wiszacy.zwolnij()
+        let dokonczone = await wTrakcie.value
+        #expect(dokonczone?.environment == .test)
+        #expect(!monitor.isRefreshing)
+    }
+}

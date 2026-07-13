@@ -180,7 +180,12 @@ public struct NewInvoiceView: View {
         guard let environment = KSeFEnvironment(rawValue: environmentRaw),
               environment.availabilityBaseURL != nil
         else { return nil }
-        if availabilityMonitor.isRefreshing { return nil }
+        // Cisza tylko podczas PIERWSZEGO odczytu (brak stanu do pokazania).
+        // Kolejne odświeżenia nie chowają ostrzeżenia — inaczej sekcja
+        // migałaby co minutę, dopóki Latarnia pozostaje nieosiągalna.
+        if availabilityMonitor.isRefreshing,
+           availabilityMonitor.snapshot == nil,
+           availabilityMonitor.lastError == nil { return nil }
         if let error = availabilityMonitor.lastError { return error }
         guard let snapshot = availabilityMonitor.snapshot,
               snapshot.environment == environment

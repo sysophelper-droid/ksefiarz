@@ -192,15 +192,25 @@ public final class KSeFAvailabilityService {
         return data
     }
 
+    /// Formattery są współdzielone — ISO8601DateFormatter po skonfigurowaniu
+    /// jest bezpieczny wątkowo, a tworzenie pary na każdą datę byłoby zbędne.
+    private static let fractionalDateFormatter: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter
+    }()
+    private static let regularDateFormatter: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime]
+        return formatter
+    }()
+
     private static func makeDecoder() -> JSONDecoder {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .custom { decoder in
             let value = try decoder.singleValueContainer().decode(String.self)
-            let fractional = ISO8601DateFormatter()
-            fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-            let regular = ISO8601DateFormatter()
-            regular.formatOptions = [.withInternetDateTime]
-            guard let date = fractional.date(from: value) ?? regular.date(from: value) else {
+            guard let date = fractionalDateFormatter.date(from: value)
+                ?? regularDateFormatter.date(from: value) else {
                 throw DecodingError.dataCorruptedError(
                     in: try decoder.singleValueContainer(),
                     debugDescription: "Nieprawidłowa data ISO 8601: \(value)"
@@ -221,7 +231,14 @@ public final class KSeFAvailabilityMonitor: ObservableObject {
     @Published public private(set) var isRefreshing = false
     @Published public private(set) var lastError: String?
 
-    private init() {}
+    /// Fabryka klienta — poza testami zawsze prawdziwe API Latarni.
+    private let makeService: (KSeFEnvironment) -> KSeFAvailabilityService
+
+    init(makeService: @escaping (KSeFEnvironment) -> KSeFAvailabilityService = {
+        KSeFAvailabilityService(environment: $0)
+    }) {
+        self.makeService = makeService
+    }
 
     @discardableResult
     public func refresh(environment: KSeFEnvironment) async -> KSeFAvailabilitySnapshot? {
@@ -230,11 +247,18 @@ public final class KSeFAvailabilityMonitor: ObservableObject {
             lastError = KSeFAvailabilityError.unsupportedEnvironment.localizedDescription
             return nil
         }
-        guard !isRefreshing else { return snapshot }
+        // Przy trwającym równolegle odświeżaniu bieżący stan wolno oddać
+        // wyłącznie dla tego samego środowiska. `eventId` to niezależne
+        // liczniki TEST/PRD — snapshot sprzed przełączenia środowiska
+        // pozwoliłby `reconcile` dopasować cudze zdarzenie i wpisać
+        // fakturze błędny termin dosłania.
+        guard !isRefreshing else {
+            return snapshot?.environment == environment ? snapshot : nil
+        }
         isRefreshing = true
         defer { isRefreshing = false }
         do {
-            let result = try await KSeFAvailabilityService(environment: environment).fetchSnapshot()
+            let result = try await makeService(environment).fetchSnapshot()
             snapshot = result
             lastError = nil
             return result
