@@ -11,7 +11,7 @@ public struct ContractorVerificationView: View {
 
     @ObservedObject private var tokenStore = TokenStore.shared
     @AppStorage(AppSettingsKeys.nip) private var myNIP = ""
-    @AppStorage(AppSettingsKeys.environment) private var environmentRaw = KSeFEnvironment.production.rawValue
+    @AppStorage(AppSettingsKeys.environment) private var environmentRaw = KSeFEnvironment.test.rawValue
     @Environment(\.dismiss) private var dismiss
 
     @State private var result: ContractorVerificationResult?
@@ -23,7 +23,7 @@ public struct ContractorVerificationView: View {
     }
 
     private var environment: KSeFEnvironment {
-        KSeFEnvironment(rawValue: environmentRaw) ?? .production
+        KSeFEnvironment(rawValue: environmentRaw) ?? .test
     }
 
     /// Poświadczenia KSeF potrzebne do sprawdzenia relacji uprawnień.
