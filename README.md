@@ -181,8 +181,17 @@ Tests/KsefiarzCoreTests/          # Swift Testing — model, parser, usługa, kr
   **offline24** (art. 106nda) — dosłanie do następnego dnia roboczego;
   **niedostępność KSeF** (art. 106nh, komunikat MF) — następny dzień
   roboczy po jej zakończeniu; **awaria KSeF** (art. 106nf, komunikat MF) —
-  7 dni roboczych od jej zakończenia (datę zakończenia wpisuje się
-  w szczegółach; do tego czasu termin prezentowany jest opisowo).
+  7 dni roboczych od jej zakończenia. Aplikacja co minutę odczytuje publiczne,
+  niewymagające logowania API **Latarni KSeF** Ministerstwa Finansów. Przy
+  aktywnej przerwie lub awarii pokazuje treść komunikatu i przycisk użycia
+  właściwego trybu; po komunikacie kończącym sama uzupełnia termin faktur
+  powiązanych z tym zdarzeniem. Datę nadal można wpisać ręcznie — ręczna
+  decyzja odłącza dokument od automatycznej aktualizacji. Zaplanowane przerwy
+  są sygnalizowane z wyprzedzeniem do 7 dni. Gdy Latarnia jest nieosiągalna,
+  formularz jawnie ostrzega, że tryb trzeba zweryfikować ręcznie. Awaria
+  całkowita nie jest błędnie mapowana na zwykły offline: aplikacja blokuje
+  wystawienie ustrukturyzowanego dokumentu do późniejszego dosłania, bo ten
+  odrębny tryb podlega innym zasadom.
 - **Kody QR na wydrukach** — każdy PDF faktury z numerem KSeF zawiera
   KOD I (link weryfikacyjny `qr.ksef.mf.gov.pl` z numerem KSeF w podpisie);
   dokumenty offline24 dostają KOD I z etykietą „OFFLINE” oraz KOD II

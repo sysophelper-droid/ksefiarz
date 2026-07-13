@@ -19,6 +19,7 @@ struct BackupServiceTests {
         invoice.ksefLastCheckedAt = Date(timeIntervalSince1970: 1_800_000_000)
         invoice.ksefAcceptedAt = Date(timeIntervalSince1970: 1_800_000_001)
         invoice.ksefEnvironmentRaw = KSeFEnvironment.test.rawValue
+        invoice.offlineEventId = 4242
         invoice.upoXmlContent = "<UPO/>"
         invoice.lines = [
             InvoiceLine(index: 1, name: "Usługa", unit: "godz.", quantity: 2, unitNetPrice: 50, netAmount: 100, vatRate: "23", vatAmount: 23, rrQuality: "klasa I"),
@@ -65,6 +66,7 @@ struct BackupServiceTests {
         #expect(entry.ksefStatusCode == 200)
         #expect(entry.ksefStatusDescription == "Przyjęta")
         #expect(entry.ksefEnvironmentRaw == KSeFEnvironment.test.rawValue)
+        #expect(entry.offlineEventId == 4242)
         #expect(entry.upoXmlContent == "<UPO/>")
         #expect(entry.lines.count == 1)
         #expect(entry.lines.first?.name == "Usługa")
@@ -88,6 +90,7 @@ struct BackupServiceTests {
         #expect(restored.paymentForm == .transfer)
         #expect(restored.ksefInvoiceReference == "INV-REF-9")
         #expect(restored.ksefSubmissionStatus == .accepted)
+        #expect(restored.offlineEventId == 4242)
         #expect(restored.ksefStatusCode == 200)
         #expect(restored.upoXmlContent == "<UPO/>")
         #expect(restored.isExcludedFromKPiR)

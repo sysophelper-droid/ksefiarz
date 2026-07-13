@@ -83,7 +83,13 @@ public struct InvoiceDetailView: View {
                     LabeledContent("Tryb offline") {
                         Picker("", selection: Binding(
                             get: { invoice.offlineReason },
-                            set: { invoice.offlineReason = $0 }
+                            set: {
+                                invoice.offlineReason = $0
+                                // Ręczna decyzja odłącza dokument od
+                                // automatycznie wykrytego zdarzenia MF.
+                                invoice.offlineEventId = nil
+                                invoice.offlineEventEndedAt = nil
+                            }
                         )) {
                             ForEach(Invoice.OfflineReason.allCases, id: \.self) { reason in
                                 Text(reason.displayName).tag(reason)
@@ -103,10 +109,16 @@ public struct InvoiceDetailView: View {
                                 if let ended = invoice.offlineEventEndedAt {
                                     DatePicker("", selection: Binding(
                                         get: { ended },
-                                        set: { invoice.offlineEventEndedAt = $0 }
+                                        set: {
+                                            invoice.offlineEventEndedAt = $0
+                                            invoice.offlineEventId = nil
+                                        }
                                     ), displayedComponents: .date)
                                     .labelsHidden()
-                                    Button("Wyczyść") { invoice.offlineEventEndedAt = nil }
+                                    Button("Wyczyść") {
+                                        invoice.offlineEventEndedAt = nil
+                                        invoice.offlineEventId = nil
+                                    }
                                         .buttonStyle(.borderless)
                                         .font(.caption)
                                 } else {
@@ -114,6 +126,7 @@ public struct InvoiceDetailView: View {
                                         .foregroundStyle(.secondary)
                                     Button("Wpisz datę zakończenia") {
                                         invoice.offlineEventEndedAt = Calendar.current.startOfDay(for: .now)
+                                        invoice.offlineEventId = nil
                                     }
                                     .buttonStyle(.borderless)
                                 }

@@ -100,6 +100,8 @@ public struct BackupInvoice: Codable, Equatable, Sendable {
     public var ryczaltNotes: String?
     /// Pole od wersji 12 — samofakturowanie (Adnotacje P_17 = 1).
     public var isSelfInvoicing: Bool?
+    /// Pole od wersji 13 — powiązanie z komunikatem API Latarni KSeF.
+    public var offlineEventId: Int?
 }
 
 /// Pozycja proformy w kopii zapasowej.
@@ -264,11 +266,12 @@ public struct BackupFile: Codable, Sendable {
 /// pobierania wszystkiego z KSeF.
 public enum BackupService {
 
-    /// Bieżąca wersja formatu pliku (12: + samofakturowanie — pole
-    /// isSelfInvoicing i wzorzec numeracji samofaktur; 11 dodała faktury
-    /// proforma i wzorzec ich numeracji; 10 — ustawienia kalendarza
-    /// i prognozy podatkowej). Starsze pliki są nadal poprawnie importowane.
-    public static let currentVersion = 12
+    /// Bieżąca wersja formatu pliku (13: + eventId Latarni KSeF; 12:
+    /// samofakturowanie — pole isSelfInvoicing i wzorzec numeracji samofaktur;
+    /// 11 dodała faktury proforma i wzorzec ich numeracji; 10 — ustawienia
+    /// kalendarza i prognozy podatkowej). Starsze pliki są nadal poprawnie
+    /// importowane.
+    public static let currentVersion = 13
 
     /// Klucze ustawień obejmowane kopią zapasową.
     /// Tokenu KSeF celowo tu nie ma — sekret żyje w pęku kluczy i nie może
@@ -448,6 +451,7 @@ public enum BackupService {
         invoice.offlineHashBase64 = backup.offlineHashBase64 ?? ""
         invoice.offlineReasonRaw = backup.offlineReasonRaw ?? ""
         invoice.offlineEventEndedAt = backup.offlineEventEndedAt
+        invoice.offlineEventId = backup.offlineEventId
         invoice.attachmentJSON = backup.attachmentJSON ?? ""
         invoice.emailSentAt = backup.emailSentAt
         invoice.emailSentTo = backup.emailSentTo ?? ""
@@ -795,7 +799,8 @@ public enum BackupService {
             ryczaltEventDate: invoice.ryczaltEventDate,
             ryczaltAmountOverride: invoice.ryczaltAmountOverride,
             ryczaltNotes: invoice.ryczaltNotes.isEmpty ? nil : invoice.ryczaltNotes,
-            isSelfInvoicing: invoice.isSelfInvoicing ? true : nil
+            isSelfInvoicing: invoice.isSelfInvoicing ? true : nil,
+            offlineEventId: invoice.offlineEventId
         )
     }
 
