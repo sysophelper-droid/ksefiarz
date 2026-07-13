@@ -36,7 +36,9 @@ Sources/
     │   ├── KSeFCrypto.swift      # RSA-OAEP (SHA-256), AES-256-CBC, SHA-256
     │   ├── FA2XML.swift          # generator FA(3) i parser FA(2)/FA(3)/FA_RR(1)
     │   ├── FARRXML.swift         # generator VAT RR i dobór schemy sesji KSeF
-    │   └── InvoiceValidator.swift# walidacja pól + suma kontrolna NIP/PESEL
+    │   ├── InvoiceValidator.swift# walidacja pól + suma kontrolna NIP/PESEL
+    │   ├── TabularFileReader.swift # odczyt CSV/TSV/XLSX do wspólnej tabeli
+    │   └── BulkImportService.swift # zapis planu importu do SwiftData
     ├── Logic/
     │   ├── InvoiceFilter.swift   # filtrowanie list (status płatności, wyszukiwarka)
     │   ├── DashboardMetrics.swift# agregaty Kokpitu (ukryte faktury pomijane)
@@ -45,7 +47,8 @@ Sources/
     │   ├── ElixirPaymentExporter.swift # walidacja i eksport paczki przelewów .pli
     │   ├── KPiREngine.swift       # KPiR 2026: klasyfikacja, sumy i CSV 1–19
     │   ├── RyczaltEngine.swift    # ryczałt 2026: stawki, przychód i CSV 1–17
-    │   └── ContractorHistory.swift # salda i scoring płatniczy kontrahenta
+    │   ├── ContractorHistory.swift # salda i scoring płatniczy kontrahenta
+    │   └── BulkImportEngine.swift  # mapowanie, walidacja i deduplikacja importu
     └── Views/
         ├── MainContentView.swift # NavigationSplitView + pasek boczny
         ├── DashboardView.swift   # Kokpit: podsumowania, płatności na 7 dni
@@ -59,8 +62,9 @@ Sources/
         ├── BankTransferExportView.swift # zakupowe przelewy Elixir-O / MPP
         ├── InvoiceAutomationView.swift # szablony, cykle i kolejka zatwierdzeń
         ├── HiddenInvoicesView.swift # archiwum „Nieuprawnione / Ukryte”
+        ├── BulkImportView.swift  # kreator importu CSV/Excel z podglądem
         └── SettingsView.swift    # NIP, token KSeF, środowisko
-Tests/KsefiarzCoreTests/          # 834 testy (Swift Testing) — model, parser, usługa, kryptografia, logika
+Tests/KsefiarzCoreTests/          # Swift Testing — model, parser, usługa, kryptografia, logika
 ```
 
 ## Funkcje
@@ -275,6 +279,21 @@ Tests/KsefiarzCoreTests/          # 834 testy (Swift Testing) — model, parser,
   podstawiane do faktury — kontrahenta i pozycje nadal można wpisać ręcznie,
   a po wybraniu ze słownika zmienić cenę, jednostkę, stawkę VAT i CN/PKWiU.
   Słowniki wchodzą w skład kopii zapasowej.
+- **Import wsadowy CSV/Excel** — przycisk „Import CSV/Excel” w sekcji
+  „Słowniki” otwiera kreator masowego importu **kontrahentów, towarów/usług
+  albo faktur**. Obsługiwane są CSV/TSV (UTF-8, UTF-16 i Windows-1250;
+  separator `;`, `,` lub tabulator) oraz pierwszy arkusz skoroszytu `.xlsx`.
+  Nagłówki typowych eksportów Fakturowni i katalogu produktów wFirmy są
+  dopasowywane automatycznie, a każdą kolumnę można przypisać ręcznie — dzięki
+  temu działa też dowolny własny układ. Bilans przed zapisem pokazuje poprawne
+  rekordy, duplikaty, błędy i ostrzeżenia oraz próbkę źródła. Powtarzane wiersze
+  tej samej faktury stają się jej pozycjami; poprawne rekordy można wczytać
+  mimo błędów w innych wierszach. Duplikaty nie nadpisują bazy (kontrahent:
+  identyfikator podatkowy; produkt: SKU/EAN/nazwa; faktura: numer KSeF oraz
+  rodzaj+numer+NIP-y stron), przy czym sprawdzane są również faktury ukryte.
+  Faktura z numerem KSeF jest zapisywana jako przyjęta, bez numeru — jako
+  lokalna. Stary binarny format `.xls` nie jest obsługiwany: z Fakturowni użyj
+  opcji „Eksport do CSV”, a plik Excela zapisz jako `.xlsx`.
 - **Uwagi na fakturze** — pole pod pozycjami na dowolny dopisek (np. podstawa
   zwolnienia z VAT); trafia do XML (stopka faktury) i na wydruk PDF.
 - **Schemat FA(3)** — wystawiane faktury są generowane w bieżącej schemie

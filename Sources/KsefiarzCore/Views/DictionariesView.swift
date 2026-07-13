@@ -23,6 +23,7 @@ public struct DictionariesView: View {
     }
 
     @State private var tab: Tab = .contractors
+    @State private var showingBulkImport = false
 
     public init() {}
 
@@ -44,6 +45,17 @@ public struct DictionariesView: View {
                 }
                 .pickerStyle(.segmented)
             }
+            ToolbarItem {
+                Button {
+                    showingBulkImport = true
+                } label: {
+                    Label("Import CSV/Excel", systemImage: "square.and.arrow.down")
+                }
+                .help("Masowy import kontrahentów, towarów/usług lub faktur")
+            }
+        }
+        .sheet(isPresented: $showingBulkImport) {
+            BulkImportView()
         }
     }
 }

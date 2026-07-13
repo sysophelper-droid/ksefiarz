@@ -46,11 +46,6 @@ kolejność dowolna. ⚠️ operacje modyfikujące KSeF testować wyłącznie na
 - [ ] C4. Automatyczne przypomnienia e-mail przed/po terminie — cykliczne
   miękkie ponaglenia do kontrahentów (dziś powiadomienia tylko systemowe).
 
-#### D. Kontrahenci / dane wejściowe
-
-- [ ] D4. Import wsadowy z CSV/Excel — masowy import kontrahentów, towarów,
-  faktur (migracja z Fakturowni/wFirmy).
-
 #### E. Dokumenty / wygląd
 
 - [ ] E3. Eksport do formatów programów księgowych — struktura importowalna
@@ -96,6 +91,22 @@ kolejność dowolna. ⚠️ operacje modyfikujące KSeF testować wyłącznie na
   kontekstu = NIP nabywcy. Dokument zweryfikowany oficjalną XSD FA(3)
   (xmllint); 17 nowych testów. Wysyłka nieprzetestowana na żywo — wymaga
   kontrahenta, który nadał uprawnienie (polityka „tylko odczyt na żywo”).
+
+### Import wsadowy CSV/Excel (13.07.2026)
+
+- [x] D4. Masowy import kontrahentów, towarów/usług i faktur z CSV/TSV lub
+  pierwszego arkusza `.xlsx` (migracja z Fakturowni/wFirmy, czy inny masowy
+  import). Kreator w „Słownikach” automatycznie rozpoznaje typowe nagłówki,
+  pozwala ręcznie mapować dowolny układ i przed zapisem pokazuje bilans,
+  diagnostykę wierszy oraz podgląd źródła. Parser obsługuje polskie kodowania,
+  separatory i liczby, tekstowe NIP/SKU/EAN oraz daty/style Excela; układ
+  katalogu wFirmy poprawnie rozróżnia cenę netto/brutto. Powtarzane wiersze
+  faktury tworzą pozycje. Deduplikacja po NIP, SKU/EAN/nazwie oraz numerze
+  KSeF/kluczu dokumentu obejmuje także faktury ukryte i niczego nie nadpisuje.
+  Faktury bez numeru KSeF pozostają lokalne, z numerem mają stan przyjęty;
+  importer nie wysyła ich do KSeF. Czysta logika, czytnik XLSX i zapis
+  SwiftData mają 17 testów (w tym rzeczywisty plik OOXML i regresje
+  niezmienników).
 
 ### OCR faktur kosztowych — macOS Vision (13.07.2026)
 
