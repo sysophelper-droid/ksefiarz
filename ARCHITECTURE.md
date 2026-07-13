@@ -90,6 +90,8 @@ Sources/KsefiarzCore/
                PaymentLedger (wpłaty częściowe/saldo — jedyne miejsce zmian
                historii wpłat), MT940Parser (wyciągi bankowe),
                PaymentMatcher (propozycje dopasowań przelewów),
+               ElixirPaymentExporter (czysty eksport paczki zobowiązań:
+               walidacja NRB/MPP, 16 pól Elixir-O, kodowania tekstowe),
                ZipWriter (archiwum ZIP bez zależności; AccountingPackageBuilder
                w Services — paczka dla księgowości),
                InvoiceEmailComposer (adresat ze słownika po NIP — invoiceEmail
@@ -162,6 +164,8 @@ Sources/KsefiarzCore/
                zamiast KPiRView przy formie „ryczałt”),
                JPKExportView i VATUEExportView (eksport ewidencji VAT
                z menu „Ewidencje” na listach faktur),
+               BankTransferExportView (wybór zakupów, rachunku źródłowego,
+               daty, kodowania i kwoty VAT MPP; zapis .pli),
                DictionariesView (+ ContractorsView/ProductsView/BankAccountsView)
 Tests/KsefiarzCoreTests/               # Swift Testing (#expect/#require), nazwy PO POLSKU
 Scripts/build-app.sh                   # składanie bundla .app
@@ -280,6 +284,39 @@ Scripts/build-app.sh                   # składanie bundla .app
   skracana przez `truncatedName` na granicy słowa (gdy zostawia ≥ połowę
   limitu), inaczej twarde ucięcie. Override wstrzykiwany do
   `zbpTransferContent(for:recipientNameOverride:)` przez `makeQRCodes`.
+
+## Eksport przelewów Elixir-O
+
+- `ElixirPaymentExporter` generuje plik bez nagłówka i stopki, po jednym
+  rekordzie na dyspozycję, z CRLF. Rekord ma 16 pól rozdzielonych przecinkami:
+  kod `110`, data `RRRRMMDD`, kwota w groszach, bank zleceniodawcy, tryb `0`,
+  NRB zleceniodawcy i odbiorcy, nazwy/adresy, bank odbiorcy, szczegóły,
+  dwa pola puste, klasyfikacja (`51` zwykły / `53` MPP) i puste informacje
+  Klient–Bank. Pola tekstowe są w cudzysłowach, mają najwyżej cztery wiersze
+  po 35 znaków rozdzielone `|`; znaki sterujące są normalizowane. Struktura
+  i limity pól zostały zweryfikowane 13.07.2026 w instrukcjach bankowych:
+  [mBank — opis płatności Elixir](https://www.mbank.pl/indywidualny/konta/pytania-i-odpowiedzi/platnosci-elixir/)
+  oraz [PKO BP (iPKO biznes) — struktura pliku wejściowego ELIXIR-O](https://www.pkobp.pl/media_files/f624fb66-22a9-4a90-80b0-aae09b8afd29.pdf)
+  (pola 1–16: bank zleceniodawcy w polu 4, stała `0` w polach 5 i 10, bank
+  odbiorcy w polu 11, szczegóły w polu 12, typ dokumentu `51`/`53` w polu 15;
+  Przelew Split w polu 12 ma strukturę `/VAT/…/IDC/…/INV/…`).
+- Kandydatem jest wyłącznie widoczna faktura zakupowa w PLN z dodatnim
+  `outstandingAmount`, nazwą sprzedawcy i poprawnym 26-cyfrowym NRB (łącznie
+  z kontrolą IBAN modulo 97). Opłacone, ukryte, walutowe i błędne dokumenty
+  są jawnie pokazane jako pominięte. Kwota przelewu to saldo, nie brutto.
+- MPP używa kodu `53` i pola 12 w kolejności
+  `/VAT/{zł,grosze}/IDC/{NIP}/INV/{numer faktury}`. Wymaga poprawnego NIP;
+  pełna faktura podpowiada pełny VAT, częściowo opłacona — VAT proporcjonalny
+  do salda. Podpowiedź jest edytowalna w UI, a generator pilnuje, by VAT był
+  dodatni, nie przekraczał kwoty przelewu ani limitu 10 cyfr części całkowitej.
+  Znaczniki MPP nie są przecinane separatorem wierszy.
+- `BankTransferExportView` bierze multiselect z listy zakupów (brak zaznaczenia
+  = widoczny filtr), pozwala wybrać własny rachunek PLN ze słownika albo
+  wpisać NRB, datę nie wcześniejszą niż bieżąca oraz kodowanie UTF-8,
+  Windows-1250 lub ISO-8859-2. Dla wspólnej zgodności obowiązuje limit 50
+  przelewów w pliku (mBank; banki korporacyjne mogą mieć inne limity).
+  Eksport nie dotyka `Invoice.isPaid` ani historii wpłat — autoryzacja odbywa
+  się dopiero po imporcie i weryfikacji w banku.
 
 ## API KSeF 2.0 — fakty krytyczne
 

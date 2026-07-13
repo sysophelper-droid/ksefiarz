@@ -34,6 +34,9 @@ public struct InvoiceListView: View {
     @State private var showingAccountingPackage = false
     @State private var showingJPKExport = false
     @State private var showingVATUEExport = false
+    /// Zamrożony wybór zakupów przekazywany do arkusza przelewów bankowych.
+    @State private var bankTransferInvoices: [Invoice] = []
+    @State private var showingBankTransferExport = false
 
     @AppStorage(AppSettingsKeys.prepaidForms) private var prepaidFormsRaw = PaymentFormPolicy.encode(PaymentFormPolicy.defaultPrepaidForms)
 
@@ -153,6 +156,9 @@ public struct InvoiceListView: View {
             .sheet(isPresented: $showingVATUEExport) {
                 VATUEExportView()
             }
+            .sheet(isPresented: $showingBankTransferExport) {
+                BankTransferExportView(invoices: bankTransferInvoices)
+            }
             .sheet(item: $duplicatedInvoice) { invoice in
                 NewInvoiceView(
                     initialDraft: InvoiceAutomationEngine.duplicate(invoice),
@@ -229,7 +235,7 @@ public struct InvoiceListView: View {
             }
             .help("Okres wyświetlanych faktur")
         }
-        ToolbarItem {
+        ToolbarItemGroup {
             Button {
                 FileExportService.exportCSV(of: filteredInvoices, suggestedName: csvFileName)
             } label: {
@@ -237,14 +243,21 @@ public struct InvoiceListView: View {
             }
             .disabled(filteredInvoices.isEmpty)
             .help("Eksportuj widoczne faktury do pliku CSV (np. dla księgowości)")
-        }
-        ToolbarItem {
             Button {
                 importBankStatement()
             } label: {
                 Label("Importuj wyciąg", systemImage: "building.columns")
             }
             .help("Wczytaj wyciąg bankowy (MT940) i dopasuj przelewy do nieopłaconych faktur")
+            if kind == .purchase {
+                Button {
+                    openBankTransferExport(for: bankTransferScope)
+                } label: {
+                    Label("Przelewy do banku", systemImage: "building.columns.fill")
+                }
+                .disabled(bankTransferScope.isEmpty)
+                .help("Eksportuj zaznaczone (albo wszystkie widoczne) zobowiązania do paczki Elixir-O")
+            }
         }
         ToolbarItem {
             Button {
@@ -401,6 +414,9 @@ public struct InvoiceListView: View {
             }
             if kind == .purchase {
                 Divider()
+                Button("Eksportuj przelew do banku…") {
+                    openBankTransferExport(for: [invoice])
+                }
                 Button("Ukryj fakturę (Nieuprawniony zakup)", role: .destructive) {
                     invoice.isArchivedOrHidden = true
                 }
@@ -414,6 +430,9 @@ public struct InvoiceListView: View {
             }
             if kind == .purchase {
                 Divider()
+                Button("Eksportuj \(selected.count) przelewów do banku…") {
+                    openBankTransferExport(for: selected)
+                }
                 Button("Ukryj \(selected.count) faktur (nieuprawnione)", role: .destructive) {
                     selected.forEach { $0.isArchivedOrHidden = true }
                     selection.removeAll()
@@ -426,6 +445,18 @@ public struct InvoiceListView: View {
     private var csvFileName: String {
         let kindName = kind == .purchase ? "zakupy" : "sprzedaz"
         return "faktury_\(kindName)_\(FA2Format.dateFormatter.string(from: .now)).csv"
+    }
+
+    /// Pasek narzędzi respektuje multiselect: gdy nic nie zaznaczono,
+    /// arkusz dostaje wszystkie aktualnie widoczne dokumenty.
+    private var bankTransferScope: [Invoice] {
+        guard !selection.isEmpty else { return filteredInvoices }
+        return filteredInvoices.filter { selection.contains($0.id) }
+    }
+
+    private func openBankTransferExport(for invoices: [Invoice]) {
+        bankTransferInvoices = invoices
+        showingBankTransferExport = true
     }
 
     // MARK: Import wyciągu bankowego
