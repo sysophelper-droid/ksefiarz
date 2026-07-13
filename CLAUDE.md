@@ -41,7 +41,8 @@ wymaga venv z `signxml requests cryptography lxml`):
 python3 Scripts/get-test-token.py --nip <NIP>
 ```
 
-Wysyłka e2e na środowisku testowym (jedyna dozwolona wysyłka na żywo):
+Wysyłka e2e na środowisku testowym (jedyna dozwolona wysyłka na żywo;
+`LiveSendTests` = sesja interaktywna, `LiveBatchSendTests` = sesja wsadowa):
 
 ```bash
 KSEF_LIVE_SEND=1 KSEF_LIVE_ENV=test KSEF_LIVE_NIP=<NIP> \
