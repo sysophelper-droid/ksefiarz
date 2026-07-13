@@ -175,9 +175,9 @@ public enum BatchSendEngine {
     /// wtedy, gdy brak wyniku jest pewny: sesja zakończyła się błędem paczki
     /// (kody ≥ 400 — żaden dokument nie został przyjęty) albo sesja jest
     /// przetworzona i dysponujemy pełną listą wyników, w której dokumentu
-    /// nie ma. Sesja w toku albo nieudane pobranie listy (pusta lista przy
-    /// statusie 200) zostawiają dokument „w toku" — bez ryzyka ponownej
-    /// wysyłki czegoś, co KSeF już przyjął.
+    /// nie ma. Kompletność listy potwierdzają liczniki statusu sesji; lista
+    /// pusta, częściowa albo bez liczników przy statusie 200 zostawia dokument
+    /// „w toku" — bez ryzyka ponownej wysyłki czegoś, co KSeF już przyjął.
     @discardableResult
     static func apply(
         outcomes: [KSeFBatchInvoiceOutcome],
@@ -186,8 +186,22 @@ public enum BatchSendEngine {
         now: Date = .now
     ) -> ApplySummary {
         var summary = ApplySummary()
+        let reportedOutcomeCount: Int? = {
+            if let successful = sessionStatus.successfulInvoiceCount,
+               let failed = sessionStatus.failedInvoiceCount {
+                let total = successful + failed
+                if let invoiceCount = sessionStatus.invoiceCount,
+                   invoiceCount != total {
+                    return nil
+                }
+                return total
+            }
+            return sessionStatus.invoiceCount
+        }()
+        let hasCompleteOutcomeList = reportedOutcomeCount == outcomes.count
+            && reportedOutcomeCount != nil
         let canRevertUnmatched = sessionStatus.isFailed
-            || (sessionStatus.isProcessed && !outcomes.isEmpty)
+            || (sessionStatus.isProcessed && hasCompleteOutcomeList)
 
         // Kubełki wyników per skrót — duplikat skrótu (identyczne dokumenty)
         // jest przydzielany kolejno, nie wielokrotnie do jednej faktury.

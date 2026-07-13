@@ -130,7 +130,7 @@ struct OpenBatchSessionResponseDTO: Decodable {
 }
 
 struct SessionStatusResponseDTO: Decodable {
-    let status: StatusInfoDTO?
+    let status: StatusInfoDTO
     let invoiceCount: Int?
     let successfulInvoiceCount: Int?
     let failedInvoiceCount: Int?
@@ -139,11 +139,14 @@ struct SessionStatusResponseDTO: Decodable {
 struct SessionInvoiceItemDTO: Decodable {
     let invoiceNumber: String?
     let ksefNumber: String?
-    let referenceNumber: String?
-    let invoiceHash: String?
+    /// Pola wymagane przez OpenAPI. Dekodowanie ma się nie udać, jeśli
+    /// odpowiedź jest niekompletna — pominięcie takiego rekordu mogłoby
+    /// fałszywie uznać listę wyników za pełną i dopuścić ponowną wysyłkę.
+    let referenceNumber: String
+    let invoiceHash: String
     let invoiceFileName: String?
     let acquisitionDate: String?
-    let status: StatusInfoDTO?
+    let status: StatusInfoDTO
 }
 
 struct SessionInvoicesResponseDTO: Decodable {
@@ -246,12 +249,24 @@ extension KSeFService {
 
         // 6. Zamknięcie sesji — start przetwarzania i generowania UPO.
         await notify(onPhase, .closingSession)
-        _ = try await perform(
-            path: "sessions/batch/\(session.referenceNumber)/close",
-            method: "POST",
-            body: nil,
-            bearer: try requireAccessToken()
-        )
+        var closeWasConfirmed = true
+        do {
+            _ = try await perform(
+                path: "sessions/batch/\(session.referenceNumber)/close",
+                method: "POST",
+                body: nil,
+                bearer: try requireAccessToken()
+            )
+        } catch {
+            // Po wysłaniu wszystkich części odpowiedź na POST /close jest
+            // transakcyjnie niejednoznaczna: serwer mógł przyjąć zamknięcie,
+            // a połączenie zerwać przed odpowiedzią. Nie wolno zgubić numeru
+            // sesji i zostawić dokumentów jako lokalnych, bo ponowna wysyłka
+            // mogłaby utworzyć duplikaty. Status sesji rozstrzygnie to teraz
+            // albo podczas późniejszej synchronizacji; pewny błąd paczki
+            // przywróci dokumenty do stanu lokalnego.
+            closeWasConfirmed = false
+        }
 
         // 7. Oczekiwanie na koniec przetwarzania. Od chwili zamknięcia sesji
         // paczka jest już przekazana do KSeF, więc błąd sieci przy odpytywaniu
@@ -260,7 +275,9 @@ extension KSeFService {
         // groziłaby duplikatami); domknięciem zajmie się synchronizacja.
         var status = KSeFBatchSessionStatus(
             code: nil,
-            description: "Paczka przekazana do przetworzenia.",
+            description: closeWasConfirmed
+                ? "Paczka przekazana do przetworzenia."
+                : "Nie udało się potwierdzić zamknięcia sesji — status zostanie sprawdzony ponownie.",
             invoiceCount: nil,
             successfulInvoiceCount: nil,
             failedInvoiceCount: nil
@@ -327,12 +344,11 @@ extension KSeFService {
             bearer: try requireAccessToken()
         )
         let response: SessionStatusResponseDTO = try decode(data)
-        let details = ([response.status?.description] + (response.status?.details ?? []))
-            .compactMap { $0 }
+        let details = ([response.status.description] + (response.status.details ?? []))
             .filter { !$0.isEmpty }
             .joined(separator: " ")
         return KSeFBatchSessionStatus(
-            code: response.status?.code,
+            code: response.status.code,
             description: details.isEmpty ? "Sesja w przetwarzaniu." : details,
             invoiceCount: response.invoiceCount,
             successfulInvoiceCount: response.successfulInvoiceCount,
@@ -348,6 +364,7 @@ extension KSeFService {
         try await ensureAuthenticated()
         var outcomes: [KSeFBatchInvoiceOutcome] = []
         var continuationToken: String?
+        var seenContinuationTokens = Set<String>()
         // Twardy limit stron — obrona przed zapętleniem na wadliwym tokenie.
         for _ in 0..<200 {
             var headers: [String: String] = [:]
@@ -355,30 +372,38 @@ extension KSeFService {
                 headers["x-continuation-token"] = continuationToken
             }
             let data = try await perform(
-                path: "sessions/\(referenceNumber)/invoices?pageSize=100",
+                path: "sessions/\(referenceNumber)/invoices?pageSize=1000",
                 method: "GET",
                 body: nil,
                 bearer: try requireAccessToken(),
                 extraHeaders: headers
             )
             let page: SessionInvoicesResponseDTO = try decode(data)
-            outcomes.append(contentsOf: page.invoices.compactMap(Self.outcome(from:)))
-            guard let next = page.continuationToken, !next.isEmpty else { break }
+            guard page.invoices.allSatisfy({
+                !$0.referenceNumber.isEmpty && !$0.invoiceHash.isEmpty
+            }) else {
+                throw KSeFError.invalidResponse
+            }
+            outcomes.append(contentsOf: page.invoices.map(Self.outcome(from:)))
+            guard let next = page.continuationToken, !next.isEmpty else { return outcomes }
+            guard seenContinuationTokens.insert(next).inserted else {
+                throw KSeFError.invalidResponse
+            }
             continuationToken = next
         }
-        return outcomes
+        // Lista nie została domknięta w bezpiecznym budżecie stron. Zwrócenie
+        // częściowych danych mogłoby cofnąć brakujące dokumenty do lokalnych.
+        throw KSeFError.invalidResponse
     }
 
     /// Mapuje wpis sesji na wynik domenowy — te same reguły co przy sesji
     /// interaktywnej: numer KSeF = przyjęta, kod ≥ 400 = odrzucona,
-    /// pozostałe = w przetwarzaniu. Wpis bez skrótu jest pomijany
-    /// (bez skrótu nie ma korelacji z dokumentem lokalnym).
-    static func outcome(from item: SessionInvoiceItemDTO) -> KSeFBatchInvoiceOutcome? {
-        guard let hash = item.invoiceHash, !hash.isEmpty else { return nil }
-
-        let code = item.status?.code
-        let details = ([item.status?.description] + (item.status?.details ?? []))
-            .compactMap { $0 }
+    /// pozostałe = w przetwarzaniu. Pola wymagane przez OpenAPI (w tym skrót,
+    /// referencja i status) są dekodowane rygorystycznie, bo bez nich nie ma
+    /// bezpiecznej korelacji z dokumentem lokalnym.
+    static func outcome(from item: SessionInvoiceItemDTO) -> KSeFBatchInvoiceOutcome {
+        let code = item.status.code
+        let details = ([item.status.description] + (item.status.details ?? []))
             .filter { !$0.isEmpty }
             .joined(separator: " ")
         let description = details.isEmpty
@@ -395,7 +420,7 @@ extension KSeFService {
                 ksefNumber: number,
                 acquisitionDate: acquisitionDate
             )
-        } else if let code, code >= 400 {
+        } else if code >= 400 {
             result = KSeFInvoiceProcessingResult(
                 status: .rejected,
                 statusCode: code,
@@ -411,7 +436,7 @@ extension KSeFService {
         return KSeFBatchInvoiceOutcome(
             referenceNumber: item.referenceNumber,
             invoiceNumber: item.invoiceNumber,
-            invoiceHash: hash,
+            invoiceHash: item.invoiceHash,
             invoiceFileName: item.invoiceFileName,
             result: result
         )

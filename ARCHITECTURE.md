@@ -613,9 +613,18 @@ klient referencyjny CIRFMF/ksef-client-csharp) i potwierdzone e2e na
   (ręczne „Pobierz z KSeF", cykl 60 s, Centrum synchronizacji).
 - **Zasada bezpieczeństwa cofania**: dokument bez wyniku wraca do stanu
   lokalnego TYLKO gdy sesja zakończyła się błędem paczki (≥400) albo jest
-  przetworzona i pełna lista wyników go nie zawiera. Pusta lista przy statusie
-  200 (np. błąd pobrania) zostawia dokument „w toku" — cofnięcie dokumentu,
-  który KSeF przyjął, groziłoby duplikatem przy ponownej wysyłce.
+  przetworzona i pełna lista wyników go nie zawiera. Kompletność listy przy
+  statusie 200 jest potwierdzana licznikami sesji (`successfulInvoiceCount +
+  failedInvoiceCount`, awaryjnie `invoiceCount`). Lista pusta, częściowa,
+  wadliwa lub bez liczników zostawia dokument „w toku" — cofnięcie dokumentu,
+  który KSeF przyjął, groziłoby duplikatem przy ponownej wysyłce. Stronicowanie
+  odrzuca powtórzony token i nie zwraca częściowych wyników po wyczerpaniu
+  bezpiecznego limitu stron.
+- **Niejednoznaczny wynik `close`**: po wysłaniu wszystkich części błąd
+  odpowiedzi na `POST /sessions/batch/{ref}/close` nie może zgubić numeru
+  sesji — serwer mógł przyjąć zamknięcie przed zerwaniem połączenia. Dokumenty
+  pozostają „w toku", a status rozstrzyga bieżące odpytywanie lub późniejsza
+  synchronizacja; dopiero pewny błąd całej paczki przywraca stan lokalny.
 - **UPO i status per dokument** — wspólne endpointy sesji
   (`/sessions/{ref}/invoices/ksef/{nr}/upo`, `/sessions/{ref}/invoices/{refFaktury}`)
   działają dla sesji wsadowej tak samo jak interaktywnej; po korelacji

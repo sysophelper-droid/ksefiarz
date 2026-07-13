@@ -83,9 +83,10 @@ kolejność dowolna. ⚠️ operacje modyfikujące KSeF testować wyłącznie na
   cofnięcie do stanu lokalnego tylko przy pewnym braku dokumentu w wynikach
   (błąd paczki ≥400 albo pełna lista bez dokumentu) — pusta lista przy
   statusie 200 niczego nie cofa (ochrona przed duplikatem). UPO wspólną
-  ścieżką `InvoiceSubmissionStatusEngine`. 29 nowych testów (paczka/podział,
+  ścieżką `InvoiceSubmissionStatusEngine`. Testy obejmują paczkę/podział,
   silnik, pełny przepływ usługi na atrapie z odszyfrowaniem części,
-  domykanie w SyncCenter) + `LiveBatchSendTests` zweryfikowany NA ŻYWO na
+  niejednoznaczny wynik zamknięcia, kompletność/stronicowanie wyników i
+  domykanie w SyncCenter; `LiveBatchSendTests` zweryfikowany NA ŻYWO na
   środowisku testowym (paczka 3 faktur → 3 numery KSeF + UPO, 14.07.2026).
 
 ### Automatyczne wykrywanie awarii KSeF — Latarnia MF (13.07.2026)

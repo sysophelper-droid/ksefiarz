@@ -356,9 +356,14 @@ struct BatchSendEngineTests {
         let plan = BatchSendEngine.plan(for: [matched, missing])
         BatchSendEngine.markSent(plan.candidates, sessionReference: "SB-1", environmentRaw: "test")
 
+        // Liczniki potwierdzają, że pełna lista sesji zawiera jeden wynik.
+        let completeStatus = KSeFBatchSessionStatus(
+            code: 200, description: "Sesja wsadowa przetworzona pomyślnie",
+            invoiceCount: 1, successfulInvoiceCount: 1, failedInvoiceCount: 0
+        )
         let summary = BatchSendEngine.apply(
             outcomes: [acceptedOutcome(hash: storedHash(of: matched))],
-            sessionStatus: processedStatus,
+            sessionStatus: completeStatus,
             to: [matched, missing]
         )
 
@@ -366,6 +371,34 @@ struct BatchSendEngineTests {
         #expect(summary.reverted == 1)
         #expect(matched.ksefSubmissionStatus == .accepted)
         #expect(missing.ksefSubmissionStatus == .local)
+    }
+
+    @Test("Sesja przetworzona: częściowa lista wyników NIE cofa brakujących dokumentów")
+    func czesciowaListaNieCofa() throws {
+        let matched = makeLocalSalesInvoice()
+        let missing = makeLocalSalesInvoice(number: "FV/2026/07/002")
+        let plan = BatchSendEngine.plan(for: [matched, missing])
+        BatchSendEngine.markSent(plan.candidates, sessionReference: "SB-1", environmentRaw: "test")
+
+        // Status zapowiada dwa wyniki, ale pobrano tylko jeden. Dopóki kolejna
+        // próba nie pobierze kompletnej listy, brakująca faktura musi pozostać
+        // nieedytowalna — mogła już zostać przyjęta przez KSeF.
+        let incompleteStatus = KSeFBatchSessionStatus(
+            code: 200, description: "Sesja wsadowa przetworzona pomyślnie",
+            invoiceCount: 2, successfulInvoiceCount: 2, failedInvoiceCount: 0
+        )
+        let summary = BatchSendEngine.apply(
+            outcomes: [acceptedOutcome(hash: storedHash(of: matched))],
+            sessionStatus: incompleteStatus,
+            to: [matched, missing]
+        )
+
+        #expect(summary.accepted == 1)
+        #expect(summary.processing == 1)
+        #expect(summary.reverted == 0)
+        #expect(matched.ksefSubmissionStatus == .accepted)
+        #expect(missing.ksefSubmissionStatus == .processing)
+        #expect(missing.ksefSessionReference == "SB-1")
     }
 
     @Test("Sesja w toku zostawia dokumenty „w toku”")
@@ -749,6 +782,74 @@ struct KSeFBatchServiceTests {
         #expect(result.sessionStatus.code == 435)
     }
 
+    @Test("Powtórzony token stronicowania nie zwraca częściowej listy wyników")
+    func powtorzonyTokenStronicowania() async throws {
+        let transport = MockTransport()
+        let keys = TestRSAKeyPair()
+        routeAuth(transport)
+        transport.route("sessions/SB-LOOP/invoices") { _ in
+            (200, Data("""
+            {"continuationToken":"TEN-SAM-TOKEN","invoices":[
+              {"referenceNumber":"REF-1","invoiceHash":"HASH-1",
+               "invoicingDate":"2026-07-01T10:00:00+00:00",
+               "status":{"code":200,"description":"Sukces"}}
+            ]}
+            """.utf8))
+        }
+        let service = makeService(transport: transport, keys: keys)
+
+        await #expect(throws: KSeFError.invalidResponse) {
+            _ = try await service.fetchBatchSessionInvoices(referenceNumber: "SB-LOOP")
+        }
+
+        let requests = transport.requests.filter {
+            ($0.url?.path ?? "").contains("SB-LOOP/invoices")
+        }
+        #expect(requests.count == 2)
+    }
+
+    @Test("Wynik bez wymaganego skrótu jest odrzucany zamiast pomijany")
+    func wynikBezSkrotu() async throws {
+        let transport = MockTransport()
+        let keys = TestRSAKeyPair()
+        routeAuth(transport)
+        transport.route("sessions/SB-BAD/invoices") { _ in
+            (200, Data("""
+            {"continuationToken":null,"invoices":[
+              {"referenceNumber":"REF-1",
+               "invoicingDate":"2026-07-01T10:00:00+00:00",
+               "status":{"code":200,"description":"Sukces"}}
+            ]}
+            """.utf8))
+        }
+        let service = makeService(transport: transport, keys: keys)
+
+        await #expect(throws: KSeFError.invalidResponse) {
+            _ = try await service.fetchBatchSessionInvoices(referenceNumber: "SB-BAD")
+        }
+    }
+
+    @Test("Wynik z pustym skrótem jest odrzucany zamiast cofać dokument")
+    func wynikZPustymSkrotem() async throws {
+        let transport = MockTransport()
+        let keys = TestRSAKeyPair()
+        routeAuth(transport)
+        transport.route("sessions/SB-EMPTY/invoices") { _ in
+            (200, Data("""
+            {"continuationToken":null,"invoices":[
+              {"referenceNumber":"REF-1","invoiceHash":"",
+               "invoicingDate":"2026-07-01T10:00:00+00:00",
+               "status":{"code":200,"description":"Sukces"}}
+            ]}
+            """.utf8))
+        }
+        let service = makeService(transport: transport, keys: keys)
+
+        await #expect(throws: KSeFError.invalidResponse) {
+            _ = try await service.fetchBatchSessionInvoices(referenceNumber: "SB-EMPTY")
+        }
+    }
+
     @Test("Odmowa magazynu przy uploadzie części przerywa wysyłkę")
     func bladUploadu() async throws {
         let transport = MockTransport()
@@ -806,6 +907,29 @@ struct KSeFBatchServiceTests {
 
         #expect(result.sessionReferenceNumber == "BATCH-REF-1")
         #expect(result.sessionStatus.isTerminal == false)
+        #expect(result.invoiceOutcomes.isEmpty)
+    }
+
+    @Test("Brak potwierdzenia zamknięcia sesji nie gubi jej numeru")
+    func brakPotwierdzeniaZamkniecia() async throws {
+        // Odpowiedź błędna/utracona na POST /close nie dowodzi, że KSeF nie
+        // rozpoczął przetwarzania. Wynik musi zachować numer sesji, aby silnik
+        // oznaczył dokumenty „w toku” zamiast dopuścić ponowną wysyłkę.
+        let transport = MockTransport()
+        let keys = TestRSAKeyPair()
+        routeAuth(transport)
+        transport.route("sessions/batch/BATCH-REF-1/close") { _ in
+            (500, Data("utracono potwierdzenie".utf8))
+        }
+        routeBatchFlow(transport, statusCounter: CallCounter())
+        let service = makeService(transport: transport, keys: keys)
+        service.maxPollAttempts = 1
+        service.rateLimitRetryDelay = 0
+
+        let result = try await service.sendInvoicesBatch(files: files, schema: .fa3)
+
+        #expect(result.sessionReferenceNumber == "BATCH-REF-1")
+        #expect(result.sessionStatus.code == 150)
         #expect(result.invoiceOutcomes.isEmpty)
     }
 
