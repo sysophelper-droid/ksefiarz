@@ -53,13 +53,14 @@ Sources/
         ├── InvoiceDetailView.swift # szczegóły + podgląd surowego XML
         ├── NewInvoiceView.swift  # formularz wystawiania faktury z walidacją
         ├── PermissionsView.swift # sekcja „Uprawnienia” + arkusz nadawania
-        ├── ContractorVerificationView.swift # karta weryfikacji kontrahenta
+        ├── ContractorVerificationView.swift # karta weryfikacji kontrahenta (krajowa)
+        ├── VIESVerificationView.swift # karta weryfikacji VAT-UE (kontrahent UE)
         ├── ContractorHistoryView.swift # dokumenty, salda i terminowość kontrahenta
         ├── BankTransferExportView.swift # zakupowe przelewy Elixir-O / MPP
         ├── InvoiceAutomationView.swift # szablony, cykle i kolejka zatwierdzeń
         ├── HiddenInvoicesView.swift # archiwum „Nieuprawnione / Ukryte”
         └── SettingsView.swift    # NIP, token KSeF, środowisko
-Tests/KsefiarzCoreTests/          # 742 testów (Swift Testing) — model, parser, usługa, kryptografia, logika
+Tests/KsefiarzCoreTests/          # 781 testów (Swift Testing) — model, parser, usługa, kryptografia, logika
 ```
 
 ## Funkcje
@@ -130,6 +131,15 @@ Tests/KsefiarzCoreTests/          # 742 testów (Swift Testing) — model, parse
   „aktywnego konta” — faktura trafia do odbiorcy po jego NIP automatycznie,
   więc karta weryfikuje status VAT i relację uprawnień, a nie „aktywację
   konta” (której w KSeF nie ma).
+- **Weryfikacja VAT-UE (VIES)** — dla kontrahentów unijnych (pole „Prefiks UE”
+  ustawione na kraj inny niż PL) ta sama akcja „Zweryfikuj” otwiera kartę VIES
+  zamiast krajowej: sprawdza w systemie VIES Komisji Europejskiej, czy numer
+  VAT-UE jest aktywny do transakcji wewnątrzwspólnotowych (bez aktywnego numeru
+  nabywcy nie zastosujesz stawki 0% do WDT). Gdy w Ustawieniach jest podany NIP
+  Twojej firmy, aplikacja próbuje pobrać z VIES **numer potwierdzenia zapytania**
+  (dowód sprawdzenia do celów należytej staranności). Publiczne API, bez klucza.
+  Niepoprawny lub odrzucony przez VIES NIP firmy nie blokuje anonimowego
+  sprawdzenia kontrahenta.
 - **Historia kontrahenta** — ze słownika kontrahentów można otworzyć jedną
   kartę z wszystkimi widocznymi dokumentami sprzedaży i zakupu, przejść
   podwójnym kliknięciem do szczegółów faktury oraz sprawdzić należności,

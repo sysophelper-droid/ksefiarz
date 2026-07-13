@@ -41,6 +41,10 @@ Sources/KsefiarzCore/
                stopka na każdej stronie),
                TokenStore (token w pęku kluczy), ContractorLookupService (Biała
                lista VAT, wl-api.mf.gov.pl — publiczne, bez klucza),
+               VIESLookupService (weryfikacja VAT-UE kontrahentów UE, REST API
+               VIES Komisji Europejskiej ec.europa.eu/taxation_customs/vies —
+               publiczne, bez klucza; odpowiednik ContractorLookupService dla
+               kontrahentów spoza PL),
                kryptografia certyfikatów: ASN1DER (koder/czytnik DER —
                czytnik utwardzony na niezaufane wejście: odrzuca długości
                przepełniające Int / przekraczające bufor),
@@ -58,6 +62,10 @@ Sources/KsefiarzCore/
                ContractorVerificationService (koordynator weryfikacji
                kontrahenta: Biała lista VAT + KSeF Received, izolacja awarii
                źródeł, składanie przez ContractorVerification.build),
+               VIESVerificationService (koordynator weryfikacji VAT-UE:
+               jedno źródło VIES, izolacja awarii, składanie przez
+               VIESVerification.build; opcjonalny requesterNIP → numer
+               potwierdzenia zapytania),
                KSeFQRCode (linki weryfikacyjne KOD I/II + render QR),
                InvoiceEmailService (okno wiadomości Mail przez
                NSSharingService; załączniki PDF/XML z katalogu tymczasowego),
@@ -148,6 +156,11 @@ Sources/KsefiarzCore/
                ContractorVerificationResult z ustaleniami i wagami
                OK/info/ostrzeżenie/krytyczne, budowa werdyktu z 3 źródeł —
                NIP, Biała lista, uprawnienia KSeF Received),
+               VIESVerification (czysta logika weryfikacji VAT-UE: status
+               VIESRegistrationStatus, wynik VIESVerificationResult reużywa
+               wag i wierszy ustaleń karty krajowej, build() z wyniku VIES;
+               euIdentity(uePrefix:identifier:) — routing UE vs krajowy,
+               zbiór viesCountryCodes 27 państw UE + XI, GR→EL, PL wykluczone),
                ContractorHistory (dopasowanie dokumentów po znormalizowanym
                NIP, salda per waluta, średni czas płatności i scoring),
                ProformaValidator (czysta walidacja proformy — NIP nabywcy
@@ -163,6 +176,10 @@ Sources/KsefiarzCore/
                ContractorVerificationView (karta „Weryfikacja kontrahenta” —
                status VAT z Białej listy + relacja uprawnień KSeF; z menu
                kontekstowego listy kontrahentów i z edytora kontrahenta),
+               VIESVerificationView (karta „Weryfikacja VAT-UE (VIES)” dla
+               kontrahentów UE — ta sama akcja „Zweryfikuj” routuje tu, gdy
+               VIESVerification.euIdentity rozpozna prefiks UE; reużywa
+               FindingRow oraz ikon/kolorów wag z ContractorVerificationView),
                ContractorHistoryView (jedna karta dokumentów, sald i
                terminowości; szczegóły faktury po podwójnym kliknięciu),
                KPiRView (tabela, edycja lokalnej klasyfikacji i CSV),
@@ -468,6 +485,53 @@ unikalności = kraj+numer+flaga): **Grupa1** WDT/część C
 **P_Dd=1 wymagane** — flaga transakcji trójstronnej}; **Grupa2** WNT/część D
 {P_Na, P_Nb, P_Nc, **P_Nd=1**}; **Grupa3** usługi/część E {P_Ua, P_Ub, P_Uc —
 bez flagi}; Grupa4 (call-off stock) NIE generowana (brak modelu danych).
+
+## VIES — weryfikacja VAT-UE kontrahentów UE (D3)
+
+Weryfikacja numerów VAT-UE kontrahentów unijnych, analogiczna do Wykazu
+podatników VAT dla krajowych. **Źródło: publiczne REST API VIES Komisji
+Europejskiej** — bez klucza. Fakty zweryfikowane u źródła 13.07.2026 (żywe
+odpowiedzi z produkcyjnego endpointu):
+
+- Endpoint: `GET https://ec.europa.eu/taxation_customs/vies/rest-api/ms/{kodKraju}/vat/{numer}`.
+  Odpowiedź HTTP 200 (JSON) z polami: `isValid` (bool), `userError`
+  (`VALID`/`INVALID`/kody awarii), `name`, `address` (może być wielolinijkowy),
+  `requestDate` (ISO 8601), `requestIdentifier` (numer potwierdzenia),
+  `originalVatNumber`, `vatNumber`, `viesApproximate` (dopasowanie rozmyte —
+  nieużywane). Gdy kraj nie udostępnia danych podmiotu, `name`/`address` = „---”
+  (normalizowane do pustego napisu przez `VIESLookupService.normalizeField`).
+- **Numer potwierdzenia zapytania** (`requestIdentifier`, tzw. consultation
+  number, np. `WAPIAAAAZ9cWmQXG`) może zostać zwrócony **wyłącznie**, gdy w
+  zapytaniu podano parametry pytającego:
+  `?requesterMemberStateCode=PL&requesterNumber={NIP}`. To dowód sprawdzenia do
+  celów należytej staranności. Zapytanie anonimowe zwraca pusty
+  `requestIdentifier`; sam NIP pytającego nie gwarantuje numeru potwierdzenia.
+- **`INVALID` to legalny wynik „numer nieaktywny”, NIE błąd** (zwracany w
+  `isValid == false`) — serwis mapuje go na status `.inactive`. Inne wartości
+  `userError` to awarie: `INVALID_INPUT` → błąd danych wejściowych,
+  `INVALID_REQUESTER_INFO` → ponowienie bez danych pytającego,
+  `MS_UNAVAILABLE`/`TIMEOUT`/`MS_MAX_CONCURRENT_REQ*` → niedostępny
+  krajowy rejestr (nie wolno pomylić z „nieaktywny”), pozostałe → ogólny błąd
+  usługi. Brak `isValid`/`userError` albo sprzeczność tych pól jest błędem
+  odpowiedzi, nigdy wynikiem „nieaktywny”. Klasyfikacja w
+  `VIESLookupService.lookup`.
+- **Grecja = kod `EL`** (nie `GR`) — normalizowane w ścieżce URL i wyniku;
+  `XI` (Irlandia Płn.) jest obsługiwane przez VIES. `PL` jest technicznie
+  obsługiwane, ale routing kieruje krajowych do Białej listy — `euIdentity`
+  pomija `PL`.
+- **Routing UE vs krajowy** (`VIESVerification.euIdentity`): kod kraju bierze
+  z pola `Contractor.uePrefix`, a przy pustym — z dwuliterowego prefiksu
+  wpisanego w samym identyfikatorze; numer VAT jest oczyszczany ze zdublowanego
+  prefiksu. Numery UE mogą zawierać litery (np. Irlandia `IE6388047V`), więc
+  bramka „Zweryfikuj” dla kontrahenta UE nie wymaga 10 cyfr jak polski NIP.
+- VIES potwierdza tylko aktywność numeru VAT-UE (kluczowe dla stawki 0% przy
+  WDT) — nie zastępuje weryfikacji tożsamości ani rachunku. Nic nie jest
+  utrwalane lokalnie; dane pobierane na żywo w `VIESVerificationView`.
+- Dane pytającego są dołączane tylko dla poprawnego polskiego NIP-u (suma
+  kontrolna). Niepoprawny lub pusty NIP nie blokuje sprawdzenia kontrahenta —
+  zapytanie pozostaje anonimowe i nie zwraca numeru potwierdzenia. Gdy VIES
+  odrzuci poprawny formalnie NIP pytającego, klient automatycznie ponawia
+  weryfikację anonimowo.
 
 ## JPK_V7M / JPK_V7K — ewidencja VAT z deklaracją
 

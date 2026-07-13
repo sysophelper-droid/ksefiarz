@@ -186,7 +186,8 @@ public struct ContractorVerificationView: View {
 // MARK: - Wiersz ustalenia
 
 /// Pojedyncza linia karty: ikona wagi, tytuł i opcjonalny szczegół.
-private struct FindingRow: View {
+/// Reużywana także przez `VIESVerificationView` (ta sama waga i model ustaleń).
+struct FindingRow: View {
     let finding: ContractorVerificationResult.Finding
 
     var body: some View {

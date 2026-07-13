@@ -52,8 +52,8 @@ kolejność dowolna. ⚠️ operacje modyfikujące KSeF testować wyłącznie na
 
 - [ ] ⭐ D1. OCR faktur kosztowych (macOS Vision) — skan/PDF papierowej faktury
   → dane do „zakupu spoza KSeF"; natywnie, bez zależności zewnętrznych.
-- [ ] D3. Weryfikacja VIES (kontrahenci UE) — sprawdzenie VAT-UE analogicznie
-  do Białej listy dla krajowych.
+- [x] D3. Weryfikacja VIES (kontrahenci UE) — sprawdzenie VAT-UE analogicznie
+  do Białej listy dla krajowych (13.07.2026).
 - [ ] D4. Import wsadowy z CSV/Excel — masowy import kontrahentów, towarów,
   faktur (migracja z Fakturowni/wFirmy).
 
@@ -79,6 +79,24 @@ kolejność dowolna. ⚠️ operacje modyfikujące KSeF testować wyłącznie na
   (dziś zaszyte PL/EN).
 
 ## Zrealizowane
+
+### Weryfikacja VIES — kontrahenci UE (13.07.2026)
+
+- [x] D3. Karta „Weryfikacja VAT-UE (VIES)” dla kontrahentów unijnych,
+  analogiczna do Białej listy dla krajowych. Ta sama akcja „Zweryfikuj” (menu
+  kontekstowe listy kontrahentów oraz przycisk w edytorze) routuje do VIES,
+  gdy `VIESVerification.euIdentity` rozpozna prefiks UE (pole „Prefiks UE” inne
+  niż PL albo prefiks w identyfikatorze). Sprawdza w REST API VIES Komisji
+  Europejskiej, czy numer VAT-UE jest aktywny; przy podanym NIP firmy pobiera
+  **numer potwierdzenia zapytania** (dowód należytej staranności). Uczciwa
+  klasyfikacja `userError`: `INVALID` = numer nieaktywny (ostrzeżenie o braku
+  stawki 0% WDT), a awarie rejestru (`MS_UNAVAILABLE`/`TIMEOUT`) NIE są mylone
+  z „nieaktywny”. Czysta logika `VIESVerification` (status, werdykt z wagami,
+  routing euIdentity) + `VIESLookupService` (klient REST) + koordynator
+  `VIESVerificationService`; 39 testów jednostkowych (atrapa transportu), w tym
+  regresje dla niepełnych/niespójnych odpowiedzi i błędnego NIP-u pytającego.
+  Kontrakt API zweryfikowany u źródła na żywych odpowiedziach. Publiczne API,
+  bez klucza; nic nie jest utrwalane lokalnie.
 
 ### Faktura proforma — dokument handlowy (13.07.2026)
 
