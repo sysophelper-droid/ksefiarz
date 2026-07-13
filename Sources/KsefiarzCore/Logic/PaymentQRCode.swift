@@ -70,7 +70,9 @@ public enum PaymentQRCode {
 
         let grosze = Int((amount * 100).rounded())
         guard grosze > 0 else { return nil }
-        let amountField = String(format: "%0\(amountMinDigits)d", grosze)
+        // `%ld` (long) — na 64-bitowym macOS `%d` odczytałby tylko 32 bity,
+        // psując pole kwoty dla dużych faktur (grosze > Int32.max ≈ 21,4 mln zł).
+        let amountField = String(format: "%0\(amountMinDigits)ld", grosze)
 
         let fields = [
             normalizedNIP(recipientNIP), // NIP odbiorcy (opcjonalny)

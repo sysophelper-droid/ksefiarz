@@ -80,6 +80,14 @@ struct PaymentQRCodeTests {
             amount: 12_345.67, currency: "PLN", title: "T"
         )
         #expect(b?.components(separatedBy: "|")[3] == "1234567")
+
+        // Duża kwota powyżej Int32.max w groszach (25 mln zł → 2,5 mld gr):
+        // regresja formatu %ld — z %d pole kwoty byłoby przekłamane.
+        let c = PaymentQRCode.zbpTransferContent(
+            recipientName: "F", recipientNIP: "", bankAccount: "12345678901234567890123456",
+            amount: 25_000_000, currency: "PLN", title: "T"
+        )
+        #expect(c?.components(separatedBy: "|")[3] == "2500000000")
     }
 
     @Test("Kwota niedodatnia → brak kodu")
