@@ -59,6 +59,12 @@ Sources/KsefiarzCore/
                odbieranie i przegląd uprawnień KSeF; API permissions;
                receivedAuthorizations(fromNIP:) — uprawnienia podmiotowe
                otrzymane od kontrahenta, queryType=Received),
+               TabularFileReader (CSV/TSV: auto-separator i kodowania PL;
+               XLSX: pierwszy arkusz OOXML, shared/inline strings, liczby,
+               style dat i system 1900/1904; odczyt tylko wymaganych wpisów
+               przez /usr/bin/unzip, limit 64 MB), BulkImportService
+               (materializacja planu + jeden zapis SwiftData; pozycje faktury
+               przypisywane dopiero po context.insert),
                ContractorVerificationService (koordynator weryfikacji
                kontrahenta: Biała lista VAT + KSeF Received, izolacja awarii
                źródeł, składanie przez ContractorVerification.build),
@@ -173,7 +179,10 @@ Sources/KsefiarzCore/
                ManualPurchaseDraft; heurystyki po etykietach odporne
                na brak diakrytyków),
                ProformaValidator (czysta walidacja proformy — NIP nabywcy
-               opcjonalny, walidowany gdy podany; osobny ProformaValidationError)
+               opcjonalny, walidowany gdy podany; osobny ProformaValidationError),
+               BulkImportEngine (czyste mapowanie nagłówków Fakturownia/
+               wFirma i układów własnych, typowanie kwot/dat/flag, walidacja,
+               grupowanie pozycji faktur, deduplikacja i plan importu),
   Views/       MainContentView (NavigationSplitView), InvoiceListView, InvoiceDetailView,
                NewInvoiceView (nowa/edycja/korekta), NewPurchaseView (zakup
                spoza KSeF), ReportsView (sekcja Raporty), DashboardView,
@@ -200,12 +209,52 @@ Sources/KsefiarzCore/
                BankTransferExportView (wybór zakupów, rachunku źródłowego,
                daty, kodowania i kwoty VAT MPP; zapis .pli),
                DictionariesView (+ ContractorsView/ProductsView/BankAccountsView),
+               BulkImportView (kreator plik → mapowanie → bilans/podgląd →
+               zapis kontrahentów, produktów albo faktur),
                ProformaListView + ProformaDetailView + NewProformaView
                (formularz z lekkim ProformaLineEditor) + ProformaEmailView
                (sekcja „Faktury proforma"; SidebarSection.proformas)
 Tests/KsefiarzCoreTests/               # Swift Testing (#expect/#require), nazwy PO POLSKU
 Scripts/build-app.sh                   # składanie bundla .app
 ```
+
+## Import wsadowy CSV/Excel (D4)
+
+- Punkt wejścia: `Słowniki` → `Import CSV/Excel`. Jeden kreator obsługuje
+  kontrahentów, towary/usługi i faktury. Źródłem jest CSV/TSV albo pierwszy
+  arkusz `.xlsx`; stary binarny `.xls` jest świadomie poza zakresem (eksport
+  Fakturowni należy pobrać jako CSV, a arkusz zapisać jako XLSX).
+  Źródła układów migracyjnych: [eksport CSV Fakturowni](https://pomoc.fakturownia.pl/19054671-eksport-faktur-do-csv),
+  [eksport XLS z pozycjami Fakturowni](https://pomoc.fakturownia.pl/327434-jak-wyeksportowac-do-pliku-excel-lub-wydrukowac-faktury-z-wybranego-okresu)
+  i [katalog produktów wFirmy](https://pomoc.wfirma.pl/-import-z-pliku-excel-i-zapis-w-formacie-csv).
+- `TabularFileReader` normalizuje oba formaty do `TabularSheet`. Parser CSV
+  obsługuje cytowanie RFC 4180, pola wieloliniowe, CRLF, separatory
+  `;`/`,`/tab oraz UTF-8, UTF-16 i Windows-1250. Czytnik XLSX nie rozpakuje
+  całego archiwum: pobiera przez `/usr/bin/unzip -p` tylko `workbook.xml`,
+  relacje, pierwszy arkusz oraz opcjonalne shared strings/style; limit
+  zdekompresowanego wpisu to 64 MB.
+- `BulkImportEngine` automatycznie mapuje popularne polskie i angielskie
+  nagłówki, w tym zmienne eksportów Fakturowni oraz oficjalny układ katalogu
+  wFirmy (`Nazwa`, `PKWiU`, `Jednostka`, `Cena`, `Stawka`, `Rodzaj ceny`,
+  `Kod produktu`, `Typ`). Każde dopasowanie jest edytowalne w UI. Identyfikatory
+  NIP/SKU/EAN pozostają tekstem; kwoty przyjmują separator polski/angielski,
+  a cena brutto jest przeliczana na netto według VAT.
+- Plan jest czystym typem wartościowym. Błędny wiersz tworzy diagnostykę
+  z numerem i nie usuwa poprawnych wierszy; brak mapowania pola wymaganego
+  blokuje cały import. Powtarzane wiersze faktury są grupowane i tworzą jej
+  pozycje. `BulkImportService` materializuje wyłącznie rekordy z planu i
+  zapisuje je jednym `ModelContext.save()`.
+- Deduplikacja nie nadpisuje istniejących danych: kontrahenci po
+  znormalizowanym identyfikatorze podatkowym, produkty po każdym z kluczy
+  SKU/EAN/nazwa, faktury jednocześnie po numerze KSeF i kluczu
+  `kind + numer dokumentu + NIP sprzedawcy + NIP nabywcy`. Fetch istniejących
+  faktur nie ma filtra widoczności, więc obejmuje też ukryte — import nie może
+  przywrócić dokumentu ukrytego przez użytkownika.
+- Import nie tworzy XML ani nie wysyła dokumentów do KSeF. Faktura z numerem
+  KSeF dostaje stan `.accepted`; bez niego `.local`, więc pozostaje lokalnym
+  dokumentem podlegającym zwykłym regułom edycji. `isPaid` jest ustawiane
+  wyłącznie z dodatniego znacznika/data zapłaty nowego rekordu; importer nie
+  modyfikuje istniejących faktur.
 
 ## KPiR (wzór od 2026 r.)
 
