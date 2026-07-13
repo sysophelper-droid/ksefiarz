@@ -103,10 +103,13 @@ kolejność dowolna. ⚠️ operacje modyfikujące KSeF testować wyłącznie na
   ostrzeżenie/krytyczne) i stałą, jawną notą o naturze KSeF. Czysta logika
   `ContractorVerification` + koordynator `ContractorVerificationService`
   (izolacja awarii źródeł) + `receivedAuthorizations(fromNIP:)` na
-  `KSeFService`; 22 testy jednostkowe. Relacja uprawnień wymaga poświadczeń
-  KSeF — bez nich karta pokazuje sam status VAT. Sprawdzenie relacji KSeF
-  nieprzetestowane na żywo (polityka „tylko odczyt na żywo”; endpoint jest
-  odczytowy, więc docelowo dopuszczalny do weryfikacji na produkcji).
+  `KSeFService`; 22 testy jednostkowe. Klasyfikacja statusu VAT używa dokładnych
+  wartości API (bez ryzyka, że „Nieczynny” stanie się „Czynny”), a lokalny
+  filtr KSeF pomija wpis bez zgodnego identyfikatora nadającego.
+  Relacja uprawnień wymaga poświadczeń KSeF — bez nich karta pokazuje sam
+  status VAT. Sprawdzenie relacji KSeF nieprzetestowane na żywo (polityka
+  „tylko odczyt na żywo”; endpoint jest odczytowy, więc docelowo dopuszczalny
+  do weryfikacji na produkcji).
 
 ### Kalendarz i prognoza podatkowa (13.07.2026)
 

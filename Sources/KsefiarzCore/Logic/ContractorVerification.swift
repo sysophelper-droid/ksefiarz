@@ -20,15 +20,15 @@ public enum VATRegistrationStatus: String, Sendable, Equatable {
         let normalized = rawStatus
             .folding(options: .diacriticInsensitive, locale: Locale(identifier: "pl_PL"))
             .lowercased()
-        if normalized.isEmpty {
-            self = .unknown
-        } else if normalized.contains("czynny") {
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        switch normalized {
+        case "czynny":
             self = .active
-        } else if normalized.contains("zwolniony") {
+        case "zwolniony":
             self = .exempt
-        } else if normalized.contains("niezarejestrowany") || normalized.contains("nie figuruje") {
+        case "niezarejestrowany":
             self = .notRegistered
-        } else {
+        default:
             self = .unknown
         }
     }

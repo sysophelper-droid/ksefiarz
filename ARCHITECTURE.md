@@ -282,9 +282,13 @@ Scripts/build-app.sh                   # składanie bundla .app
   OpenAPI. Jedyna KSeF-natywna „weryfikacja relacji” z kontrahentem to
   `POST /permissions/query/authorizations/grants` z `queryType=Received`
   (opcjonalny filtr `authorizingIdentifier` = NIP kontrahenta) — sprawdza,
-  jakie uprawnienia podmiotowe nadał NAM kontrahent. Realny status podatnika
-  (czynny/zwolniony) pochodzi z Wykazu podatników VAT (`ContractorLookupService`,
-  poza KSeF). Feature A7 łączy oba źródła (`ContractorVerificationService`).
+  jakie uprawnienia podmiotowe nadał NAM kontrahent. Wynik jest dodatkowo
+  filtrowany lokalnie po wymaganym przez OpenAPI polu
+  `authorizingEntityIdentifier`; wpis bez zgodnego identyfikatora typu `Nip`
+  jest pomijany, aby niespójna odpowiedź nie potwierdziła fałszywej relacji.
+  Realny status podatnika (czynny/zwolniony) pochodzi z Wykazu podatników VAT
+  (`ContractorLookupService`, poza KSeF). Feature A7 łączy oba źródła
+  (`ContractorVerificationService`).
 - Tryby offline: zwykła sesja interaktywna z `offlineMode: true` w żądaniu
   wysyłki (WSPÓLNA flaga dla wszystkich trybów — API nie rozróżnia);
   dosyłany XML musi być BAJT W BAJT tym, z którego policzono skrót

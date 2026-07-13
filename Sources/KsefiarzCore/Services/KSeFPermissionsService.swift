@@ -322,9 +322,13 @@ public extension KSeFService {
             let page: QueryEntityAuthorizationPermissionsResponseDTO = try decode(data)
             for grant in page.authorizationGrants {
                 // Zawężamy do uprawnień nadanych właśnie przez tego kontrahenta.
-                // Gdy serwer nie zwrócił nadającego, ufamy filtrowi żądania.
-                if let granterNIP = grant.authorizingEntityIdentifier?.value,
-                   granterNIP.filter(\.isNumber) != normalizedNIP {
+                // OpenAPI wymaga identyfikatora nadającego w odpowiedzi. Wpis
+                // bez niego albo z innym typem pomijamy, żeby niespójna
+                // odpowiedź nie dała fałszywego potwierdzenia relacji.
+                guard let granter = grant.authorizingEntityIdentifier,
+                      granter.type?.caseInsensitiveCompare("Nip") == .orderedSame,
+                      let granterNIP = granter.value,
+                      granterNIP.filter(\.isNumber) == normalizedNIP else {
                     continue
                 }
                 result.append(ContractorKSeFAuthorization(

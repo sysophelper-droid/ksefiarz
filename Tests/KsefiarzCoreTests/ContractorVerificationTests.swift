@@ -19,6 +19,8 @@ struct VATRegistrationStatusTests {
     func classifiesUnknown() {
         #expect(VATRegistrationStatus(rawStatus: "") == .unknown)
         #expect(VATRegistrationStatus(rawStatus: "cokolwiek") == .unknown)
+        #expect(VATRegistrationStatus(rawStatus: "Nieczynny") == .unknown)
+        #expect(VATRegistrationStatus(rawStatus: "  Czynny\n") == .active)
     }
 
     @Test("Etykiety po polsku")
@@ -266,8 +268,8 @@ struct ReceivedAuthorizationsTests {
         #expect(grants.map(\.id) == ["auth-1"])
     }
 
-    @Test("Brak pola nadającego: ufamy filtrowi żądania (zachowujemy wpis)")
-    func keepsGrantsWithoutGranterField() async throws {
+    @Test("Brak lub błędny typ nadającego: pomija wpis zamiast potwierdzać relację")
+    func skipsGrantsWithoutReliableGranter() async throws {
         let transport = MockTransport()
         routeAuth(on: transport)
         transport.routeOK("permissions/query/authorizations/grants", data: Data("""
@@ -278,6 +280,13 @@ struct ReceivedAuthorizationsTests {
               "authorizedEntityIdentifier": {"type":"Nip","value":"5260250274"},
               "authorizationScope": "SelfInvoicing",
               "startDate": "2026-05-01T00:00:00Z"
+            },
+            {
+              "id": "auth-2",
+              "authorizedEntityIdentifier": {"type":"Nip","value":"5260250274"},
+              "authorizingEntityIdentifier": {"type":"Pesel","value":"1111111111"},
+              "authorizationScope": "TaxRepresentative",
+              "startDate": "2026-05-01T00:00:00Z"
             }
           ],
           "hasMore": false
@@ -286,7 +295,7 @@ struct ReceivedAuthorizationsTests {
 
         let service = makeService(transport: transport)
         let grants = try await service.receivedAuthorizations(fromNIP: "1111111111")
-        #expect(grants.count == 1)
+        #expect(grants.isEmpty)
     }
 }
 
