@@ -98,10 +98,19 @@ public enum InvoiceOCRService {
 
     // MARK: - Obrazy
 
-    private static func loadCGImage(from url: URL) -> CGImage? {
+    /// Wczytuje obraz w rozmiarze odpowiednim dla Vision. ImageIO stosuje
+    /// orientację EXIF (typową dla zdjęć z telefonu) i ogranicza dłuższy bok,
+    /// aby duży plik nie był dekodowany do pełnej, wielusetmegabajtowej bitmapy.
+    static func loadCGImage(from url: URL) -> CGImage? {
         guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
               CGImageSourceGetCount(source) > 0 else { return nil }
-        return CGImageSourceCreateImageAtIndex(source, 0, nil)
+        let options: [CFString: Any] = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceThumbnailMaxPixelSize: Int(maxRenderDimension),
+            kCGImageSourceShouldCacheImmediately: true,
+        ]
+        return CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary)
     }
 
     // MARK: - Vision

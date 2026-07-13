@@ -276,6 +276,22 @@ struct InvoiceOCRParserTests {
         #expect(netOnly.resolvedAmounts()! == (net: 1000, vat: 0))
     }
 
+    @Test("Jawna suma brutto wygrywa z zerowym saldem do zapłaty")
+    func explicitGrossBeatsZeroDueBalance() {
+        let result = InvoiceOCRParser.parse(lines: [
+            "Suma brutto: 1 230,00 PLN",
+            "Do zapłaty: 0,00 PLN",
+        ])
+        #expect(result.grossAmount == 1230)
+        #expect(result.resolvedAmounts()! == (net: 1230, vat: 0))
+
+        let itemPrice = InvoiceOCRParser.parse(lines: [
+            "Cena brutto: 10,00 PLN",
+            "Do zapłaty: 100,00 PLN",
+        ])
+        #expect(itemPrice.grossAmount == 100)
+    }
+
     @Test("Samo brutto zgodne z istniejącym podziałem netto/VAT nie zeruje VAT (edycja)")
     func grossOnlyKeepsExistingSplit() {
         var draft = ManualPurchaseDraft()
@@ -362,6 +378,15 @@ struct InvoiceOCRParserTests {
         #expect(below.sellerTaxID == "1234563218")
     }
 
+    @Test("NIP w linii sprzedawcy nie staje się częścią nazwy")
+    func inlineSellerMetadataExcludedFromName() {
+        let result = InvoiceOCRParser.parse(lines: [
+            "Sprzedawca: ACME Sp. z o.o., NIP: 526-104-08-28",
+        ])
+        #expect(result.sellerName == "ACME Sp. z o.o.")
+        #expect(result.sellerTaxID == "5261040828")
+    }
+
     @Test("Bez etykiety „Sprzedawca” nazwa nie jest zgadywana")
     func noSellerLabelNoGuess() {
         let result = InvoiceOCRParser.parse(lines: ["Jakaś Firma", "NIP: 1234563218"])
@@ -378,6 +403,18 @@ struct InvoiceOCRParserTests {
         #expect(InvoiceOCRParser.parse(lines: ["bez waluty 100,00"]).currency == nil)
         // Kod wewnątrz słowa nie jest walutą.
         #expect(InvoiceOCRParser.parse(lines: ["SUPLNET dostawa"]).currency == nil)
+    }
+
+    @Test("Kody waluty, VAT ID i prefiks IBAN są niewrażliwe na wielkość liter")
+    func identifiersAreCaseInsensitive() {
+        let result = InvoiceOCRParser.parse(lines: [
+            "VAT ID: de123456789",
+            "Do zapłaty: 100,00 eur",
+            "Konto: pl61 1090 1014 0000 0712 1981 2874",
+        ])
+        #expect(result.sellerTaxID == "DE123456789")
+        #expect(result.currency == "EUR")
+        #expect(result.bankAccount == "61109010140000071219812874")
     }
 
     @Test("Rachunek NRB: grupowany, z prefiksem PL i walidacją sumy kontrolnej")

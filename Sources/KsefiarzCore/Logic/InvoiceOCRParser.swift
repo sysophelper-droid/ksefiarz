@@ -392,6 +392,10 @@ public enum InvoiceOCRParser {
 
     private static let sellerLabels = ["sprzedawca", "wystawca", "dostawca"]
     private static let buyerLabels = ["nabywca", "kupujacy", "odbiorca"]
+    private static let sellerInlineMetadataRegex = try? NSRegularExpression(
+        pattern: #"[,;|]?\s+(?:NIP|VAT\s+ID|REGON)\s*[:=]?"#,
+        options: [.caseInsensitive]
+    )
 
     private static func parseSeller(into extraction: inout InvoiceOCRExtraction, lines: [String], folded: [String], ownNIP: String?) {
         let sellerLabelIdx = folded.firstIndex { fold in sellerLabels.contains { fold.hasPrefix($0) } }
@@ -405,8 +409,9 @@ public enum InvoiceOCRParser {
         // Nazwa: reszta linii etykiety albo pierwsza sensowna linia poniżej.
         var nameIdx: Int?
         if let inline = value(after: sellerLabels.first(where: { folded[labelIdx].hasPrefix($0) }) ?? "", inFolded: folded[labelIdx], original: lines[labelIdx]),
-           isPlausibleName(inline) {
-            extraction.sellerName = inline
+           let name = sellerName(fromInlineValue: inline),
+           isPlausibleName(name) {
+            extraction.sellerName = name
             nameIdx = labelIdx
         } else {
             for idx in (labelIdx + 1)..<min(labelIdx + 3, lines.count) where isPlausibleName(lines[idx]) {
@@ -446,13 +451,27 @@ public enum InvoiceOCRParser {
         return !labelPrefixes.contains { fold.hasPrefix($0) }
     }
 
+    /// Linia etykiety często łączy nazwę z identyfikatorami, np.
+    /// „Sprzedawca: ACME Sp. z o.o., NIP: 526…”. Metadane nie są częścią
+    /// nazwy kontrahenta i nie mogą trafić do pola formularza.
+    private static func sellerName(fromInlineValue value: String) -> String? {
+        let ns = value as NSString
+        let fullRange = NSRange(location: 0, length: ns.length)
+        let end = sellerInlineMetadataRegex?.firstMatch(in: value, range: fullRange)?.range.location
+            ?? ns.length
+        let name = ns.substring(with: NSRange(location: 0, length: end))
+            .trimmingCharacters(in: CharacterSet(charactersIn: " ,;|\t"))
+        return name.isEmpty ? nil : name
+    }
+
     private static let nipRegex = try? NSRegularExpression(
         pattern: #"(?<![\dA-Za-z])(?:PL[ -]?)?(\d{3}[- ]?\d{3}[- ]?\d{2}[- ]?\d{2}|\d{3}[- ]?\d{2}[- ]?\d{2}[- ]?\d{3}|\d{10})(?!\d)"#
     )
     /// Zagraniczny VAT ID: prefiks kraju UE + min. 7 znaków numeru —
     /// krótsze dopasowania to zwykle fragmenty IBAN ("PL61") albo skróty.
     private static let euVatRegex = try? NSRegularExpression(
-        pattern: #"(?<![A-Za-z0-9])([A-Z]{2})[ -]?([0-9A-Z]{7,13})(?![A-Za-z0-9])"#
+        pattern: #"(?<![A-Za-z0-9])([A-Z]{2})[ -]?([0-9A-Z]{7,13})(?![A-Za-z0-9])"#,
+        options: [.caseInsensitive]
     )
 
     private static func sellerTaxID(lines: [String], folded: [String], ownNIP: String?, sellerLabelIdx: Int?, buyerLabelIdx: Int?) -> String? {
@@ -492,8 +511,8 @@ public enum InvoiceOCRParser {
             guard folded[idx].contains("vat") || folded[idx].contains("nip") else { continue }
             let ns = line as NSString
             for match in euRegex.matches(in: line, range: NSRange(location: 0, length: ns.length)) {
-                let prefix = ns.substring(with: match.range(at: 1))
-                let number = ns.substring(with: match.range(at: 2))
+                let prefix = ns.substring(with: match.range(at: 1)).uppercased()
+                let number = ns.substring(with: match.range(at: 2)).uppercased()
                 guard prefix != "PL",
                       VIESVerification.viesCountryCodes.contains(prefix),
                       number.contains(where: \.isNumber) else { continue }
@@ -526,7 +545,12 @@ public enum InvoiceOCRParser {
         }
     }
 
-    private static let grossLabels = ["do zaplaty", "kwota do zaplaty", "razem do zaplaty", "suma brutto", "razem brutto", "wartosc brutto", "kwota brutto", "brutto"]
+    // Jawna wartość brutto jest bardziej wiarygodna niż „do zapłaty”, które
+    // po częściowej lub pełnej wpłacie oznacza pozostałe saldo (często 0,00).
+    private static let grossLabels = [
+        "suma brutto", "razem brutto", "wartosc brutto", "kwota brutto",
+        "razem do zaplaty", "kwota do zaplaty", "do zaplaty", "brutto",
+    ]
     private static let netLabels = ["suma netto", "razem netto", "wartosc netto", "kwota netto", "netto"]
     private static let vatLabels = ["suma vat", "razem vat", "kwota vat", "podatek vat", "vat"]
 
@@ -583,7 +607,10 @@ public enum InvoiceOCRParser {
 
     private static let currencyRegexes: [(code: String, regex: NSRegularExpression)] = {
         ["PLN", "EUR", "USD", "GBP", "CHF", "CZK", "SEK", "NOK", "DKK"].compactMap { code in
-            (try? NSRegularExpression(pattern: "(?<![A-Za-z])\(code)(?![A-Za-z])"))
+            (try? NSRegularExpression(
+                pattern: "(?<![A-Za-z])\(code)(?![A-Za-z])",
+                options: [.caseInsensitive]
+            ))
                 .map { (code: code, regex: $0) }
         }
     }()
@@ -623,7 +650,8 @@ public enum InvoiceOCRParser {
     // MARK: - Rachunek bankowy
 
     private static let nrbRegex = try? NSRegularExpression(
-        pattern: #"(?<![\dA-Za-z])(?:PL[ ]?)?(\d{2}(?:[ -]?\d{4}){6})(?!\d)"#
+        pattern: #"(?<![\dA-Za-z])(?:PL[ ]?)?(\d{2}(?:[ -]?\d{4}){6})(?!\d)"#,
+        options: [.caseInsensitive]
     )
     private static func bankAccount(lines: [String], folded: [String]) -> String? {
         guard let regex = nrbRegex else { return nil }

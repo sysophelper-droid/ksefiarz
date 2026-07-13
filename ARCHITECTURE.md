@@ -594,8 +594,10 @@ oficjalną XSD (xmllint, 12.07.2026).
   tekstu; `InvoiceOCRParser` (Logic, czysta funkcja z pełnymi testami)
   zamienia linie na `InvoiceOCRExtraction`. PDF z warstwą tekstową
   (≥ 32 znaki na stronę) czytany jest wprost przez `PDFPage.string` — bez
-  strat OCR; strona-skan jest renderowana do bitmapy (300 DPI, limit 4000 px)
-  i przechodzi przez `VNRecognizeTextRequest` (`.accurate`, korekcja
+  strat OCR; strona-skan jest renderowana do bitmapy (300 DPI, limit 4000 px).
+  Obrazy są przed OCR obracane zgodnie z orientacją EXIF i skalowane do
+  maks. 4000 px dłuższego boku, żeby nie dekodować dużych zdjęć do pełnej
+  bitmapy. Obraz przechodzi przez `VNRecognizeTextRequest` (`.accurate`, korekcja
   językowa). Limit 4 stron PDF. Języki żądania filtrowane przez
   `supportedRecognitionLanguages()` (pl/en) — żądanie niewspieranego języka
   kończy się błędem `perform`. Obserwacje sortowane w kolejność czytania
@@ -616,8 +618,11 @@ oficjalną XSD (xmllint, 12.07.2026).
   „nabywcy" tylko jako ostateczność). `resolvedAmounts()` wyprowadza
   brakującą kwotę z równania netto+VAT=brutto (samo brutto → netto=brutto,
   VAT=0 — przypadek paragonu); **para netto+VAT ma pierwszeństwo przed
-  brutto**, bo „Do zapłaty" bywa saldem po częściowej wpłacie (ujemna
-  różnica nigdy nie jest ufana). Pułapki pokryte testami: „Do zapłaty:
+  brutto**, a jawna etykieta „Suma/Wartość brutto” wygrywa z „Do zapłaty”,
+  bo to ostatnie bywa saldem po częściowej wpłacie (ujemna różnica nigdy
+  nie jest ufana). Nazwa z łączonej linii „Sprzedawca: …, NIP: …” jest
+  odcinana przed identyfikatorem; kody walut, VAT ID i prefiks IBAN są
+  niewrażliwe na wielkość liter. Pułapki pokryte testami: „Do zapłaty:
   0,00", numer faktury `1/07/2026` (nie jest datą — daty odrzucane tylko
   w zapisie kropkowym/ISO), „Rachunek bankowy nr" ≠ numer dokumentu,
   prefiks IBAN „PL61" ≠ VAT ID (fallback UE pomija PL i wymaga ≥ 7 znaków

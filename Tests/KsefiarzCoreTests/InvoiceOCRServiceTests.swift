@@ -1,6 +1,7 @@
 import CoreGraphics
 import CoreText
 import Foundation
+import ImageIO
 import PDFKit
 import Testing
 @testable import KsefiarzCore
@@ -80,6 +81,23 @@ struct InvoiceOCRServiceTests {
         return image
     }
 
+    private func writeJPEG(
+        _ image: CGImage,
+        to url: URL,
+        orientation: Int? = nil
+    ) throws {
+        guard let destination = CGImageDestinationCreateWithURL(
+            url as CFURL, "public.jpeg" as CFString, 1, nil
+        ) else { throw InvoiceOCRError.unreadableFile }
+        let properties = orientation.map {
+            [kCGImagePropertyOrientation: $0] as CFDictionary
+        }
+        CGImageDestinationAddImage(destination, image, properties)
+        guard CGImageDestinationFinalize(destination) else {
+            throw InvoiceOCRError.unreadableFile
+        }
+    }
+
     /// Treść syntetycznego skanu — bez polskich znaków, bo dobór języków
     /// Vision zależy od systemu; parser i tak jest na to odporny.
     private static let scanLines = [
@@ -126,6 +144,38 @@ struct InvoiceOCRServiceTests {
         #expect(extraction.documentNumber == "FV/123/2026")
         #expect(extraction.sellerTaxID == "5261040828")
         #expect(extraction.grossAmount == 1230.00)
+    }
+
+    @Test("Wczytanie zdjęcia stosuje orientację EXIF przed OCR")
+    func imageOrientationIsApplied() throws {
+        let image = try makeScanImage(lines: ["Test"])
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ocr-test-\(UUID().uuidString).jpg")
+        try writeJPEG(image, to: url, orientation: 6) // obrót o 90° w prawo
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        let loaded = try #require(InvoiceOCRService.loadCGImage(from: url))
+        #expect(loaded.width == image.height)
+        #expect(loaded.height == image.width)
+    }
+
+    @Test("Duży obraz jest zmniejszany do limitu 4000 px przed OCR")
+    func largeImageIsDownsampled() throws {
+        let width = 5000
+        let height = 100
+        let context = try #require(CGContext(
+            data: nil, width: width, height: height, bitsPerComponent: 8,
+            bytesPerRow: 0, space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ))
+        let image = try #require(context.makeImage())
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ocr-test-\(UUID().uuidString).jpg")
+        try writeJPEG(image, to: url)
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        let loaded = try #require(InvoiceOCRService.loadCGImage(from: url))
+        #expect(max(loaded.width, loaded.height) == 4000)
     }
 
     @Test("Plik niebędący PDF ani obrazem zgłasza czytelny błąd")

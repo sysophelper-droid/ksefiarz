@@ -60,7 +60,7 @@ Sources/
         ├── InvoiceAutomationView.swift # szablony, cykle i kolejka zatwierdzeń
         ├── HiddenInvoicesView.swift # archiwum „Nieuprawnione / Ukryte”
         └── SettingsView.swift    # NIP, token KSeF, środowisko
-Tests/KsefiarzCoreTests/          # 829 testów (Swift Testing) — model, parser, usługa, kryptografia, logika
+Tests/KsefiarzCoreTests/          # 834 testy (Swift Testing) — model, parser, usługa, kryptografia, logika
 ```
 
 ## Funkcje
