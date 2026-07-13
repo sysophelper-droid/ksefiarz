@@ -28,8 +28,6 @@ kolejność dowolna. ⚠️ operacje modyfikujące KSeF testować wyłącznie na
 - [ ] ⭐ A6. Auto-wykrywanie trybu awaryjnego KSeF — pobieranie komunikatów MF
   o niedostępności/awarii i automatyczne proponowanie trybu offline + terminu
   (dziś datę zakończenia zdarzenia wpisuje użytkownik ręcznie).
-- [ ] A7. Weryfikacja kontrahenta w KSeF — sprawdzenie, czy odbiorca ma
-  aktywne konto/uprawnienia w KSeF. Niszowe.
 
 #### B. Podatki dochodowe / ewidencje
 
@@ -89,6 +87,26 @@ kolejność dowolna. ⚠️ operacje modyfikujące KSeF testować wyłącznie na
   (dziś zaszyte PL/EN).
 
 ## Zrealizowane
+
+### Weryfikacja kontrahenta w KSeF (13.07.2026)
+
+- [x] A7. Karta „Weryfikacja kontrahenta” (menu kontekstowe listy kontrahentów
+  oraz przycisk „Zweryfikuj” w edytorze). USTALENIE u źródła (OpenAPI KSeF 2.0,
+  73 ścieżki): KSeF **nie ma** endpointu „aktywne konto” — bo takie pojęcie nie
+  istnieje. System jest powszechny, każdy ważny NIP odbiera faktury po NIP
+  automatycznie. Zamiast atrapy zbudowano uczciwą, złożoną weryfikację:
+  walidacja NIP (suma kontrolna) + status VAT z Wykazu podatników VAT (Biała
+  lista: czynny/zwolniony/niezarejestrowany) + KSeF-natywne sprawdzenie relacji
+  uprawnień podmiotowych (`POST /permissions/query/authorizations/grants`
+  `queryType=Received`, filtr po NIP nadającego — czy kontrahent nadał NASZEJ
+  firmie np. samofakturowanie/przedstawiciela). Werdykt z wagami (OK/info/
+  ostrzeżenie/krytyczne) i stałą, jawną notą o naturze KSeF. Czysta logika
+  `ContractorVerification` + koordynator `ContractorVerificationService`
+  (izolacja awarii źródeł) + `receivedAuthorizations(fromNIP:)` na
+  `KSeFService`; 22 testy jednostkowe. Relacja uprawnień wymaga poświadczeń
+  KSeF — bez nich karta pokazuje sam status VAT. Sprawdzenie relacji KSeF
+  nieprzetestowane na żywo (polityka „tylko odczyt na żywo”; endpoint jest
+  odczytowy, więc docelowo dopuszczalny do weryfikacji na produkcji).
 
 ### Kalendarz i prognoza podatkowa (13.07.2026)
 

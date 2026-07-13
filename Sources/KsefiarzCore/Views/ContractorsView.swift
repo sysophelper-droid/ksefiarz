@@ -11,6 +11,7 @@ struct ContractorsListView: View {
     @State private var searchText = ""
     @State private var selection = Set<UUID>()
     @State private var editedContractor: Contractor?
+    @State private var verifyingContractor: Contractor?
     @State private var showingNewContractor = false
 
     private var filtered: [Contractor] {
@@ -49,6 +50,12 @@ struct ContractorsListView: View {
                 Button("Edytuj") {
                     editedContractor = contractors.first { ids.contains($0.id) }
                 }
+                if ids.count == 1, let contractor = contractors.first(where: { ids.contains($0.id) }),
+                   !contractor.nip.filter(\.isNumber).isEmpty {
+                    Button("Zweryfikuj w KSeF i wykazie VAT") {
+                        verifyingContractor = contractor
+                    }
+                }
                 Button("Usuń ze słownika", role: .destructive) {
                     deleteContractors(ids)
                 }
@@ -80,6 +87,9 @@ struct ContractorsListView: View {
         }
         .sheet(item: $editedContractor) { contractor in
             ContractorEditorView(original: contractor)
+        }
+        .sheet(item: $verifyingContractor) { contractor in
+            ContractorVerificationView(nip: contractor.nip, expectedName: contractor.displayName)
         }
     }
 
@@ -116,6 +126,7 @@ struct ContractorEditorView: View {
     @State private var working = Contractor()
     @State private var isLookingUp = false
     @State private var lookupMessage: String?
+    @State private var showingVerification = false
 
     /// Prefiksy VAT UE wg wykazu w schemie FA(2).
     private static let uePrefixes = ["", "AT", "BE", "BG", "CY", "CZ", "DE", "DK",
@@ -147,6 +158,13 @@ struct ContractorEditorView: View {
                         }
                         .disabled(isLookingUp || working.nip.filter(\.isNumber).count != 10)
                         .help("Pobiera nazwę i adres z wykazu podatników VAT (Biała lista)")
+                        Button {
+                            showingVerification = true
+                        } label: {
+                            Label("Zweryfikuj", systemImage: "checkmark.shield")
+                        }
+                        .disabled(working.nip.filter(\.isNumber).count != 10)
+                        .help("Sprawdza status VAT (Biała lista) i relację uprawnień w KSeF")
                     }
                     if let lookupMessage {
                         Text(lookupMessage)
@@ -219,6 +237,9 @@ struct ContractorEditorView: View {
         .navigationTitle(original == nil ? "Nowy kontrahent" : "Edycja kontrahenta")
         .onAppear {
             if let original { working.copy(from: original) }
+        }
+        .sheet(isPresented: $showingVerification) {
+            ContractorVerificationView(nip: working.nip, expectedName: working.displayName)
         }
     }
 
