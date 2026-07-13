@@ -229,16 +229,22 @@ Scripts/build-app.sh                   # składanie bundla .app
   i [katalog produktów wFirmy](https://pomoc.wfirma.pl/-import-z-pliku-excel-i-zapis-w-formacie-csv).
 - `TabularFileReader` normalizuje oba formaty do `TabularSheet`. Parser CSV
   obsługuje cytowanie RFC 4180, pola wieloliniowe, CRLF, separatory
-  `;`/`,`/tab oraz UTF-8, UTF-16 i Windows-1250. Czytnik XLSX nie rozpakuje
-  całego archiwum: pobiera przez `/usr/bin/unzip -p` tylko `workbook.xml`,
-  relacje, pierwszy arkusz oraz opcjonalne shared strings/style; limit
-  zdekompresowanego wpisu to 64 MB.
+  `;`/`,`/tab oraz UTF-8, UTF-16 i Windows-1250; BOM UTF-8 jest usuwany
+  przed parsowaniem (inaczej psułby cudzysłów pierwszego pola). Czytnik XLSX
+  nie rozpakuje całego archiwum: pobiera przez `/usr/bin/unzip -p` tylko
+  `workbook.xml`, relacje, pierwszy arkusz oraz opcjonalne shared strings/style;
+  limit zdekompresowanego wpisu to 64 MB. Elementy XML są dopasowywane po
+  nazwie lokalnej, więc działają też pliki z prefiksami przestrzeni nazw
+  (`<x:row>` z .NET OpenXML SDK).
 - `BulkImportEngine` automatycznie mapuje popularne polskie i angielskie
   nagłówki, w tym zmienne eksportów Fakturowni oraz oficjalny układ katalogu
   wFirmy (`Nazwa`, `PKWiU`, `Jednostka`, `Cena`, `Stawka`, `Rodzaj ceny`,
   `Kod produktu`, `Typ`). Każde dopasowanie jest edytowalne w UI. Identyfikatory
-  NIP/SKU/EAN pozostają tekstem; kwoty przyjmują separator polski/angielski,
-  a cena brutto jest przeliczana na netto według VAT.
+  NIP/SKU/EAN pozostają tekstem; kwoty przyjmują separator polski/angielski
+  oraz dopiski walut (`zł`, `PLN`, `EUR`, `USD`), a cena brutto jest przeliczana
+  na netto według VAT. Typ dokumentu jest normalizowany do słownika
+  `Invoice.documentTypeRaw` (np. „Faktura zaliczkowa” → `ZAL`); wartość
+  nieznana daje ostrzeżenie i kod `VAT`.
 - Plan jest czystym typem wartościowym. Błędny wiersz tworzy diagnostykę
   z numerem i nie usuwa poprawnych wierszy; brak mapowania pola wymaganego
   blokuje cały import. Powtarzane wiersze faktury są grupowane i tworzą jej

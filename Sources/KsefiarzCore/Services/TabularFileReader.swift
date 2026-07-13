@@ -45,6 +45,10 @@ public enum TabularFileReader {
     }
 
     public static func parseCSV(_ text: String, name: String = "CSV", delimiter: Character? = nil) throws -> TabularSheet {
+        // BOM przed nagłówkiem „zapycha” pierwsze pole i cudzysłów otwierający
+        // przestaje być rozpoznawany — usuwamy go przed parsowaniem.
+        var text = text
+        if text.hasPrefix("\u{FEFF}") { text.removeFirst() }
         let rows = CSVParser.parse(text, delimiter: delimiter ?? CSVParser.detectDelimiter(in: text))
         return try normalizedSheet(name: name, rows: rows)
     }
@@ -184,6 +188,13 @@ private enum CSVParser {
 
 // MARK: - Excel / Office Open XML
 
+/// Nazwa elementu bez prefiksu przestrzeni nazw — część generatorów XLSX
+/// (np. .NET OpenXML SDK) zapisuje `<x:row>` zamiast `<row>`.
+private func xmlLocalName(_ elementName: String) -> String {
+    guard let colon = elementName.lastIndex(of: ":") else { return elementName }
+    return String(elementName[elementName.index(after: colon)...])
+}
+
 private enum XLSXReader {
     static func read(url: URL) throws -> TabularSheet {
         let archive = XLSXArchive(url: url)
@@ -282,10 +293,10 @@ private final class WorkbookXML: NSObject, XMLParserDelegate {
     func parser(_ parser: XMLParser, didStartElement elementName: String,
                 namespaceURI: String?, qualifiedName qName: String?,
                 attributes attributeDict: [String: String] = [:]) {
-        if elementName == "workbookPr" || elementName.hasSuffix(":workbookPr") {
+        if xmlLocalName(elementName) == "workbookPr" {
             uses1904Dates = ["1", "true"].contains(attributeDict["date1904"]?.lowercased() ?? "")
         }
-        if elementName == "sheet" || elementName.hasSuffix(":sheet"),
+        if xmlLocalName(elementName) == "sheet",
            let name = attributeDict["name"],
            let relationshipID = attributeDict["r:id"] ?? attributeDict["id"] {
             sheets.append(.init(name: name, relationshipID: relationshipID))
@@ -309,7 +320,7 @@ private final class RelationshipsXML: NSObject, XMLParserDelegate {
     func parser(_ parser: XMLParser, didStartElement elementName: String,
                 namespaceURI: String?, qualifiedName qName: String?,
                 attributes attributeDict: [String: String] = [:]) {
-        guard elementName == "Relationship" || elementName.hasSuffix(":Relationship"),
+        guard xmlLocalName(elementName) == "Relationship",
               let id = attributeDict["Id"], let target = attributeDict["Target"] else { return }
         relationships[id] = target
     }
@@ -333,8 +344,8 @@ private final class SharedStringsXML: NSObject, XMLParserDelegate {
     func parser(_ parser: XMLParser, didStartElement elementName: String,
                 namespaceURI: String?, qualifiedName qName: String?,
                 attributes attributeDict: [String: String] = [:]) {
-        if elementName == "si" { current = "" }
-        if elementName == "t" { capturesText = true }
+        if xmlLocalName(elementName) == "si" { current = "" }
+        if xmlLocalName(elementName) == "t" { capturesText = true }
     }
 
     func parser(_ parser: XMLParser, foundCharacters string: String) {
@@ -343,8 +354,8 @@ private final class SharedStringsXML: NSObject, XMLParserDelegate {
 
     func parser(_ parser: XMLParser, didEndElement elementName: String,
                 namespaceURI: String?, qualifiedName qName: String?) {
-        if elementName == "t" { capturesText = false }
-        if elementName == "si" { values.append(current) }
+        if xmlLocalName(elementName) == "t" { capturesText = false }
+        if xmlLocalName(elementName) == "si" { values.append(current) }
     }
 }
 
@@ -371,12 +382,13 @@ private final class StylesXML: NSObject, XMLParserDelegate {
     func parser(_ parser: XMLParser, didStartElement elementName: String,
                 namespaceURI: String?, qualifiedName qName: String?,
                 attributes attributeDict: [String: String] = [:]) {
-        if elementName == "numFmt", let id = attributeDict["numFmtId"].flatMap(Int.init),
+        let element = xmlLocalName(elementName)
+        if element == "numFmt", let id = attributeDict["numFmtId"].flatMap(Int.init),
            let code = attributeDict["formatCode"] {
             customFormats[id] = code
-        } else if elementName == "cellXfs" {
+        } else if element == "cellXfs" {
             insideCellFormats = true
-        } else if elementName == "xf", insideCellFormats,
+        } else if element == "xf", insideCellFormats,
                   let id = attributeDict["numFmtId"].flatMap(Int.init) {
             let code = customFormats[id]
             cellStyles.append(.init(
@@ -388,7 +400,7 @@ private final class StylesXML: NSObject, XMLParserDelegate {
 
     func parser(_ parser: XMLParser, didEndElement elementName: String,
                 namespaceURI: String?, qualifiedName qName: String?) {
-        if elementName == "cellXfs" { insideCellFormats = false }
+        if xmlLocalName(elementName) == "cellXfs" { insideCellFormats = false }
     }
 
     private static func isDateFormat(id: Int, code: String?) -> Bool {
@@ -442,16 +454,17 @@ private final class SheetXML: NSObject, XMLParserDelegate {
     func parser(_ parser: XMLParser, didStartElement elementName: String,
                 namespaceURI: String?, qualifiedName qName: String?,
                 attributes attributeDict: [String: String] = [:]) {
-        if elementName == "row" {
+        let element = xmlLocalName(elementName)
+        if element == "row" {
             currentRow = []
             nextColumn = 0
-        } else if elementName == "c" {
+        } else if element == "c" {
             cellColumn = attributeDict["r"].map(Self.columnIndex) ?? nextColumn
             nextColumn = cellColumn + 1
             cellType = attributeDict["t"] ?? ""
             cellStyle = attributeDict["s"].flatMap(Int.init)
             cellValue = ""
-        } else if elementName == "v" || (elementName == "t" && cellType == "inlineStr") {
+        } else if element == "v" || (element == "t" && cellType == "inlineStr") {
             capturesValue = true
         }
     }
@@ -462,11 +475,12 @@ private final class SheetXML: NSObject, XMLParserDelegate {
 
     func parser(_ parser: XMLParser, didEndElement elementName: String,
                 namespaceURI: String?, qualifiedName qName: String?) {
-        if elementName == "v" || elementName == "t" { capturesValue = false }
-        if elementName == "c" {
+        let element = xmlLocalName(elementName)
+        if element == "v" || element == "t" { capturesValue = false }
+        if element == "c" {
             while currentRow.count <= cellColumn { currentRow.append("") }
             currentRow[cellColumn] = resolvedCellValue()
-        } else if elementName == "row" {
+        } else if element == "row" {
             rows.append(currentRow)
         }
     }

@@ -32,6 +32,49 @@ struct BulkImportParserTests {
         #expect(sheet.dataRows[1] == ["FV/2", "2,40"])
     }
 
+    @Test("BOM UTF-8 nie psuje cudzysłowu pierwszego pola")
+    func bomWithQuotedFirstField() throws {
+        let csv = "\u{FEFF}\"Nazwa firmy\";NIP\n\"ACME; Polska\";5260250274\n"
+        let sheet = try TabularFileReader.parseCSV(csv)
+        #expect(sheet.headers == ["Nazwa firmy", "NIP"])
+        #expect(sheet.dataRows[0] == ["ACME; Polska", "5260250274"])
+
+        let mapping = BulkImportEngine.automaticMapping(entity: .contractors, headers: sheet.headers)
+        #expect(mapping[.contractorName] == 0)
+        #expect(mapping[.contractorNIP] == 1)
+    }
+
+    @Test("Kwoty z dopiskiem zł są parsowane")
+    func amountsWithZlotySuffix() throws {
+        let sheet = TabularSheet(name: "Cennik", rows: [
+            ["Nazwa", "Cena netto"],
+            ["Abonament", "1 234,56 zł"],
+        ])
+        let mapping = BulkImportEngine.automaticMapping(entity: .products, headers: sheet.headers)
+        let plan = BulkImportEngine.plan(sheet: sheet, entity: .products, mapping: mapping)
+        let product = try #require(plan.products.first)
+        #expect(product.basePriceNet == 1234.56)
+    }
+
+    @Test("Typ dokumentu jest normalizowany do słownika aplikacji")
+    func documentTypeNormalization() {
+        let sheet = TabularSheet(name: "Faktury", rows: [
+            ["Numer", "Data", "Kontrahent", "Netto", "Typ dokumentu"],
+            ["FV/1", "2026-07-01", "Klient", "100", "Faktura VAT"],
+            ["FV/2", "2026-07-02", "Klient", "100", "Faktura zaliczkowa"],
+            ["FV/3", "2026-07-03", "Klient", "100", "pro-forma"],
+            ["FV/4", "2026-07-04", "Klient", "100", "Paragon"],
+        ])
+        let plan = BulkImportEngine.plan(
+            sheet: sheet, entity: .invoices,
+            mapping: [.invoiceNumber: 0, .invoiceIssueDate: 1, .invoiceContractorName: 2,
+                      .invoiceNet: 3, .invoiceDocumentType: 4],
+            options: .init(company: .init(name: "Moja Firma", nip: "1111111111"))
+        )
+        #expect(plan.invoices.map(\.documentType) == ["VAT", "ZAL", "PRO", "VAT"])
+        #expect(plan.issues.contains { $0.severity == .warning && $0.message.contains("Paragon") })
+    }
+
     @Test("Plik CSV Windows-1250 zachowuje polskie znaki")
     func windows1250() throws {
         let text = "Nazwa;NIP\r\nZażółć;5260250274\r\n"
@@ -260,6 +303,45 @@ struct BulkImportParserTests {
         #expect(sheet.name == "Dane")
         #expect(sheet.headers == ["Numer faktury", "Data wystawienia", "NIP", "EAN"])
         #expect(sheet.dataRows[0] == ["FV/1", "1900-01-01", "5260250274", "00590123456789"])
+    }
+
+    @Test("XLSX z prefiksami przestrzeni nazw (x:) jest czytany jak bez prefiksów")
+    func xlsxNamespacePrefixes() throws {
+        var writer = ZipWriter()
+        writer.addFile(path: "xl/workbook.xml", data: Data("""
+        <?xml version="1.0" encoding="UTF-8"?>
+        <x:workbook xmlns:x="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+          <x:sheets><x:sheet name="Arkusz1" sheetId="1" r:id="rId1"/></x:sheets>
+        </x:workbook>
+        """.utf8))
+        writer.addFile(path: "xl/_rels/workbook.xml.rels", data: Data("""
+        <?xml version="1.0" encoding="UTF-8"?>
+        <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+          <Relationship Id="rId1" Type="worksheet" Target="worksheets/sheet1.xml"/>
+        </Relationships>
+        """.utf8))
+        writer.addFile(path: "xl/sharedStrings.xml", data: Data("""
+        <?xml version="1.0" encoding="UTF-8"?>
+        <x:sst xmlns:x="http://schemas.openxmlformats.org/spreadsheetml/2006/main" count="2" uniqueCount="2">
+          <x:si><x:t>Nazwa</x:t></x:si><x:si><x:t>NIP</x:t></x:si>
+        </x:sst>
+        """.utf8))
+        writer.addFile(path: "xl/worksheets/sheet1.xml", data: Data("""
+        <?xml version="1.0" encoding="UTF-8"?>
+        <x:worksheet xmlns:x="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><x:sheetData>
+          <x:row r="1"><x:c r="A1" t="s"><x:v>0</x:v></x:c><x:c r="B1" t="s"><x:v>1</x:v></x:c></x:row>
+          <x:row r="2"><x:c r="A2" t="inlineStr"><x:is><x:t>ACME</x:t></x:is></x:c><x:c r="B2"><x:v>5260250274</x:v></x:c></x:row>
+        </x:sheetData></x:worksheet>
+        """.utf8))
+
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("bulk-import-\(UUID().uuidString).xlsx")
+        try writer.finalized().write(to: url)
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        let sheet = try TabularFileReader.read(url: url)
+        #expect(sheet.headers == ["Nazwa", "NIP"])
+        #expect(sheet.dataRows[0] == ["ACME", "5260250274"])
     }
 }
 

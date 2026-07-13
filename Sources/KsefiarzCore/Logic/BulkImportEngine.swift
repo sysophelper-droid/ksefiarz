@@ -639,7 +639,9 @@ public enum BulkImportEngine {
                     currency: nonEmpty(value(.invoiceCurrency, row, mapping), default: "PLN").uppercased(),
                     exchangeRate: exchangeRate ?? 0,
                     splitPayment: boolean(value(.invoiceSplitPayment, row, mapping)) ?? false,
-                    documentType: nonEmpty(value(.invoiceDocumentType, row, mapping), default: "VAT").uppercased(),
+                    documentType: normalizedDocumentType(
+                        value(.invoiceDocumentType, row, mapping), rowNumber, &plan
+                    ),
                     notes: value(.invoiceNotes, row, mapping),
                     costCategory: value(.invoiceCostCategory, row, mapping),
                     kind: kind,
@@ -807,6 +809,8 @@ public enum BulkImportEngine {
         var cleaned = text
             .replacingOccurrences(of: "\u{00A0}", with: "")
             .replacingOccurrences(of: " ", with: "")
+            .replacingOccurrences(of: "zł", with: "", options: .caseInsensitive)
+            .replacingOccurrences(of: "zl", with: "", options: .caseInsensitive)
             .replacingOccurrences(of: "PLN", with: "", options: .caseInsensitive)
             .replacingOccurrences(of: "EUR", with: "", options: .caseInsensitive)
             .replacingOccurrences(of: "USD", with: "", options: .caseInsensitive)
@@ -866,6 +870,42 @@ public enum BulkImportEngine {
         switch normalizedHeader(text) {
         case "usluga", "service", "u": return .service
         default: return .goods
+        }
+    }
+
+    /// `Invoice.documentTypeRaw` to zamknięty słownik (filtry typów, wykrywanie
+    /// korekt) — wartości z pliku sprowadzamy do znanych kodów, a nieznane
+    /// zgłaszamy ostrzeżeniem i traktujemy jak zwykłą fakturę VAT.
+    private static func normalizedDocumentType(
+        _ text: String, _ rowNumber: Int, _ plan: inout BulkImportPlan
+    ) -> String {
+        switch normalizedHeader(text) {
+        case "", "vat", "faktura", "faktura vat", "invoice", "sales invoice":
+            return "VAT"
+        case "zal", "zaliczka", "zaliczkowa", "faktura zaliczkowa", "advance", "advance invoice", "prepayment":
+            return "ZAL"
+        case "roz", "rozliczeniowa", "koncowa", "faktura rozliczeniowa", "faktura koncowa", "final", "final invoice":
+            return "ROZ"
+        case "upr", "uproszczona", "faktura uproszczona", "simplified":
+            return "UPR"
+        case "vat rr", "rr", "faktura rr", "faktura vat rr":
+            return "VAT_RR"
+        case "kor", "korekta", "korygujaca", "faktura korygujaca", "korekta faktury", "correction", "credit note":
+            return "KOR"
+        case "kor zal", "korekta zaliczki", "korekta faktury zaliczkowej":
+            return "KOR_ZAL"
+        case "kor roz", "korekta rozliczeniowej", "korekta faktury rozliczeniowej":
+            return "KOR_ROZ"
+        case "kor vat rr", "korekta rr", "korekta vat rr":
+            return "KOR_VAT_RR"
+        case "pro", "proforma", "pro forma", "faktura proforma", "faktura pro forma":
+            return "PRO"
+        default:
+            plan.issues.append(.init(
+                row: rowNumber, severity: .warning,
+                message: "Nieznany typ dokumentu „\(text)”; przyjęto zwykłą fakturę VAT."
+            ))
+            return "VAT"
         }
     }
 
