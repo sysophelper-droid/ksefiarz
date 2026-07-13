@@ -137,7 +137,9 @@ Sources/KsefiarzCore/
                klasyfikacja statusu VAT VATRegistrationStatus, model wyniku
                ContractorVerificationResult z ustaleniami i wagami
                OK/info/ostrzeżenie/krytyczne, budowa werdyktu z 3 źródeł —
-               NIP, Biała lista, uprawnienia KSeF Received)
+               NIP, Biała lista, uprawnienia KSeF Received),
+               ContractorHistory (dopasowanie dokumentów po znormalizowanym
+               NIP, salda per waluta, średni czas płatności i scoring)
   Views/       MainContentView (NavigationSplitView), InvoiceListView, InvoiceDetailView,
                NewInvoiceView (nowa/edycja/korekta), NewPurchaseView (zakup
                spoza KSeF), ReportsView (sekcja Raporty), DashboardView,
@@ -149,6 +151,8 @@ Sources/KsefiarzCore/
                ContractorVerificationView (karta „Weryfikacja kontrahenta” —
                status VAT z Białej listy + relacja uprawnień KSeF; z menu
                kontekstowego listy kontrahentów i z edytora kontrahenta),
+               ContractorHistoryView (jedna karta dokumentów, sald i
+               terminowości; szczegóły faktury po podwójnym kliknięciu),
                KPiRView (tabela, edycja lokalnej klasyfikacji i CSV),
                RyczaltView (ewidencja przychodów: tabela ze stawką, podział
                przychodu/ryczałtu per stawka, edycja wpisu i CSV — pokazywana
@@ -289,6 +293,19 @@ Scripts/build-app.sh                   # składanie bundla .app
   Realny status podatnika (czynny/zwolniony) pochodzi z Wykazu podatników VAT
   (`ContractorLookupService`, poza KSeF). Feature A7 łączy oba źródła
   (`ContractorVerificationService`).
+- **Historia kontrahenta (D2)**: `ContractorHistory` dopasowuje sprzedaż po
+  `buyerNIP`, a zakupy po `sellerNIP`; usuwa separatory i normalizuje polski
+  prefiks `PL`. Ukryte dokumenty są bezwarunkowo pomijane. Otwarte saldo jest
+  liczone jako brutto minus historia wpłat i agregowane osobno per waluta:
+  należności dla sprzedaży, zobowiązania dla zakupów oraz saldo netto
+  (należności minus zobowiązania). Ujemne korekty zachowują znak. Średni czas
+  płatności i terminowość dotyczą tylko sprzedaży, bo płatność zakupu ocenia
+  nas, nie kontrahenta. Wiarygodna data pełnej zapłaty pochodzi z `paymentDate`
+  albo z wpłaty domykającej brutto; ręczny `isPaid` bez daty nie wchodzi do
+  średniej ani scoringu. Próba terminowości obejmuje rozliczone faktury z
+  terminem i datą zapłaty oraz niezapłacone faktury już po terminie. Progi:
+  co najmniej 90% — bardzo dobra, 75% — dobra, 50% — wymaga uwagi, niżej —
+  słaba; bez próby widok jawnie pokazuje brak danych.
 - Tryby offline: zwykła sesja interaktywna z `offlineMode: true` w żądaniu
   wysyłki (WSPÓLNA flaga dla wszystkich trybów — API nie rozróżnia);
   dosyłany XML musi być BAJT W BAJT tym, z którego policzono skrót

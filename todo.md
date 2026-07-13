@@ -56,8 +56,6 @@ kolejność dowolna. ⚠️ operacje modyfikujące KSeF testować wyłącznie na
 
 - [ ] ⭐ D1. OCR faktur kosztowych (macOS Vision) — skan/PDF papierowej faktury
   → dane do „zakupu spoza KSeF"; natywnie, bez zależności zewnętrznych.
-- [ ] ⭐ D2. Karta / historia kontrahenta — jeden widok: wszystkie dokumenty,
-  saldo, średni czas płatności, terminowość (scoring).
 - [ ] D3. Weryfikacja VIES (kontrahenci UE) — sprawdzenie VAT-UE analogicznie
   do Białej listy dla krajowych.
 - [ ] D4. Import wsadowy z CSV/Excel — masowy import kontrahentów, towarów,
@@ -87,6 +85,20 @@ kolejność dowolna. ⚠️ operacje modyfikujące KSeF testować wyłącznie na
   (dziś zaszyte PL/EN).
 
 ## Zrealizowane
+
+### Karta i historia kontrahenta (13.07.2026)
+
+- [x] ⭐ D2. Ze słownika kontrahentów dostępna jest jedna karta wszystkich
+  widocznych dokumentów sprzedaży i zakupu z otwieraniem szczegółów,
+  należnościami, zobowiązaniami i saldem netto osobno per waluta. Średni czas
+  płatności opiera się na jawnej dacie zapłaty albo wpłacie domykającej brutto;
+  ręczny znacznik bez daty nie tworzy fałszywej precyzji. Scoring terminowości
+  odbiorcy (bardzo dobra / dobra / wymaga uwagi / słaba) liczy sprzedaż
+  rozliczoną z terminem oraz bieżące zaległości; zakupy nie oceniają
+  kontrahenta, bo ich płatnikiem jest nasza firma. Dopasowanie normalizuje NIP,
+  ujemne korekty zachowują znak, dokumenty ukryte pozostają poza statystyką.
+  Czysta logika `ContractorHistory` ma testy sald, walut, korekt, częściowych
+  wpłat, scoringu, ról stron oraz przypadków bez danych.
 
 ### Weryfikacja kontrahenta w KSeF (13.07.2026)
 

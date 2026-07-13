@@ -43,7 +43,8 @@ Sources/
     │   ├── PermissionsEngine.swift # walidacja i normalizacja uprawnień KSeF
     │   ├── InvoiceAutomationEngine.swift # duplikaty i terminy cykli
     │   ├── KPiREngine.swift       # KPiR 2026: klasyfikacja, sumy i CSV 1–19
-    │   └── RyczaltEngine.swift    # ryczałt 2026: stawki, przychód i CSV 1–17
+    │   ├── RyczaltEngine.swift    # ryczałt 2026: stawki, przychód i CSV 1–17
+    │   └── ContractorHistory.swift # salda i scoring płatniczy kontrahenta
     └── Views/
         ├── MainContentView.swift # NavigationSplitView + pasek boczny
         ├── DashboardView.swift   # Kokpit: podsumowania, płatności na 7 dni
@@ -52,10 +53,11 @@ Sources/
         ├── NewInvoiceView.swift  # formularz wystawiania faktury z walidacją
         ├── PermissionsView.swift # sekcja „Uprawnienia” + arkusz nadawania
         ├── ContractorVerificationView.swift # karta weryfikacji kontrahenta
+        ├── ContractorHistoryView.swift # dokumenty, salda i terminowość kontrahenta
         ├── InvoiceAutomationView.swift # szablony, cykle i kolejka zatwierdzeń
         ├── HiddenInvoicesView.swift # archiwum „Nieuprawnione / Ukryte”
         └── SettingsView.swift    # NIP, token KSeF, środowisko
-Tests/KsefiarzCoreTests/          # 671 testów (Swift Testing) — model, parser, usługa, kryptografia, logika
+Tests/KsefiarzCoreTests/          # 677 testów (Swift Testing) — model, parser, usługa, kryptografia, logika
 ```
 
 ## Funkcje
@@ -116,6 +118,15 @@ Tests/KsefiarzCoreTests/          # 671 testów (Swift Testing) — model, parse
   „aktywnego konta” — faktura trafia do odbiorcy po jego NIP automatycznie,
   więc karta weryfikuje status VAT i relację uprawnień, a nie „aktywację
   konta” (której w KSeF nie ma).
+- **Historia kontrahenta** — ze słownika kontrahentów można otworzyć jedną
+  kartę z wszystkimi widocznymi dokumentami sprzedaży i zakupu, przejść
+  podwójnym kliknięciem do szczegółów faktury oraz sprawdzić należności,
+  zobowiązania i saldo netto osobno dla każdej waluty. Karta pokazuje średni
+  czas pełnej zapłaty oraz scoring terminowości odbiorcy (bardzo dobra / dobra /
+  wymaga uwagi / słaba). Ocena dotyczy wyłącznie sprzedaży — terminowość
+  zakupów opisuje zachowanie naszej firmy — i nie zgaduje daty zapłaty z
+  samego ręcznego znacznika. Uwzględnia natomiast otwarte faktury po terminie;
+  dokumenty ukryte są pomijane tak jak w pozostałych statystykach.
 - **Tryby offline (offline24 / niedostępność / awaria)** — świadome
   wystawianie faktur bez połączenia z KSeF oraz automatyczne przejście
   w offline przy braku sieci. Dokument dostaje utrwalony skrót SHA-256
