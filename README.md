@@ -54,7 +54,7 @@ Sources/
         ├── InvoiceAutomationView.swift # szablony, cykle i kolejka zatwierdzeń
         ├── HiddenInvoicesView.swift # archiwum „Nieuprawnione / Ukryte”
         └── SettingsView.swift    # NIP, token KSeF, środowisko
-Tests/KsefiarzCoreTests/          # 637 testów (Swift Testing) — model, parser, usługa, kryptografia, logika
+Tests/KsefiarzCoreTests/          # 649 testów (Swift Testing) — model, parser, usługa, kryptografia, logika
 ```
 
 ## Funkcje
@@ -275,6 +275,19 @@ Tests/KsefiarzCoreTests/          # 637 testów (Swift Testing) — model, parse
     kontrahenta, oraz wiersz sumy przychodów per stawka.
   - We wszystkich ewidencjach faktury ukryte nigdy nie wchodzą do zestawienia,
     a lokalna klasyfikacja podatkowa wchodzi do kopii zapasowej.
+- **Kalendarz i prognoza podatkowa** — Kokpit pokazuje cztery najbliższe
+  obowiązki: ZUS/DRA i zaliczkę PIT (standardowo do 20. dnia), miesięczny
+  JPK_V7 oraz płatność VAT (do 25. dnia). Terminy przypadające w weekend lub
+  święto są przesuwane na pierwszy dzień roboczy. JPK pozostaje miesięczny
+  także przy kwartalnym VAT; cykl VAT i PIT/ryczałtu ustawia się w
+  Ustawieniach → Firma. Podatnik zwolniony z VAT może wyłączyć te dwa
+  obowiązki i prognozę VAT.
+  Prognoza bieżącego miesiąca albo kwartału pokazuje saldo VAT oraz szacowany
+  PIT: dla KPiR według skali 12%/32% z kwotą zmniejszającą albo liniowo 19%,
+  a dla ryczałtu według stawek przypisanych do wpisów. Kwoty są robocze —
+  opierają się na fakturach i lokalnej klasyfikacji, bez składek
+  ZUS/zdrowotnej, ulg, innych źródeł, proporcji VAT i faktycznie wpłaconych
+  zaliczek; przed zapłatą wymagają weryfikacji księgowej.
 - **Rozbudowany Kokpit** — oprócz podsumowań kwot i najbliższych płatności:
   VAT należny/naliczony/saldo w analizowanym okresie, wykres przepływów
   pieniężnych z ostatnich 6 miesięcy (wg ewidencji wpłat), struktura wiekowa

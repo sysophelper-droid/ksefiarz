@@ -33,8 +33,6 @@ kolejność dowolna. ⚠️ operacje modyfikujące KSeF testować wyłącznie na
 
 #### B. Podatki dochodowe / ewidencje
 
-- [ ] ⭐ B3. Kalendarz i prognoza podatkowa — terminarz (JPK do 25., VAT,
-  zaliczka PIT, ZUS) + szacunek kwot VAT/PIT do zapłaty za bieżący okres.
 - [ ] B4. JPK_FA na żądanie — pełny JPK faktur (nie ewidencja), format dla
   kontroli US. Rzadkie.
 - [ ] B5. Ewidencja JPK_V7 dla VAT RR — ujęcie zryczałtowanego zwrotu po
@@ -91,6 +89,19 @@ kolejność dowolna. ⚠️ operacje modyfikujące KSeF testować wyłącznie na
   (dziś zaszyte PL/EN).
 
 ## Zrealizowane
+
+### Kalendarz i prognoza podatkowa (13.07.2026)
+
+- [x] ⭐ B3. Kokpit pokazuje terminarz ZUS/DRA, zaliczki PIT, miesięcznego
+  JPK_V7 i płatności VAT z przesuwaniem 20./25. dnia na pierwszy dzień roboczy.
+  Osobne ustawienia obsługują miesięczny lub kwartalny VAT i PIT/ryczałt,
+  przy czym JPK zawsze pozostaje miesięczny. Prognoza bieżącego okresu liczy
+  saldo VAT z reguł JPK oraz PIT: skalę 12%/32% lub liniowy 19% narastająco
+  z KPiR albo ryczałt według stawek wpisów. UI jawnie opisuje ograniczenia
+  szacunku (bez składek, ulg, innych dochodów, proporcji VAT i wpłat).
+  Podatnik zwolniony może wyłączyć terminy JPK/VAT; VAT RR jest pomijany
+  w podatku naliczonym z ostrzeżeniem (do realizacji B5). Ustawienia wchodzą
+  do kopii zapasowej v10; logika ma osobny suite testów.
 
 ### Ewidencja przychodów — ryczałt (13.07.2026)
 

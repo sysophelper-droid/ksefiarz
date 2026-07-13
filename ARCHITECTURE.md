@@ -112,6 +112,10 @@ Sources/KsefiarzCore/
                ryczałtu per stawka, RyczaltCSVExporter 17 kolumn + wiersz
                sumy; enum TaxForm wybiera KPiR albo ryczałt — obie
                wykluczające, AppSettingsKeys.taxForm),
+               TaxCalendarEngine (najbliższe terminy ZUS/PIT/JPK/VAT z
+               przesunięciem przez PolishBusinessCalendar; miesięczny lub
+               kwartalny okres VAT i PIT; prognoza VAT oraz PIT dla
+               KPiR — skala/liniowy — albo ryczałtu),
                ReportsEngine (raporty: top kontrahenci, przychody per
                towar/usługa, koszty per kategoria; CostCategories —
                podpowiedzi kategorii), MenuBarStatus (liczniki dosłań
@@ -189,7 +193,37 @@ Scripts/build-app.sh                   # składanie bundla .app
   (`isExcludedFromRyczalt`) pomijane; wykluczone można roboczo pokazać.
 - CSV (`RyczaltCSVExporter`) to pełny 17-kolumnowy eksport roboczy z wierszem
   sumy przychodów per stawka — nie struktura JPK_EWP. Metadane ryczałtu objęte
-  `BackupService` od wersji 9 (klucze `taxForm`/`ryczaltDefaultRate` też).
+  `BackupService` od wersji 9. Od wersji 10 kopia obejmuje też ustawienia
+  prognozy: metodę PIT dla KPiR oraz cykle rozliczeń PIT/ryczałtu i VAT.
+
+## Kalendarz i prognoza podatkowa
+
+- `TaxCalendarEngine` jest czystym silnikiem z wstrzykiwaną datą i kalendarzem.
+  Zwraca po jednym najbliższym terminie dla ZUS/DRA, zaliczki PIT, JPK_V7
+  i płatności VAT. Nominalny 20. lub 25. dzień przesuwa przez
+  `PolishBusinessCalendar` na pierwszy dzień roboczy.
+- JPK_V7 jest zawsze miesięczny. Płatność VAT oraz zaliczka PIT/ryczałt mogą
+  być miesięczne albo kwartalne (`TaxSettlementCycle`, osobne klucze
+  `vatSettlementCycle` i `incomeTaxSettlementCycle`). Przełącznik
+  `isActiveVATPayer` usuwa terminy JPK/VAT i zeruje prognozę u podatnika
+  zwolnionego. ZUS przyjmuje termin
+  20. dnia właściwy dla przedsiębiorcy / płatnika bez osobowości prawnej.
+- Prognoza VAT używa tej samej daty okresu i tych samych koszyków/przeliczeń
+  PLN co `JPKV7Generator`; faktury ukryte są pomijane. Wynik nie modeluje
+  proporcji odliczenia, ulg ani przeniesionej nadwyżki. Faktury VAT RR nie
+  są automatycznie zaliczane do podatku naliczonego (B5 pozostaje osobnym
+  zadaniem), a prognoza pokazuje ostrzeżenie.
+- Dla KPiR prognoza liczy podatek narastająco od dochodu roku: skala
+  12% do 120 000 zł i 32% powyżej, z kwotą zmniejszającą 3 600 zł, albo
+  podatek liniowy 19%. Kwota okresu jest różnicą podatku narastającego na
+  koniec bieżącego i poprzedniego okresu. Dla ryczałtu używane jest
+  `RyczaltEngine.summary` i stawki wpisów. Nie są odejmowane składki,
+  ulgi, inne dochody ani faktycznie wpłacone zaliczki — UI jawnie oznacza
+  wynik jako szacunek wymagający weryfikacji księgowej.
+- Reguły terminów zweryfikowano 13.07.2026 w źródłach urzędowych:
+  [JPK_VAT — podatki.gov.pl](https://www.podatki.gov.pl/podatki-firmowe/jednolity-plik-kontrolny/jpk_vat/jpk_vat),
+  [ryczałt — podatki.gov.pl](https://www.podatki.gov.pl/podatki-firmowe/pit/informacje-podstawowe/co-jest-opodatkowane/opodatkowanie-ryczaltem-od-przychodow-ewidencjonowanych)
+  i [terminy ZUS](https://www.zus.pl/en/firmy/rozliczenia-z-zus/dokumenty-rozliczeniowe/termin-skladania-dokumentow-i-oplacania-skladek).
 
 ## API KSeF 2.0 — fakty krytyczne
 
