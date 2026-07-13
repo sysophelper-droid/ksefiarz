@@ -39,6 +39,9 @@ public struct InvoiceListView: View {
     /// Zamrożony wybór zakupów przekazywany do arkusza przelewów bankowych.
     @State private var bankTransferInvoices: [Invoice] = []
     @State private var showingBankTransferExport = false
+    /// Zamrożone zaznaczenie przekazywane do arkusza wysyłki wsadowej.
+    @State private var batchSendPreselection = Set<UUID>()
+    @State private var showingBatchSend = false
 
     @AppStorage(AppSettingsKeys.prepaidForms) private var prepaidFormsRaw = PaymentFormPolicy.encode(PaymentFormPolicy.defaultPrepaidForms)
 
@@ -164,6 +167,9 @@ public struct InvoiceListView: View {
             .sheet(isPresented: $showingBankTransferExport) {
                 BankTransferExportView(invoices: bankTransferInvoices)
             }
+            .sheet(isPresented: $showingBatchSend) {
+                BatchSendView(preselected: batchSendPreselection)
+            }
             .sheet(item: $duplicatedInvoice) { invoice in
                 NewInvoiceView(
                     initialDraft: InvoiceAutomationEngine.duplicate(invoice),
@@ -288,6 +294,18 @@ public struct InvoiceListView: View {
                 Label("Ewidencje", systemImage: "doc.badge.gearshape")
             }
             .help("Eksport ewidencji VAT wybranego miesiąca: JPK_V7M/V7K (sprzedaż + zakup, GTU, procedury, deklaracja miesięczna lub kwartalna) lub VAT-UE (WDT, WNT, usługi UE)")
+        }
+        if kind == .sales {
+            ToolbarItem {
+                // Wysyłka wsadowa (sesja batch/ZIP) — masowa wysyłka
+                // lokalnych dokumentów, np. po migracji z innego systemu.
+                Button {
+                    openBatchSend(preselection: selection)
+                } label: {
+                    Label("Wyślij wsadowo do KSeF", systemImage: "square.and.arrow.up.on.square")
+                }
+                .help("Wyślij lokalne dokumenty jedną paczką ZIP (sesja wsadowa KSeF) — zaznaczone albo wszystkie kwalifikujące się")
+            }
         }
         ToolbarItem {
             Button {
@@ -443,6 +461,13 @@ public struct InvoiceListView: View {
             Button("Oznacz \(selected.count) jako nieopłacone") {
                 selected.forEach { $0.isPaid = false }
             }
+            // Wysyłka wsadowa zaznaczonych dokumentów lokalnych.
+            if !BatchSendEngine.eligible(in: selected).isEmpty {
+                Divider()
+                Button("Wyślij wsadowo do KSeF…") {
+                    openBatchSend(preselection: ids)
+                }
+            }
             if kind == .purchase {
                 Divider()
                 Button("Eksportuj \(selected.count) przelewów do banku…") {
@@ -472,6 +497,12 @@ public struct InvoiceListView: View {
     private func openBankTransferExport(for invoices: [Invoice]) {
         bankTransferInvoices = invoices
         showingBankTransferExport = true
+    }
+
+    /// Otwiera arkusz wysyłki wsadowej z zamrożonym zaznaczeniem listy.
+    private func openBatchSend(preselection: Set<UUID>) {
+        batchSendPreselection = preselection
+        showingBatchSend = true
     }
 
     // MARK: Import wyciągu bankowego

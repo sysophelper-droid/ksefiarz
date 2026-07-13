@@ -73,6 +73,20 @@ Tests/KsefiarzCoreTests/          # Swift Testing — model, parser, usługa, kr
   (`api-test`/`api-demo`/`api.ksef.mf.gov.pl`): uwierzytelnienie certyfikatem
   lub tokenem, pobieranie faktur zakupowych (metadane + oryginalny XML),
   wystawianie faktur w sesji interaktywnej z obowiązkowym szyfrowaniem AES-256-CBC.
+- **Wysyłka wsadowa (sesja batch/ZIP)** — przycisk „Wyślij wsadowo do KSeF”
+  na liście sprzedaży (oraz akcja zbiorcza w menu kontekstowym zaznaczenia)
+  wysyła wiele lokalnych dokumentów jedną paczką ZIP zamiast pojedynczych
+  sesji interaktywnych — do migracji z innego systemu (np. po imporcie
+  CSV/Excel) i nadrabiania zaległości. Arkusz pokazuje kwalifikujące się
+  dokumenty (lokalne, jeszcze nie przekazane do KSeF — także samofaktury
+  i VAT RR; FA(3) i FA_RR(1) idą w osobnych sesjach), prosi o potwierdzenie
+  z nazwą środowiska i po przetworzeniu paczki pokazuje wynik per dokument
+  (numer KSeF / odrzucenie / w toku). Statusy są korelowane po skrócie
+  SHA-256 dokumentu (zalecenie MF), UPO pobierane wspólną ścieżką, a sesje
+  przetwarzane dłużej domyka automatyczna synchronizacja. Dokument, którego
+  paczka nie dostarczyła (błąd całej sesji), wraca do stanu lokalnego i można
+  go wysłać ponownie. Przepływ zweryfikowany e2e na środowisku testowym KSeF
+  (paczka 3 faktur → 3 numery KSeF + UPO).
 - **Faktury VAT RR (rolnik ryczałtowy)** — w formularzu wystawiania można
   wybrać dokument VAT RR, wskazać dostawcę–rolnika, klasę/jakość produktu
   rolnego oraz stawkę zryczałtowanego zwrotu 7% (lub historyczną 6,5%).

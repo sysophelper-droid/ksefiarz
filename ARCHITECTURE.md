@@ -34,7 +34,11 @@ Sources/KsefiarzCore/
                od agregacji faktur — szczegóły w sekcji „Faktura proforma"),
                ProformaDraft (+ init(from: Proforma), invoiceDraft() →
                InvoiceDraft do konwersji proformy na fakturę VAT)
-  Services/    KSeFService (API 2.0), KSeFCrypto, FA2XML (generator+parser), InvoiceValidator,
+  Services/    KSeFService (API 2.0), KSeFBatchService (rozszerzenie KSeFService
+               o sesję wsadową batch/ZIP: otwarcie sesji, upload zaszyfrowanych
+               części paczki pod adresy magazynu, zamknięcie, status sesji
+               i wyniki per faktura ze stronicowaniem — szczegóły w sekcji
+               „Sesja wsadowa"), KSeFCrypto, FA2XML (generator+parser), InvoiceValidator,
                BackupService (format v8 obejmuje metadane KPiR),
                FileExportService (NSSave/OpenPanel), InvoicePDFGenerator (+ kody QR,
                opcjonalny branding własnych dokumentów: logo, dwa kolory,
@@ -108,6 +112,12 @@ Sources/KsefiarzCore/
                osadzenie InvoicePDFGenerator; szczegóły niżej),
                InvoiceSyncEngine (wspólny sync: ręczny,
                przy starcie i cykliczny — automatyka w MainContentView),
+               KSeFBatchPackage (czysta paczka ZIP sesji wsadowej: budowa
+               archiwum, podział binarny na części ≤100 MB, limity),
+               BatchSendEngine (wysyłka wsadowa: kwalifikacja lokalnych
+               dokumentów, plan per schema FA(3)/FA_RR(1), oznaczanie
+               wysłanych, korelacja wyników po skrócie SHA-256, domykanie
+               sesji przez SyncCenter — sekcja „Sesja wsadowa"),
                PolishBusinessCalendar (dni robocze/święta — terminy trybów
                offline), OfflineQueueEngine (kolejka dosłań offline),
                KSeFAvailabilityPolicy (mapowanie MAINTENANCE/FAILURE na
@@ -191,6 +201,8 @@ Sources/KsefiarzCore/
                wFirma i układów własnych, typowanie kwot/dat/flag, walidacja,
                grupowanie pozycji faktur, deduplikacja i plan importu),
   Views/       MainContentView (NavigationSplitView), InvoiceListView, InvoiceDetailView,
+               BatchSendView (arkusz wysyłki wsadowej — wejście z paska
+               narzędzi listy sprzedaży i menu kontekstowego zaznaczenia),
                NewInvoiceView (nowa/edycja/korekta), NewPurchaseView (zakup
                spoza KSeF), ReportsView (sekcja Raporty), DashboardView,
                SettingsView (zakładka Firma: import/podgląd logo,
@@ -561,6 +573,68 @@ Scripts/build-app.sh                   # składanie bundla .app
 Fakty o API/schemie weryfikuj u źródła (OpenAPI
 `https://api-test.ksef.mf.gov.pl/docs/v2/openapi.json`, XSD z CIRFMF/ksef-api,
 docs CIRFMF/ksef-docs) — nie zgaduj pól.
+
+## Sesja wsadowa (A4) — wysyłka batch/ZIP
+
+Fakty zweryfikowane u źródła (OpenAPI 2.0, ksef-docs `sesja-wsadowa.md`,
+klient referencyjny CIRFMF/ksef-client-csharp) i potwierdzone e2e na
+środowisku testowym 14.07.2026 (paczka 3 FA(3) → 3 numery KSeF + UPO):
+
+- **Przepływ**: ZIP ze wszystkimi XML → podział binarny na części
+  (≤100 MB PRZED szyfrowaniem, maks. 50 części, paczka ≤5 GB; `ZipWriter`
+  bez ZIP64 daje dodatkowy twardy limit 4 GB w `KSeFBatchPackage`) →
+  szyfrowanie KAŻDEJ części AES-256-CBC/PKCS#7 wspólnym kluczem sesji →
+  `POST /sessions/batch` (formCode + `batchFile{fileSize, fileHash}` z SUROWEGO
+  ZIP + `fileParts[{ordinalNumber, fileSize, fileHash}]` z części
+  ZASZYFROWANYCH + `encryption`) → upload części pod adresy
+  z `partUploadRequests` (dokładnie wskazana metoda/URL/nagłówki magazynu
+  Azure, surowe bajty w body, **BEZ tokenu dostępu**; łącznik `ordinalNumber`)
+  → `POST /sessions/batch/{ref}/close` → polling `GET /sessions/{ref}` →
+  wyniki `GET /sessions/{ref}/invoices` (stronicowanie: żądanie z nagłówkiem
+  `x-continuation-token`, token następnej strony w treści odpowiedzi).
+- **IV nie jest doklejany do szyfrogramu** — mimo mylącego zdania w ksef-docs
+  („IV dołączany jako prefiks") klient referencyjny przekazuje IV wyłącznie
+  w `encryption.initializationVector`, dokładnie jak sesja interaktywna
+  (zweryfikowane w `CryptographyService.cs` i potwierdzone e2e).
+- **Jedna schema na sesję** — formCode dotyczy całej paczki; FA(3) i FA_RR(1)
+  wymagają OSOBNYCH sesji (`BatchSendEngine.plan` grupuje dokumenty).
+- **Kody statusu sesji wsadowej**: 100 rozpoczęta, 150 w przetwarzaniu,
+  200 przetworzona pomyślnie (per dokument nadal możliwe odrzucenia),
+  405/415/420/430/435/440/445/500 — błędy CAŁEJ paczki; przy kodzie ≥400
+  żaden dokument nie został przyjęty. Limit czasu uploadu: liczba części
+  × 20 min na każdą część.
+- **Korelacja wyników po `invoiceHash`** (zalecenie ksef-docs): sesja NIE
+  zwraca referencji per faktura przy wysyłce — dopiero wyniki po przetworzeniu
+  (`invoiceHash` = SHA-256 oryginalnego XML). Aplikacja zapisuje wysłany XML
+  w `rawXmlContent` i stan „w toku" z numerem sesji, ale BEZ
+  `ksefInvoiceReference` — po tym stanie `BatchSendEngine.pendingReconciliation`
+  rozpoznaje dokumenty wsadowe do domknięcia (wysyłka interaktywna zawsze ma
+  referencję). Domykanie jest wpięte w `SyncCenter.reconcileSubmissions`
+  (ręczne „Pobierz z KSeF", cykl 60 s, Centrum synchronizacji).
+- **Zasada bezpieczeństwa cofania**: dokument bez wyniku wraca do stanu
+  lokalnego TYLKO gdy sesja zakończyła się błędem paczki (≥400) albo jest
+  przetworzona i pełna lista wyników go nie zawiera. Kompletność listy przy
+  statusie 200 jest potwierdzana licznikami sesji (`successfulInvoiceCount +
+  failedInvoiceCount`, awaryjnie `invoiceCount`). Lista pusta, częściowa,
+  wadliwa lub bez liczników zostawia dokument „w toku" — cofnięcie dokumentu,
+  który KSeF przyjął, groziłoby duplikatem przy ponownej wysyłce. Stronicowanie
+  odrzuca powtórzony token i nie zwraca częściowych wyników po wyczerpaniu
+  bezpiecznego limitu stron.
+- **Niejednoznaczny wynik `close`**: po wysłaniu wszystkich części błąd
+  odpowiedzi na `POST /sessions/batch/{ref}/close` nie może zgubić numeru
+  sesji — serwer mógł przyjąć zamknięcie przed zerwaniem połączenia. Dokumenty
+  pozostają „w toku", a status rozstrzyga bieżące odpytywanie lub późniejsza
+  synchronizacja; dopiero pewny błąd całej paczki przywraca stan lokalny.
+- **UPO i status per dokument** — wspólne endpointy sesji
+  (`/sessions/{ref}/invoices/ksef/{nr}/upo`, `/sessions/{ref}/invoices/{refFaktury}`)
+  działają dla sesji wsadowej tak samo jak interaktywnej; po korelacji
+  dokumenty przechodzą na istniejącą ścieżkę `InvoiceSubmissionStatusEngine`.
+- **Kolejka offline poza paczką** — dosłania offline mają własną ścieżkę
+  (`OfflineQueueEngine`, bajt w bajt); `offlineMode` sesji wsadowej jest
+  flagą całej paczki, więc świadomie nie mieszamy trybów.
+- Znaczniki czasu KSeF miewają 7 cyfr ułamka sekundy
+  (`2025-09-18T12:24:16.0154302+00:00`) — systemowy `ISO8601DateFormatter`
+  tego nie parsuje; `KSeFService.parseKSeFTimestamp` przycina ułamek do 3 cyfr.
 
 ## FA(3) — zasady generowania XML
 

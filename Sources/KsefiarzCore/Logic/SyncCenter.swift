@@ -80,7 +80,8 @@ public enum SyncCenter {
     }
 
     /// Domyka wysyłki: dosyła kolejkę offline24 (zapisany XML bajt w bajt),
-    /// potem statusy przesyłek i UPO. Przebieg trafia do historii tylko wtedy,
+    /// domyka sesje wsadowe (korelacja wyników po skrócie), a potem statusy
+    /// przesyłek i UPO. Przebieg trafia do historii tylko wtedy,
     /// gdy było co robić — automat odpytuje co 60 s i pusta kolejka
     /// zaśmiecałaby historię.
     @discardableResult
@@ -88,7 +89,7 @@ public enum SyncCenter {
         invoices: [Invoice],
         environmentRaw: String,
         trigger: SyncRun.Trigger,
-        using service: KSeFInvoiceSending & KSeFSubmissionStatusProviding,
+        using service: KSeFInvoiceSending & KSeFSubmissionStatusProviding & KSeFBatchStatusProviding,
         context: ModelContext,
         now: Date = .now
     ) async -> SubmissionsOutcome {
@@ -96,16 +97,24 @@ public enum SyncCenter {
         let pendingCount = OfflineQueueEngine.pending(
             in: invoices, environmentRaw: environmentRaw
         ).count
+        let batchPendingCount = BatchSendEngine.pendingReconciliation(
+            in: invoices, environmentRaw: environmentRaw
+        ).count
         let outstandingCount = invoices.filter {
             $0.needsKSeFFollowUp
                 && ($0.ksefEnvironmentRaw.isEmpty || $0.ksefEnvironmentRaw == environmentRaw)
         }.count
-        guard pendingCount + outstandingCount > 0 else {
+        guard pendingCount + batchPendingCount + outstandingCount > 0 else {
             return outcome
         }
 
         let startedAt = now
         let sendSummary = await OfflineQueueEngine.sendPending(
+            invoices, environmentRaw: environmentRaw, using: service, now: now
+        )
+        // Sesje wsadowe domykamy PRZED odświeżaniem statusów — dokument,
+        // który właśnie dostał numer KSeF, w tym samym przebiegu pobierze UPO.
+        let batchSummary = await BatchSendEngine.reconcilePending(
             invoices, environmentRaw: environmentRaw, using: service, now: now
         )
         let refreshSummary = await InvoiceSubmissionStatusEngine.refreshOutstanding(
@@ -114,10 +123,10 @@ public enum SyncCenter {
         try? context.save()
 
         outcome.hadWork = true
-        outcome.processed = sendSummary.sent + refreshSummary.checked
-        outcome.accepted = sendSummary.accepted + refreshSummary.accepted
-        outcome.rejected = sendSummary.rejected + refreshSummary.rejected
-        outcome.failures = sendSummary.failures + refreshSummary.failures
+        outcome.processed = sendSummary.sent + batchSummary.checked + refreshSummary.checked
+        outcome.accepted = sendSummary.accepted + batchSummary.accepted + refreshSummary.accepted
+        outcome.rejected = sendSummary.rejected + batchSummary.rejected + refreshSummary.rejected
+        outcome.failures = sendSummary.failures + batchSummary.failures + refreshSummary.failures
 
         _ = try? record(
             operation: .submissions,

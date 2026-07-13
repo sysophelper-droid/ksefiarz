@@ -46,6 +46,7 @@ public enum KSeFError: LocalizedError, Equatable {
     case invoiceRejected(String)
     case certificateEnrollmentFailed(String)
     case permissionOperationFailed(String)
+    case batchPackageFailed(String)
 
     public var errorDescription: String? {
         switch self {
@@ -76,6 +77,8 @@ public enum KSeFError: LocalizedError, Equatable {
             return "Wniosek o certyfikat KSeF nie powiódł się: \(details)"
         case .permissionOperationFailed(let details):
             return "Operacja na uprawnieniach KSeF nie powiodła się: \(details)"
+        case .batchPackageFailed(let details):
+            return "Paczka wysyłki wsadowej nie powstała: \(details)"
         }
     }
 }
@@ -304,7 +307,9 @@ public final class KSeFService {
     /// Certyfikat KSeF (typ 1) — preferowana metoda uwierzytelnienia;
     /// przy braku lub niepowodzeniu następuje powrót do tokenu KSeF.
     private let certificate: KSeFCertificate?
-    private let transport: HTTPTransport
+    /// Wewnętrzny — sesja wsadowa (KSeFBatchService) wysyła części paczki
+    /// bezpośrednio pod adresy magazynu zwrócone przez API (poza `perform`).
+    let transport: HTTPTransport
     private let publicKeyResolver: PublicKeyResolver
 
     /// Odstęp między kolejnymi odpytaniami o status (testy ustawiają 0).
@@ -475,8 +480,9 @@ public final class KSeFService {
     }
 
     /// Pobiera certyfikat klucza publicznego MF o wskazanym przeznaczeniu
-    /// i zwraca gotowy do użycia klucz publiczny.
-    private func fetchEncryptionKey(usage: String) async throws -> SecKey {
+    /// i zwraca gotowy do użycia klucz publiczny. Wewnętrzny — używany też
+    /// przez sesję wsadową (KSeFBatchService).
+    func fetchEncryptionKey(usage: String) async throws -> SecKey {
         let data = try await perform(path: "security/public-key-certificates", method: "GET", body: nil, bearer: nil)
         let certificates: [PublicKeyCertificateDTO] = try decode(data)
         guard let match = certificates.first(where: { $0.usage.contains(usage) }),
@@ -808,7 +814,8 @@ public final class KSeFService {
         method: String,
         body: Data?,
         bearer: String?,
-        contentType: String = "application/json"
+        contentType: String = "application/json",
+        extraHeaders: [String: String] = [:]
     ) async throws -> Data {
         guard let url = URL(string: environment.baseURL.absoluteString + "/" + path) else {
             throw KSeFError.invalidResponse
@@ -820,6 +827,9 @@ public final class KSeFService {
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         if let bearer {
             request.setValue("Bearer \(bearer)", forHTTPHeaderField: "Authorization")
+        }
+        for (header, value) in extraHeaders {
+            request.setValue(value, forHTTPHeaderField: header)
         }
 
         // KSeF limituje liczbę żądań (8/s) — odpowiedź 429 ponawiamy

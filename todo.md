@@ -19,8 +19,6 @@ kolejność dowolna. ⚠️ operacje modyfikujące KSeF testować wyłącznie na
 
 #### A. Zgodność / KSeF
 
-- [ ] A4. Wsadowa wysyłka do KSeF (sesja batch/ZIP) — masowa wysyłka zamiast
-  pojedynczej sesji interaktywnej (migracja/zaległości). ⚠️ tylko `test`.
 - [ ] A5. Anonimowy dostęp / pobranie faktury po numerze KSeF — wciągnięcie
   faktury zakupowej po numerze KSeF + danych, gdy nie przyszła synchronizacją.
 #### B. Podatki dochodowe / ewidencje
@@ -64,6 +62,32 @@ kolejność dowolna. ⚠️ operacje modyfikujące KSeF testować wyłącznie na
   (dziś zaszyte PL/EN).
 
 ## Zrealizowane
+
+### Wysyłka wsadowa do KSeF — sesja batch/ZIP (14.07.2026)
+
+- [x] A4. Masowa wysyłka lokalnych dokumentów jedną paczką ZIP zamiast
+  pojedynczych sesji interaktywnych (migracja/zaległości, np. po imporcie
+  D4). Przycisk „Wyślij wsadowo do KSeF” na liście sprzedaży + akcja zbiorcza
+  w menu kontekstowym; arkusz z wyborem kwalifikujących się dokumentów
+  (lokalne z cyklem KSeF, także samofaktury i VAT RR), potwierdzeniem
+  z nazwą środowiska, postępem i wynikiem per dokument. Przepływ wg
+  ksef-docs/OpenAPI: ZIP → podział binarny ≤100 MB/≤50 części → szyfrowanie
+  części AES-256-CBC wspólnym kluczem sesji (IV osobno — jak sesja
+  interaktywna; USTALENIE z klienta referencyjnego CIRFMF wbrew mylącemu
+  zdaniu docs o „prefiksie IV”) → `POST /sessions/batch` → upload części pod
+  adresy magazynu (bez tokenu) → close → polling statusu → wyniki
+  ze stronicowaniem `x-continuation-token`. FA(3) i FA_RR(1) w osobnych
+  sesjach (formCode paczki). Korelacja wyników po skrócie SHA-256 dokumentu;
+  dokument „w toku” bez referencji faktury domyka `SyncCenter` (cykl 60 s /
+  ręczna synchronizacja / przycisk „Sprawdź teraz”). Reguła bezpieczeństwa:
+  cofnięcie do stanu lokalnego tylko przy pewnym braku dokumentu w wynikach
+  (błąd paczki ≥400 albo pełna lista bez dokumentu) — pusta lista przy
+  statusie 200 niczego nie cofa (ochrona przed duplikatem). UPO wspólną
+  ścieżką `InvoiceSubmissionStatusEngine`. Testy obejmują paczkę/podział,
+  silnik, pełny przepływ usługi na atrapie z odszyfrowaniem części,
+  niejednoznaczny wynik zamknięcia, kompletność/stronicowanie wyników i
+  domykanie w SyncCenter; `LiveBatchSendTests` zweryfikowany NA ŻYWO na
+  środowisku testowym (paczka 3 faktur → 3 numery KSeF + UPO, 14.07.2026).
 
 ### Automatyczne wykrywanie awarii KSeF — Latarnia MF (13.07.2026)
 

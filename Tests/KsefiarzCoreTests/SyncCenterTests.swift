@@ -5,10 +5,30 @@ import Testing
 
 // MARK: - Atrapa usługi (wysyłka + statusy + UPO)
 
-/// Atrapa łącząca oba kontrakty potrzebne do domykania wysyłek.
-private final class MockSubmissionService: KSeFInvoiceSending, KSeFSubmissionStatusProviding {
+/// Atrapa łącząca kontrakty potrzebne do domykania wysyłek
+/// (kolejka offline + sesje wsadowe + statusy/UPO).
+private final class MockSubmissionService: KSeFInvoiceSending, KSeFSubmissionStatusProviding,
+    KSeFBatchStatusProviding {
     var sendError: Error?
     var statusError: Error?
+    /// Stan sesji wsadowych — domyślnie brak (odpytanie jest błędem).
+    var batchStatusBySession: [String: KSeFBatchSessionStatus] = [:]
+    var batchOutcomesBySession: [String: [KSeFBatchInvoiceOutcome]] = [:]
+
+    func fetchBatchSessionStatus(
+        referenceNumber: String
+    ) async throws -> KSeFBatchSessionStatus {
+        guard let status = batchStatusBySession[referenceNumber] else {
+            throw KSeFError.invalidResponse
+        }
+        return status
+    }
+
+    func fetchBatchSessionInvoices(
+        referenceNumber: String
+    ) async throws -> [KSeFBatchInvoiceOutcome] {
+        batchOutcomesBySession[referenceNumber] ?? []
+    }
 
     func sendInvoiceXML(_ xmlData: Data, offlineMode: Bool) async throws -> KSeFSendResult {
         if let sendError { throw sendError }
@@ -219,6 +239,65 @@ struct SyncCenterTests {
         // Dosłanie + pobranie UPO — dokument obsłużony w dwóch krokach.
         #expect((runs.first?.fetchedCount ?? 0) >= 1)
         #expect((runs.first?.insertedCount ?? 0) >= 1)
+    }
+
+    @Test("Domknięcie sesji wsadowej nadaje numer KSeF i pobiera UPO w jednym przebiegu")
+    func domkniecieSesjiWsadowej() async throws {
+        let context = try makeContext()
+        // Dokument przekazany wsadowo: „w toku” z sesją, bez referencji faktury.
+        let xml = "<Faktura>wsadowa</Faktura>"
+        let invoice = Invoice(
+            invoiceNumber: "FV/BATCH/1", issueDate: .now,
+            sellerName: "A", sellerNIP: "1111111111",
+            buyerName: "B", buyerNIP: "2222222222",
+            netAmount: 100, vatAmount: 23, grossAmount: 123,
+            rawXmlContent: xml,
+            ksefSessionReference: "SB-1",
+            ksefSubmissionStatus: .processing,
+            ksefEnvironmentRaw: "production",
+            kind: .sales
+        )
+        context.insert(invoice)
+
+        let service = MockSubmissionService()
+        service.batchStatusBySession["SB-1"] = KSeFBatchSessionStatus(
+            code: 200, description: "Sesja wsadowa przetworzona pomyślnie",
+            invoiceCount: 1, successfulInvoiceCount: 1, failedInvoiceCount: 0
+        )
+        service.batchOutcomesBySession["SB-1"] = [
+            KSeFBatchInvoiceOutcome(
+                referenceNumber: "REF-1",
+                invoiceNumber: "FV/BATCH/1",
+                invoiceHash: KSeFCrypto.sha256Base64(Data(xml.utf8)),
+                invoiceFileName: "faktura_00001.xml",
+                result: KSeFInvoiceProcessingResult(
+                    status: .accepted,
+                    statusCode: 200,
+                    description: "Sukces",
+                    ksefNumber: "1111111111-20260711-BBBBBBBBBBBB-BB",
+                    acquisitionDate: Date(timeIntervalSince1970: 1_790_000_000)
+                )
+            ),
+        ]
+
+        let outcome = await SyncCenter.reconcileSubmissions(
+            invoices: [invoice],
+            environmentRaw: "production",
+            trigger: .automatic,
+            using: service,
+            context: context
+        )
+
+        #expect(outcome.hadWork)
+        #expect(outcome.accepted >= 1)
+        #expect(invoice.ksefSubmissionStatus == .accepted)
+        #expect(invoice.ksefId == "1111111111-20260711-BBBBBBBBBBBB-BB")
+        #expect(invoice.ksefInvoiceReference == "REF-1")
+        // UPO pobrane w tym samym przebiegu (wspólna ścieżka domykania).
+        #expect(invoice.upoXmlContent == "<UPO/>")
+
+        let runs = try context.fetch(FetchDescriptor<SyncRun>())
+        #expect(runs.first?.operation == .submissions)
     }
 
     @Test("Błąd sieci przy dosłaniu trafia do historii jako niepowodzenie")
