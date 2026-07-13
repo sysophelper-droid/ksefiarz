@@ -50,9 +50,6 @@ kolejność dowolna. ⚠️ operacje modyfikujące KSeF testować wyłącznie na
 
 #### D. Kontrahenci / dane wejściowe
 
-- [x] ⭐ D1. OCR faktur kosztowych (macOS Vision) — skan/PDF papierowej faktury
-  → dane do „zakupu spoza KSeF"; natywnie, bez zależności zewnętrznych
-  (13.07.2026).
 - [x] D3. Weryfikacja VIES (kontrahenci UE) — sprawdzenie VAT-UE analogicznie
   do Białej listy dla krajowych (13.07.2026).
 - [ ] D4. Import wsadowy z CSV/Excel — masowy import kontrahentów, towarów,
