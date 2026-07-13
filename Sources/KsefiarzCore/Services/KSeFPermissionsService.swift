@@ -71,6 +71,14 @@ struct AuthorizationPermissionsQueryRequestDTO: Encodable {
     let queryType: String
 }
 
+/// Zapytanie o uprawnienia podmiotowe OTRZYMANE od wskazanego podmiotu
+/// (`queryType=Received`) — z filtrem po podmiocie nadającym (kontrahencie).
+struct ReceivedAuthorizationsQueryRequestDTO: Encodable {
+    let queryType: String
+    /// Podmiot nadający uprawnienie (kontrahent, po NIP) — zawęża wynik.
+    let authorizingIdentifier: PermissionSubjectIdentifierDTO?
+}
+
 /// Identyfikator w odpowiedziach zapytań (typ + wartość mogą być puste).
 struct PermissionIdentifierDTO: Decodable {
     let type: String?
@@ -106,6 +114,9 @@ struct QueryPersonPermissionsResponseDTO: Decodable {
 struct EntityAuthorizationGrantDTO: Decodable {
     let id: String
     let authorizedEntityIdentifier: PermissionIdentifierDTO
+    /// Podmiot nadający uprawnienie — obecny w wyniku `queryType=Received`
+    /// (przy `Granted` nadającym jesteśmy my; pole opcjonalne).
+    let authorizingEntityIdentifier: PermissionIdentifierDTO?
     let authorizationScope: String
     let description: String?
     let subjectEntityDetails: PermissionSubjectEntityDetailsDTO?
@@ -279,6 +290,53 @@ public extension KSeFService {
             )
             let page: QueryEntityAuthorizationPermissionsResponseDTO = try decode(data)
             result.append(contentsOf: page.authorizationGrants.map(Self.grant(from:)))
+            guard page.hasMore else { break }
+            pageOffset += 1
+        }
+        return result
+    }
+
+    /// Sprawdza, jakie uprawnienia podmiotowe NADAŁ NAM wskazany kontrahent
+    /// (po NIP) — `/permissions/query/authorizations/grants` z
+    /// `queryType=Received`. To jedyna KSeF-natywna „weryfikacja relacji”
+    /// z kontrahentem: KSeF nie zna pojęcia „aktywnego konta”, a każdy NIP
+    /// odbiera faktury automatycznie. Wynik filtrujemy dodatkowo po stronie
+    /// klienta na wypadek, gdyby serwer zignorował filtr nadającego.
+    func receivedAuthorizations(fromNIP nip: String) async throws -> [ContractorKSeFAuthorization] {
+        try await ensureAuthenticated()
+        let normalizedNIP = nip.filter(\.isNumber)
+        let request = ReceivedAuthorizationsQueryRequestDTO(
+            queryType: "Received",
+            authorizingIdentifier: .init(type: "Nip", value: normalizedNIP)
+        )
+        var result: [ContractorKSeFAuthorization] = []
+        var pageOffset = 0
+        // Bezpiecznik jak w pozostałych zapytaniach — realnie kończy hasMore.
+        while pageOffset < 100 {
+            let data = try await perform(
+                path: "permissions/query/authorizations/grants?pageOffset=\(pageOffset)&pageSize=100",
+                method: "POST",
+                body: try JSONEncoder().encode(request),
+                bearer: try requireAccessToken()
+            )
+            let page: QueryEntityAuthorizationPermissionsResponseDTO = try decode(data)
+            for grant in page.authorizationGrants {
+                // Zawężamy do uprawnień nadanych właśnie przez tego kontrahenta.
+                // OpenAPI wymaga identyfikatora nadającego w odpowiedzi. Wpis
+                // bez niego albo z innym typem pomijamy, żeby niespójna
+                // odpowiedź nie dała fałszywego potwierdzenia relacji.
+                guard let granter = grant.authorizingEntityIdentifier,
+                      granter.type?.caseInsensitiveCompare("Nip") == .orderedSame,
+                      let granterNIP = granter.value,
+                      granterNIP.filter(\.isNumber) == normalizedNIP else {
+                    continue
+                }
+                result.append(ContractorKSeFAuthorization(
+                    id: grant.id,
+                    scopeRaw: grant.authorizationScope,
+                    startDate: PermissionsEngine.parseDate(grant.startDate)
+                ))
+            }
             guard page.hasMore else { break }
             pageOffset += 1
         }

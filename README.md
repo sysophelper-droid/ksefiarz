@@ -51,10 +51,11 @@ Sources/
         ├── InvoiceDetailView.swift # szczegóły + podgląd surowego XML
         ├── NewInvoiceView.swift  # formularz wystawiania faktury z walidacją
         ├── PermissionsView.swift # sekcja „Uprawnienia” + arkusz nadawania
+        ├── ContractorVerificationView.swift # karta weryfikacji kontrahenta
         ├── InvoiceAutomationView.swift # szablony, cykle i kolejka zatwierdzeń
         ├── HiddenInvoicesView.swift # archiwum „Nieuprawnione / Ukryte”
         └── SettingsView.swift    # NIP, token KSeF, środowisko
-Tests/KsefiarzCoreTests/          # 649 testów (Swift Testing) — model, parser, usługa, kryptografia, logika
+Tests/KsefiarzCoreTests/          # 671 testów (Swift Testing) — model, parser, usługa, kryptografia, logika
 ```
 
 ## Funkcje
@@ -105,6 +106,16 @@ Tests/KsefiarzCoreTests/          # 649 testów (Swift Testing) — model, parse
   jednoznaczny. Wymaga poświadczeń z prawem zarządzania uprawnieniami
   (właściciel NIP). Zweryfikowane na mockach; na produkcji nie modyfikuje
   się uprawnień w testach (polityka „tylko odczyt na żywo”).
+- **Weryfikacja kontrahenta** — karta „Zweryfikuj” (menu kontekstowe listy
+  kontrahentów oraz przycisk w edytorze) łączy trzy sprawdzenia: poprawność
+  NIP (suma kontrolna), status w Wykazie podatników VAT (Biała lista:
+  czynny / zwolniony / niezarejestrowany) oraz — gdy podane są poświadczenia
+  KSeF — relację uprawnień w KSeF (czy kontrahent nadał Twojej firmie
+  uprawnienie podmiotowe, np. samofakturowanie). Werdykt oznaczony wagą
+  (OK / informacja / ostrzeżenie / błąd). Uwaga: KSeF nie ma pojęcia
+  „aktywnego konta” — faktura trafia do odbiorcy po jego NIP automatycznie,
+  więc karta weryfikuje status VAT i relację uprawnień, a nie „aktywację
+  konta” (której w KSeF nie ma).
 - **Tryby offline (offline24 / niedostępność / awaria)** — świadome
   wystawianie faktur bez połączenia z KSeF oraz automatyczne przejście
   w offline przy braku sieci. Dokument dostaje utrwalony skrót SHA-256

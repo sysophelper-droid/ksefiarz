@@ -47,7 +47,12 @@ Sources/KsefiarzCore/
                PKCS8EncryptedKey (odszyfrowanie ENCRYPTED PRIVATE KEY —
                PBES2: PBKDF2 HMAC-SHA1/224/256/384/512 + AES-128/192/256-CBC),
                KSeFPermissionsService (rozszerzenie KSeFService — nadawanie,
-               odbieranie i przegląd uprawnień KSeF; API permissions),
+               odbieranie i przegląd uprawnień KSeF; API permissions;
+               receivedAuthorizations(fromNIP:) — uprawnienia podmiotowe
+               otrzymane od kontrahenta, queryType=Received),
+               ContractorVerificationService (koordynator weryfikacji
+               kontrahenta: Biała lista VAT + KSeF Received, izolacja awarii
+               źródeł, składanie przez ContractorVerification.build),
                KSeFQRCode (linki weryfikacyjne KOD I/II + render QR),
                InvoiceEmailService (okno wiadomości Mail przez
                NSSharingService; załączniki PDF/XML z katalogu tymczasowego),
@@ -127,7 +132,12 @@ Sources/KsefiarzCore/
                wpięte w MainContentView, przełącznik ksef.autoRenewCertificates),
                PermissionsEngine (czysta logika uprawnień: budowa żądań
                grant/revoke z formularza, walidacja NIP, normalizacja
-               wyników zapytań do widoku, polskie etykiety zakresów)
+               wyników zapytań do widoku, polskie etykiety zakresów),
+               ContractorVerification (czysta logika weryfikacji kontrahenta:
+               klasyfikacja statusu VAT VATRegistrationStatus, model wyniku
+               ContractorVerificationResult z ustaleniami i wagami
+               OK/info/ostrzeżenie/krytyczne, budowa werdyktu z 3 źródeł —
+               NIP, Biała lista, uprawnienia KSeF Received)
   Views/       MainContentView (NavigationSplitView), InvoiceListView, InvoiceDetailView,
                NewInvoiceView (nowa/edycja/korekta), NewPurchaseView (zakup
                spoza KSeF), ReportsView (sekcja Raporty), DashboardView,
@@ -136,6 +146,9 @@ Sources/KsefiarzCore/
                HiddenInvoicesView,
                PermissionsView (sekcja Uprawnienia — nadawanie/odbieranie
                i przegląd dostępów KSeF),
+               ContractorVerificationView (karta „Weryfikacja kontrahenta” —
+               status VAT z Białej listy + relacja uprawnień KSeF; z menu
+               kontekstowego listy kontrahentów i z edytora kontrahenta),
                KPiRView (tabela, edycja lokalnej klasyfikacji i CSV),
                RyczaltView (ewidencja przychodów: tabela ze stawką, podział
                przychodu/ryczałtu per stawka, edycja wpisu i CSV — pokazywana
@@ -263,6 +276,19 @@ Scripts/build-app.sh                   # składanie bundla .app
   Zarządzanie uprawnieniami wymaga zakresu `CredentialsManage`, przegląd —
   `CredentialsRead` (właściciel NIP ma oba); token dostępowy wystarcza
   (nie trzeba XAdES).
+- **Weryfikacja kontrahenta**: KSeF 2.0 NIE ma endpointu „aktywne konto”
+  podmiotu — pojęcie nie istnieje (system jest powszechny; każdy ważny NIP
+  odbiera faktury po NIP automatycznie). Zweryfikowano pełną listą 73 ścieżek
+  OpenAPI. Jedyna KSeF-natywna „weryfikacja relacji” z kontrahentem to
+  `POST /permissions/query/authorizations/grants` z `queryType=Received`
+  (opcjonalny filtr `authorizingIdentifier` = NIP kontrahenta) — sprawdza,
+  jakie uprawnienia podmiotowe nadał NAM kontrahent. Wynik jest dodatkowo
+  filtrowany lokalnie po wymaganym przez OpenAPI polu
+  `authorizingEntityIdentifier`; wpis bez zgodnego identyfikatora typu `Nip`
+  jest pomijany, aby niespójna odpowiedź nie potwierdziła fałszywej relacji.
+  Realny status podatnika (czynny/zwolniony) pochodzi z Wykazu podatników VAT
+  (`ContractorLookupService`, poza KSeF). Feature A7 łączy oba źródła
+  (`ContractorVerificationService`).
 - Tryby offline: zwykła sesja interaktywna z `offlineMode: true` w żądaniu
   wysyłki (WSPÓLNA flaga dla wszystkich trybów — API nie rozróżnia);
   dosyłany XML musi być BAJT W BAJT tym, z którego policzono skrót
