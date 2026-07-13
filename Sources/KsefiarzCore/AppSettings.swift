@@ -37,6 +37,9 @@ public enum AppSettingsKeys {
     public static let pdfBrandingAccentColor = "pdf.branding.accentColor"
     /// Własna stopka umieszczana na każdej stronie wydruku faktury.
     public static let pdfBrandingFooter = "pdf.branding.footer"
+    /// Czy na wydruku własnej faktury drukować kod QR płatności (standard 2D
+    /// ZBP) — klient skanuje aplikacją banku i płaci. Domyślnie włączony.
+    public static let pdfPaymentQR = "pdf.paymentQR"
     /// Token autoryzacyjny KSeF.
     public static let token = "ksef.token"
     /// Wybrane środowisko KSeF (rawValue `KSeFEnvironment`).

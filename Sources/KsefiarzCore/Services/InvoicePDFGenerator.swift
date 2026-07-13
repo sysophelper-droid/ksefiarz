@@ -124,25 +124,59 @@ public enum InvoicePDFGenerator {
 
     // MARK: Kody QR wizualizacji
 
-    /// Kody QR wymagane na wizualizacji faktury KSeF.
+    /// Kody QR na wizualizacji faktury.
     struct InvoiceQRCodes {
-        /// KOD I — link weryfikacyjny faktury.
-        let verification: CGImage
-        /// Etykieta pod KODEM I: numer KSeF albo „OFFLINE”.
+        /// KOD I — link weryfikacyjny KSeF (nil, gdy faktura nie ma numeru
+        /// KSeF ani nie jest offline, np. lokalna sprzedaż z samym kodem
+        /// płatności).
+        let verification: CGImage?
+        /// Etykieta pod KODEM I: numer KSeF albo „OFFLINE” (pusta bez KODU I).
         let verificationLabel: String
         /// KOD II („CERTYFIKAT”) — tylko dokumenty offline.
         let certificate: CGImage?
         /// Informacja, gdy KOD II jest wymagany, ale nie dało się go zbudować.
         let certificateNote: String?
+        /// Kod QR płatności (standard 2D ZBP) — tylko własna sprzedaż z saldem
+        /// do zapłaty i przy włączonym ustawieniu.
+        let payment: CGImage?
     }
 
-    /// Buduje kody QR dla faktury: KOD I dla każdego dokumentu z numerem KSeF
-    /// lub wystawionego offline, KOD II dodatkowo dla dokumentów offline
-    /// (podpis certyfikatem KSeF typu 2 — domyślnie z pęku kluczy).
+    /// Buduje komplet kodów QR dla wizualizacji faktury: KOD I/KOD II KSeF
+    /// (weryfikacja i certyfikat offline) oraz — dla własnej sprzedaży —
+    /// kod płatności 2D ZBP. Zwraca `nil` tylko wtedy, gdy żaden kod nie
+    /// powstaje. Kod płatności jest sterowany osobnym ustawieniem.
     static func makeQRCodes(
         for invoice: Invoice,
-        offlineCertificate: KSeFCertificate? = KSeFCertificateStore.shared.offlineCertificate
+        offlineCertificate: KSeFCertificate? = KSeFCertificateStore.shared.offlineCertificate,
+        paymentEnabled: Bool = PaymentQRCode.isEnabled()
     ) -> InvoiceQRCodes? {
+        let ksef = makeKSeFQRCodes(for: invoice, offlineCertificate: offlineCertificate)
+
+        var paymentImage: CGImage?
+        if paymentEnabled, let content = PaymentQRCode.zbpTransferContent(for: invoice) {
+            paymentImage = QRCodeRenderer.image(for: content)
+        }
+
+        // Bez żadnego kodu nie rezerwujemy miejsca i nie rysujemy sekcji QR.
+        guard ksef != nil || paymentImage != nil else { return nil }
+
+        return InvoiceQRCodes(
+            verification: ksef?.verification,
+            verificationLabel: ksef?.label ?? "",
+            certificate: ksef?.certificate,
+            certificateNote: ksef?.certificateNote,
+            payment: paymentImage
+        )
+    }
+
+    /// KOD I dla każdego dokumentu z numerem KSeF lub wystawionego offline,
+    /// KOD II dodatkowo dla dokumentów offline (podpis certyfikatem KSeF
+    /// typu 2 — domyślnie z pęku kluczy). Zwraca `nil`, gdy faktura nie ma
+    /// wizualizacji KSeF (brak numeru i nie offline lub brak danych do skrótu).
+    private static func makeKSeFQRCodes(
+        for invoice: Invoice,
+        offlineCertificate: KSeFCertificate?
+    ) -> (verification: CGImage, label: String, certificate: CGImage?, certificateNote: String?)? {
         guard !invoice.sellerNIP.isEmpty else { return nil }
         guard invoice.ksefId != nil || invoice.isOfflineMode else { return nil }
 
@@ -189,12 +223,7 @@ public enum InvoicePDFGenerator {
             }
         }
 
-        return InvoiceQRCodes(
-            verification: verification,
-            verificationLabel: invoice.ksefId ?? "OFFLINE",
-            certificate: certificateImage,
-            certificateNote: certificateNote
-        )
+        return (verification, invoice.ksefId ?? "OFFLINE", certificateImage, certificateNote)
     }
 }
 
@@ -400,11 +429,17 @@ struct InvoicePrintPageView: View {
         .font(.system(size: 9))
         .foregroundStyle(.secondary)
 
-        // Kody QR wizualizacji KSeF: KOD I (weryfikacja) na każdej fakturze
-        // z numerem KSeF lub offline; KOD II (CERTYFIKAT) na dokumentach offline.
+        // Kody QR: kod płatności 2D ZBP (własna sprzedaż) do zeskanowania
+        // aplikacją banku; KOD I (weryfikacja KSeF) na fakturze z numerem KSeF
+        // lub offline; KOD II (CERTYFIKAT) na dokumentach offline.
         if let qrCodes {
             HStack(alignment: .top, spacing: 24) {
-                qrBox(image: qrCodes.verification, label: qrCodes.verificationLabel)
+                if let payment = qrCodes.payment {
+                    qrBox(image: payment, label: labels.text("Zapłać (QR)", "Pay (QR)"))
+                }
+                if let verification = qrCodes.verification {
+                    qrBox(image: verification, label: qrCodes.verificationLabel)
+                }
                 if let certificate = qrCodes.certificate {
                     qrBox(image: certificate, label: "CERTYFIKAT")
                 }

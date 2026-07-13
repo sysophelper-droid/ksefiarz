@@ -241,6 +241,7 @@ public enum BackupService {
         AppSettingsKeys.pdfBrandingPrimaryColor,
         AppSettingsKeys.pdfBrandingAccentColor,
         AppSettingsKeys.pdfBrandingFooter,
+        AppSettingsKeys.pdfPaymentQR,
         AppSettingsKeys.environment,
         AppSettingsKeys.numberPattern,
         AppSettingsKeys.numberPatternZAL,

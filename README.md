@@ -143,6 +143,14 @@ Tests/KsefiarzCoreTests/          # 677 testów (Swift Testing) — model, parse
   KOD I (link weryfikacyjny `qr.ksef.mf.gov.pl` z numerem KSeF w podpisie);
   dokumenty offline24 dostają KOD I z etykietą „OFFLINE” oraz KOD II
   „CERTYFIKAT” podpisany certyfikatem KSeF typu 2 (RSASSA-PSS/ECDSA).
+- **Kod QR płatności (standard 2D ZBP)** — na własnych fakturach sprzedaży
+  drukowany jest kod „Zapłać (QR)” zgodny z Rekomendacją Związku Banków
+  Polskich: odbiorca skanuje go aplikacją banku, a rachunek, kwota i tytuł
+  uzupełniają się automatycznie. Kod pojawia się tylko dla faktur w PLN
+  z podanym rachunkiem i niezerowym saldem (kwota = pozostałe do zapłaty;
+  faktura opłacona kodu nie dostaje). Przełącznik w Ustawieniach → Firma
+  („Drukuj kod QR płatności na fakturach”, domyślnie włączony); niezależny
+  od kodu weryfikacyjnego KSeF.
 - **Pełny status wysyłki** — faktura sprzedażowa rozróżnia stan lokalny,
   przetwarzanie, przyjęcie i odrzucenie. Numer referencyjny przesyłki jest
   przechowywany osobno od numeru KSeF; aplikacja automatycznie ponawia

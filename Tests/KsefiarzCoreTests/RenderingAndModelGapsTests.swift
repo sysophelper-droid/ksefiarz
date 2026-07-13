@@ -422,7 +422,8 @@ struct RenderingGapsTests {
                 verification: qrImage,
                 verificationLabel: "OFFLINE",
                 certificate: nil,
-                certificateNote: "Brak certyfikatu offline (typ 2) — dokument offline wymaga KODU II."
+                certificateNote: "Brak certyfikatu offline (typ 2) — dokument offline wymaga KODU II.",
+                payment: nil
             )
         )
         renderPage(pageWithNote)
@@ -436,7 +437,8 @@ struct RenderingGapsTests {
                 verification: qrImage,
                 verificationLabel: "OFFLINE",
                 certificate: qrImage,
-                certificateNote: nil
+                certificateNote: nil,
+                payment: qrImage
             ),
             labels: InvoicePDFLabels(bilingual: true)
         )

@@ -76,6 +76,9 @@ Sources/KsefiarzCore/
                PaymentFormPolicy, InvoicePDFBranding (czysta konfiguracja,
                normalizacja #RRGGBB i reguła zastosowania tylko do własnej
                sprzedaży; VAT RR po NIP nabywcy),
+               PaymentQRCode (czysta treść kodu QR płatności 2D ZBP —
+               polecenie przelewu krajowego; render QRCodeRenderer,
+               osadzenie InvoicePDFGenerator; szczegóły niżej),
                InvoiceSyncEngine (wspólny sync: ręczny,
                przy starcie i cykliczny — automatyka w MainContentView),
                PolishBusinessCalendar (dni robocze/święta — terminy trybów
@@ -241,6 +244,30 @@ Scripts/build-app.sh                   # składanie bundla .app
   [JPK_VAT — podatki.gov.pl](https://www.podatki.gov.pl/podatki-firmowe/jednolity-plik-kontrolny/jpk_vat/jpk_vat),
   [ryczałt — podatki.gov.pl](https://www.podatki.gov.pl/podatki-firmowe/pit/informacje-podstawowe/co-jest-opodatkowane/opodatkowanie-ryczaltem-od-przychodow-ewidencjonowanych)
   i [terminy ZUS](https://www.zus.pl/en/firmy/rozliczenia-z-zus/dokumenty-rozliczeniowe/termin-skladania-dokumentow-i-oplacania-skladek).
+
+## Kod QR płatności (standard 2D ZBP)
+
+- `PaymentQRCode` (czysta logika) buduje treść polecenia przelewu krajowego
+  wg Rekomendacji Związku Banków Polskich dot. kodu dwuwymiarowego („2D”).
+  Format to **dziewięć pól rozdzielonych `|`** w kolejności: NIP odbiorcy
+  (10 cyfr lub puste) · kod kraju (2 litery, np. `PL`) · numer rachunku
+  (26 cyfr NRB, bez prefiksu `PL` i separatorów) · **kwota w GROSZACH**
+  wyrównana zerami do min. 6 cyfr (`%06d`, rośnie dla większych kwot) ·
+  nazwa odbiorcy (≤20 znaków) · tytuł (≤32 znaki) · trzy pola rezerwowe
+  (puste). Całość ≤160 znaków. Kolejność i długości zweryfikowane u źródła
+  (referencyjna implementacja ZBP `MarcinOrlowski/bank-qrcode-formatter` —
+  metoda `build()`; oficjalny dokument: Rekomendacja ZBP „Standard 2D”).
+- Standard obejmuje wyłącznie **przelewy krajowe w PLN** — dla innych walut
+  kod nie powstaje (kwota jest w groszach). Kod dotyczy tylko WŁASNEJ
+  sprzedaży (to nasza firma jest odbiorcą przelewu): odbiorcą jest sprzedawca,
+  tytułem numer faktury, kwotą **saldo pozostałe do zapłaty**
+  (`Invoice.outstandingAmount`) — faktura opłacona (saldo 0) kodu nie dostaje,
+  częściowo opłacona dostaje kod na kwotę brakującą. NIP i rachunek są
+  normalizowane (usuwanie spacji, kresek i prefiksu `PL`; niepełny NIP →
+  pole puste, bo jest opcjonalne). `InvoicePDFGenerator.makeQRCodes` łączy kod
+  płatności z kodami weryfikacyjnymi KSeF (KOD I/II) i rezerwuje miejsce na
+  wydruku, gdy jest choć jeden kod; przełącznik `AppSettingsKeys.pdfPaymentQR`
+  (domyślnie włączony, w kopii zapasowej) steruje tylko kodem płatności.
 
 ## API KSeF 2.0 — fakty krytyczne
 
