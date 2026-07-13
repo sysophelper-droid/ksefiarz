@@ -165,4 +165,26 @@ struct ContractorHistoryTests {
         #expect(history.invoices.isEmpty)
         #expect(history.score == .unrated)
     }
+
+    @Test("Korekta in minus z datą zapłaty nie jest wpłatą nabywcy i nie zasila średniej ani scoringu")
+    func negativeCorrectionWithPaymentDateIsNotABuyerPayment() {
+        // Jedyny dokument z datą to korekta in minus — bez poprawki liczyłaby się
+        // jako terminowa „wpłata", zawyżając średni czas i dając fałszywy scoring.
+        let correction = makeInvoice(
+            number: "K/1", issue: "2026-07-01",
+            gross: -100, due: "2026-07-10", paidAt: "2026-07-03"
+        )
+        let history = ContractorHistory(
+            invoices: [correction],
+            contractorNIP: "1234567890",
+            asOf: date("2026-07-20")
+        )
+
+        #expect(history.invoices.map(\.invoiceNumber) == ["K/1"])
+        #expect(history.paymentTimeSampleCount == 0)
+        #expect(history.averagePaymentDays == nil)
+        #expect(history.timelinessSampleCount == 0)
+        #expect(history.onTimeRate == nil)
+        #expect(history.score == .unrated)
+    }
 }

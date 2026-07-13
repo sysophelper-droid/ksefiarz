@@ -151,8 +151,11 @@ public struct ContractorHistory {
     /// domknęła kwotę brutto. Sam ręczny znacznik bez daty nie jest podstawą
     /// do oceny — zapobiega tworzeniu pozornie precyzyjnego scoringu.
     public static func paymentCompletionDate(for invoice: Invoice) -> Date? {
-        if let paymentDate = invoice.paymentDate { return paymentDate }
+        // Bez dodatniego brutto nie ma czego „domykać” — dokument o zerowej lub
+        // ujemnej wartości (np. korekta in minus) nie jest wpłatą nabywcy, więc
+        // nie może zasilać średniego czasu ani scoringu terminowości.
         guard invoice.grossAmount > Self.paymentTolerance else { return nil }
+        if let paymentDate = invoice.paymentDate { return paymentDate }
 
         var accumulated = 0.0
         for payment in invoice.payments.sorted(by: { $0.date < $1.date }) {
