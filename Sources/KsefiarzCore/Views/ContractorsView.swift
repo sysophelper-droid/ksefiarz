@@ -11,6 +11,7 @@ struct ContractorsListView: View {
     @State private var searchText = ""
     @State private var selection = Set<UUID>()
     @State private var editedContractor: Contractor?
+    @State private var historyContractor: Contractor?
     @State private var verifyingContractor: Contractor?
     @State private var showingNewContractor = false
 
@@ -47,6 +48,11 @@ struct ContractorsListView: View {
         }
         .contextMenu(forSelectionType: UUID.self) { ids in
             if !ids.isEmpty {
+                if ids.count == 1 {
+                    Button("Pokaż historię i saldo") {
+                        historyContractor = contractors.first { ids.contains($0.id) }
+                    }
+                }
                 Button("Edytuj") {
                     editedContractor = contractors.first { ids.contains($0.id) }
                 }
@@ -76,6 +82,14 @@ struct ContractorsListView: View {
         .toolbar {
             ToolbarItem {
                 Button {
+                    historyContractor = selectedContractor
+                } label: {
+                    Label("Historia kontrahenta", systemImage: "clock.arrow.circlepath")
+                }
+                .disabled(selectedContractor == nil)
+            }
+            ToolbarItem {
+                Button {
                     showingNewContractor = true
                 } label: {
                     Label("Nowy kontrahent", systemImage: "plus")
@@ -88,9 +102,17 @@ struct ContractorsListView: View {
         .sheet(item: $editedContractor) { contractor in
             ContractorEditorView(original: contractor)
         }
+        .sheet(item: $historyContractor) { contractor in
+            ContractorHistoryView(contractor: contractor)
+        }
         .sheet(item: $verifyingContractor) { contractor in
             ContractorVerificationView(nip: contractor.nip, expectedName: contractor.displayName)
         }
+    }
+
+    private var selectedContractor: Contractor? {
+        guard selection.count == 1 else { return nil }
+        return contractors.first { selection.contains($0.id) }
     }
 
     private func deleteContractors(_ ids: Set<UUID>) {
