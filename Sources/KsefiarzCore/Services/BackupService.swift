@@ -216,10 +216,10 @@ public struct BackupFile: Codable, Sendable {
 /// pobierania wszystkiego z KSeF.
 public enum BackupService {
 
-    /// Bieżąca wersja formatu pliku (9: + klasyfikacja ryczałtu i ustawienia
-    /// formy opodatkowania).
+    /// Bieżąca wersja formatu pliku (10: + ustawienia kalendarza i prognozy
+    /// podatkowej; 9 dodała klasyfikację ryczałtu i formę opodatkowania).
     /// Starsze pliki są nadal poprawnie importowane.
-    public static let currentVersion = 9
+    public static let currentVersion = 10
 
     /// Klucze ustawień obejmowane kopią zapasową.
     /// Tokenu KSeF celowo tu nie ma — sekret żyje w pęku kluczy i nie może
@@ -232,6 +232,10 @@ public enum BackupService {
         AppSettingsKeys.bankAccount,
         AppSettingsKeys.taxForm,
         AppSettingsKeys.ryczaltDefaultRate,
+        AppSettingsKeys.kpirIncomeTaxMethod,
+        AppSettingsKeys.incomeTaxSettlementCycle,
+        AppSettingsKeys.vatSettlementCycle,
+        AppSettingsKeys.isActiveVATPayer,
         AppSettingsKeys.pdfBrandingEnabled,
         AppSettingsKeys.pdfBrandingLogo,
         AppSettingsKeys.pdfBrandingPrimaryColor,

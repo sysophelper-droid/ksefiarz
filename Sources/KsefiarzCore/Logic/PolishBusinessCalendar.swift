@@ -6,7 +6,7 @@ import Foundation
 /// Wielkanocny i Boże Ciało; Wigilia jest dniem wolnym od 2025 r.).
 public enum PolishBusinessCalendar {
 
-    static var calendar: Calendar {
+    public static var calendar: Calendar {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(identifier: "Europe/Warsaw") ?? .current
         return calendar

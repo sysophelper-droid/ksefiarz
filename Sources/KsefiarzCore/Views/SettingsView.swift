@@ -15,6 +15,10 @@ public struct SettingsView: View {
     @AppStorage(AppSettingsKeys.bankAccount) private var bankAccount = ""
     @AppStorage(AppSettingsKeys.taxForm) private var taxFormRaw = TaxForm.kpir.rawValue
     @AppStorage(AppSettingsKeys.ryczaltDefaultRate) private var ryczaltDefaultRateRaw = RyczaltRate.r8_5.rawValue
+    @AppStorage(AppSettingsKeys.kpirIncomeTaxMethod) private var kpirIncomeTaxMethodRaw = KPiRIncomeTaxMethod.scale.rawValue
+    @AppStorage(AppSettingsKeys.incomeTaxSettlementCycle) private var incomeTaxSettlementCycleRaw = TaxSettlementCycle.monthly.rawValue
+    @AppStorage(AppSettingsKeys.vatSettlementCycle) private var vatSettlementCycleRaw = TaxSettlementCycle.monthly.rawValue
+    @AppStorage(AppSettingsKeys.isActiveVATPayer) private var isActiveVATPayer = true
     @AppStorage(AppSettingsKeys.pdfBrandingEnabled) private var pdfBrandingEnabled = false
     @AppStorage(AppSettingsKeys.pdfBrandingLogo) private var pdfBrandingLogo = ""
     @AppStorage(AppSettingsKeys.pdfBrandingPrimaryColor) private var pdfBrandingPrimaryColor = InvoicePDFBranding.defaultPrimaryHex
@@ -100,6 +104,10 @@ public struct SettingsView: View {
         ("Rachunek bankowy (domyślny)", .company),
         ("Forma opodatkowania (KPiR / ryczałt)", .company),
         ("Domyślna stawka ryczałtu", .company),
+        ("Skala podatkowa / podatek liniowy", .company),
+        ("Cykl rozliczenia PIT", .company),
+        ("Czynny podatnik VAT", .company),
+        ("Cykl rozliczenia VAT", .company),
         ("Branding PDF", .company), ("Logo na PDF", .company),
         ("Kolory PDF", .company), ("Stopka PDF", .company),
         ("Token autoryzacyjny KSeF", .ksef), ("Środowisko KSeF", .ksef),
@@ -289,11 +297,43 @@ public struct SettingsView: View {
                         }
                     }
                     .listRowBackground(highlight("Domyślna stawka ryczałtu"))
+                } else {
+                    Picker("Sposób opodatkowania", selection: $kpirIncomeTaxMethodRaw) {
+                        ForEach(KPiRIncomeTaxMethod.allCases) { method in
+                            Text(method.displayName).tag(method.rawValue)
+                        }
+                    }
+                    .listRowBackground(highlight("Skala podatkowa / podatek liniowy"))
                 }
+                Picker("Zaliczka PIT / ryczałt", selection: $incomeTaxSettlementCycleRaw) {
+                    ForEach(TaxSettlementCycle.allCases) { cycle in
+                        Text(cycle.displayName).tag(cycle.rawValue)
+                    }
+                }
+                .listRowBackground(highlight("Cykl rozliczenia PIT"))
             } header: {
                 Text("Podatek dochodowy")
             } footer: {
-                Text("Wybór decyduje, którą ewidencję prowadzi aplikacja: KPiR (zasady ogólne / podatek liniowy) albo ewidencję przychodów (ryczałt) — w pasku bocznym pojawi się tylko wybrana, bo nie można rozliczać się na obu formach naraz. Domyślną stawkę ryczałtu można nadpisać na każdym wpisie ewidencji.")
+                Text("Wybór decyduje, którą ewidencję prowadzi aplikacja: KPiR albo ewidencję przychodów (ryczałt). Metoda i cykl rozliczenia PIT/ryczałtu sterują terminarzem oraz roboczą prognozą na Kokpicie. Prognoza nie zastępuje rozliczenia księgowego i nie uwzględnia m.in. składek, ulg ani wcześniejszych wpłat.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section {
+                Toggle("Czynny podatnik VAT", isOn: $isActiveVATPayer)
+                    .listRowBackground(highlight("Czynny podatnik VAT"))
+                if isActiveVATPayer {
+                    Picker("Rozliczenie VAT", selection: $vatSettlementCycleRaw) {
+                        ForEach(TaxSettlementCycle.allCases) { cycle in
+                            Text(cycle.displayName).tag(cycle.rawValue)
+                        }
+                    }
+                    .listRowBackground(highlight("Cykl rozliczenia VAT"))
+                }
+            } header: {
+                Text("VAT")
+            } footer: {
+                Text("JPK_V7 jest zawsze miesięczny, także przy kwartalnym rozliczeniu VAT. Podatnik zwolniony z VAT wyłącza terminy JPK/VAT oraz prognozę VAT na Kokpicie.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

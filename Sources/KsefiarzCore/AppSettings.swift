@@ -21,6 +21,13 @@ public enum AppSettingsKeys {
     /// Domyślna stawka ryczałtu (rawValue `RyczaltRate`) — używana dla wpisów
     /// ewidencji bez własnej stawki. Można ją nadpisać na każdym wpisie.
     public static let ryczaltDefaultRate = "ksef.ryczaltDefaultRate"
+    /// Metoda zaliczki PIT dla KPiR (skala albo podatek liniowy).
+    public static let kpirIncomeTaxMethod = "ksef.kpirIncomeTaxMethod"
+    /// Częstotliwość zaliczki PIT/ryczałtu oraz rozliczenia VAT.
+    public static let incomeTaxSettlementCycle = "ksef.incomeTaxSettlementCycle"
+    public static let vatSettlementCycle = "ksef.vatSettlementCycle"
+    /// Czy firma jest czynnym podatnikiem VAT (terminy JPK/VAT i prognoza).
+    public static let isActiveVATPayer = "ksef.isActiveVATPayer"
     /// Czy wydruki własnych faktur mają używać brandingu firmy.
     public static let pdfBrandingEnabled = "pdf.branding.enabled"
     /// Logo firmy jako znormalizowany PNG zakodowany Base64.

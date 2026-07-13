@@ -17,6 +17,12 @@ public struct DashboardView: View {
 
     /// Horyzont widgetu najbliższych płatności (konfigurowalny w Ustawieniach).
     @AppStorage(AppSettingsKeys.dueSoonDays) private var dueSoonDays = 7
+    @AppStorage(AppSettingsKeys.taxForm) private var taxFormRaw = TaxForm.kpir.rawValue
+    @AppStorage(AppSettingsKeys.ryczaltDefaultRate) private var ryczaltDefaultRateRaw = RyczaltRate.r8_5.rawValue
+    @AppStorage(AppSettingsKeys.kpirIncomeTaxMethod) private var kpirIncomeTaxMethodRaw = KPiRIncomeTaxMethod.scale.rawValue
+    @AppStorage(AppSettingsKeys.incomeTaxSettlementCycle) private var incomeTaxSettlementCycleRaw = TaxSettlementCycle.monthly.rawValue
+    @AppStorage(AppSettingsKeys.vatSettlementCycle) private var vatSettlementCycleRaw = TaxSettlementCycle.monthly.rawValue
+    @AppStorage(AppSettingsKeys.isActiveVATPayer) private var isActiveVATPayer = true
 
     /// Ścieżka nawigacji — podwójne kliknięcie wiersza płatności otwiera
     /// szczegóły faktury bez przechodzenia do listy zakupów.
@@ -55,6 +61,18 @@ public struct DashboardView: View {
     /// wiekowanie i porównania miesięczne — ze wszystkich widocznych faktur.
     private var analytics: DashboardAnalytics {
         DashboardAnalytics(invoices: invoices, periodInvoices: displayFilter.apply(to: invoices))
+    }
+
+    private var taxSnapshot: TaxCalendarEngine.Snapshot {
+        TaxCalendarEngine.snapshot(
+            invoices: invoices,
+            taxForm: TaxForm.resolve(taxFormRaw),
+            defaultRyczaltRate: RyczaltEngine.defaultRate(fromSetting: ryczaltDefaultRateRaw),
+            incomeTaxMethod: KPiRIncomeTaxMethod.resolve(kpirIncomeTaxMethodRaw),
+            incomeTaxCycle: TaxSettlementCycle.resolve(incomeTaxSettlementCycleRaw),
+            vatCycle: TaxSettlementCycle.resolve(vatSettlementCycleRaw),
+            isActiveVATPayer: isActiveVATPayer
+        )
     }
 
     /// Etykieta miesiąca na osi wykresów, np. „lip 26”.
@@ -197,6 +215,8 @@ public struct DashboardView: View {
                     )
                 }
 
+                taxCalendarSection
+
                 cashFlowSection
                 agingSection
                 monthComparisonSection
@@ -224,6 +244,94 @@ public struct DashboardView: View {
 }
 
 extension DashboardView {
+
+    /// Poprawna polska odmiana rzeczownika „ostrzeżenie” dla licznika.
+    static func warningsNoun(_ count: Int) -> String {
+        if count == 1 { return "ostrzeżenie" }
+        let lastTwo = count % 100
+        let last = count % 10
+        if (2...4).contains(last) && !(12...14).contains(lastTwo) { return "ostrzeżenia" }
+        return "ostrzeżeń"
+    }
+
+    /// Najbliższe obowiązki oraz prognoza trwającego miesiąca/kwartału.
+    private var taxCalendarSection: some View {
+        // Migawkę liczymy raz na render — silnik iteruje wszystkie faktury,
+        // więc nie powielamy tej pracy przy każdym odczycie `forecast`.
+        let snapshot = taxSnapshot
+        let forecast = snapshot.forecast
+        return GroupBox {
+            VStack(alignment: .leading, spacing: 14) {
+                LazyVGrid(columns: columns, spacing: 12) {
+                    ForEach(snapshot.deadlines) { deadline in
+                        HStack(spacing: 12) {
+                            Image(systemName: deadline.kind.systemImage)
+                                .font(.title3)
+                                .foregroundStyle(.blue)
+                                .frame(width: 26)
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(deadline.kind.title).font(.callout.weight(.semibold))
+                                Text("Za: \(deadline.period.label)")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            Text(deadline.dueDate, format: .dateTime.day().month(.abbreviated))
+                                .font(.callout.weight(.semibold))
+                                .monospacedDigit()
+                        }
+                        .padding(12)
+                        .background(.background.secondary, in: RoundedRectangle(cornerRadius: 10))
+                    }
+                }
+
+                Divider()
+
+                Text("Prognoza bieżącego okresu")
+                    .font(.headline)
+                LazyVGrid(columns: columns, spacing: 12) {
+                    StatCard(
+                        title: forecast.vatApplies
+                            ? (forecast.vatBalance >= 0 ? "VAT do zapłaty — " : "Nadwyżka VAT — ")
+                                + forecast.vatPeriod.label
+                            : "VAT / JPK — podatnik zwolniony",
+                        value: forecast.vatApplies
+                            ? abs(forecast.vatBalance).formatted(.currency(code: "PLN"))
+                            : "Nie dotyczy",
+                        icon: "building.columns",
+                        color: !forecast.vatApplies ? .secondary : (forecast.vatBalance >= 0 ? .orange : .green)
+                    )
+                    StatCard(
+                        title: forecast.incomeTaxLabel + " — " + forecast.incomeTaxPeriod.label,
+                        value: forecast.incomeTax.formatted(.currency(code: "PLN")),
+                        icon: "banknote",
+                        color: .purple
+                    )
+                }
+                let outputVATLabel = forecast.outputVAT.formatted(.currency(code: "PLN"))
+                let inputVATLabel = forecast.inputVAT.formatted(.currency(code: "PLN"))
+                let incomeBaseLabel = forecast.incomeTaxBase.formatted(.currency(code: "PLN"))
+                Text(forecast.vatApplies
+                    ? "VAT należny \(outputVATLabel) − naliczony \(inputVATLabel). Podstawa PIT narastająco / przychód ryczałtu: \(incomeBaseLabel)."
+                    : "Terminy i prognoza VAT są wyłączone. Podstawa PIT narastająco / przychód ryczałtu: \(incomeBaseLabel).")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Text("Kwoty są szacunkiem z faktur i lokalnej klasyfikacji. Nie uwzględniają m.in. zapłaconych zaliczek, składek ZUS/zdrowotnej, ulg, proporcji VAT ani innych źródeł przychodu.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                if !forecast.warnings.isEmpty {
+                    Label("Prognoza zawiera \(forecast.warnings.count) \(Self.warningsNoun(forecast.warnings.count)) danych (np. brak kursu lub uproszczenia JPK).", systemImage: "exclamationmark.triangle")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                        .help(forecast.warnings.joined(separator: "\n"))
+                }
+            }
+            .padding(.vertical, 4)
+        } label: {
+            Label("Kalendarz i prognoza podatkowa", systemImage: "calendar.badge.exclamationmark")
+                .font(.headline)
+        }
+    }
 
     /// Przepływy pieniężne z ewidencji wpłat — słupki wpływów i wydatków
     /// per miesiąc (ostatnie 6 miesięcy, kwoty w PLN).
