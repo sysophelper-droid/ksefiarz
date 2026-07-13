@@ -43,8 +43,6 @@ kolejność dowolna. ⚠️ operacje modyfikujące KSeF testować wyłącznie na
 
 #### C. Płatności i windykacja
 
-- [ ] ⭐ C1. Kod QR płatności na PDF (standard 2D ZBP) — klient skanuje i płaci
-  z aplikacji banku; tanio (mamy już render QR).
 - [ ] C2. Plik przelewów do banku (Elixir / przelew zbiorczy) — eksport
   zobowiązań (zakupów) do pliku importowalnego w bankowości.
 - [ ] C3. Ścieżka windykacji — eskalacja: przypomnienie → wezwanie → nota →
@@ -85,6 +83,28 @@ kolejność dowolna. ⚠️ operacje modyfikujące KSeF testować wyłącznie na
   (dziś zaszyte PL/EN).
 
 ## Zrealizowane
+
+### Kod QR płatności na PDF — standard 2D ZBP (13.07.2026)
+
+- [x] ⭐ C1. Na własnych fakturach sprzedaży PDF dostaje kod „Zapłać (QR)”
+  zgodny z Rekomendacją Związku Banków Polskich (9 pól rozdzielonych `|`:
+  poprawny NIP odbiorcy instytucjonalnego, kod kraju, 26-cyfrowy NRB,
+  kwota w groszach `%06d`, nazwa odbiorcy ≤20,
+  tytuł ≤32, trzy pola rezerwowe; maks. 160 znaków). Klient skanuje kod
+  aplikacją banku i płaci bez przepisywania danych. Kod powstaje wyłącznie dla
+  faktur sprzedaży w PLN z podanym rachunkiem i niezerowym saldem — kwota to
+  saldo pozostałe do zapłaty (`outstandingAmount`), więc faktura opłacona kodu
+  nie dostaje, a częściowo opłacona dostaje kod na kwotę brakującą. Odbiorcą
+  przelewu jest sprzedawca, tytułem — numer faktury; rachunek i NIP są
+  normalizowane (usuwanie spacji, prefiksu `PL`, kresek), a znaki spoza
+  rekomendacji nie mogą wstrzyknąć separatora pól. Renderer używa wymaganego
+  przez ZBP poziomu korekcji błędów `L`. Przełącznik
+  w Ustawieniach → Firma („Drukuj kod QR płatności na fakturach”, domyślnie
+  włączony, w kopii zapasowej; poprawnie odczytywany także po przywróceniu
+  tekstowej wartości `"0"`/`"1"`), niezależny od kodu weryfikacyjnego KSeF.
+  Czysta logika `PaymentQRCode` (weryfikacja formatu u źródła — referencyjna
+  biblioteka ZBP) z osobnym suitem testów; render `QRCodeRenderer`, osadzenie
+  w `InvoicePDFGenerator`.
 
 ### Karta i historia kontrahenta (13.07.2026)
 

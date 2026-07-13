@@ -24,6 +24,8 @@ public struct SettingsView: View {
     @AppStorage(AppSettingsKeys.pdfBrandingPrimaryColor) private var pdfBrandingPrimaryColor = InvoicePDFBranding.defaultPrimaryHex
     @AppStorage(AppSettingsKeys.pdfBrandingAccentColor) private var pdfBrandingAccentColor = InvoicePDFBranding.defaultAccentHex
     @AppStorage(AppSettingsKeys.pdfBrandingFooter) private var pdfBrandingFooter = ""
+    @AppStorage(AppSettingsKeys.pdfPaymentQR) private var pdfPaymentQR = true
+    @AppStorage(AppSettingsKeys.paymentQRRecipientName) private var paymentQRRecipientName = ""
     @State private var isChoosingBrandingLogo = false
     @State private var brandingLogoError: String?
     @ObservedObject private var tokenStore = TokenStore.shared
@@ -110,6 +112,8 @@ public struct SettingsView: View {
         ("Cykl rozliczenia VAT", .company),
         ("Branding PDF", .company), ("Logo na PDF", .company),
         ("Kolory PDF", .company), ("Stopka PDF", .company),
+        ("Kod QR płatności (2D ZBP)", .company),
+        ("Nazwa odbiorcy na kodzie QR", .company),
         ("Token autoryzacyjny KSeF", .ksef), ("Środowisko KSeF", .ksef),
         ("Certyfikaty KSeF (typ 1 / typ 2)", .ksef),
         ("Import certyfikatu z pliku", .ksef),
@@ -389,6 +393,32 @@ public struct SettingsView: View {
                 Text("Branding wydruków PDF")
             } footer: {
                 Text("Logo, kolory i stopka pojawią się tylko na fakturach Twojej firmy. Pobrane faktury kosztowe zachowują wygląd wystawcy. Logo zostanie pomniejszone i zapisane w kopii zapasowej razem z pozostałymi ustawieniami.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section {
+                Toggle("Drukuj kod QR płatności na fakturach", isOn: $pdfPaymentQR)
+                    .listRowBackground(highlight("Kod QR płatności (2D ZBP)"))
+                TextField(
+                    "Nazwa odbiorcy na kodzie QR",
+                    text: $paymentQRRecipientName,
+                    prompt: Text("Pełna nazwa firmy (skracana do 20 znaków)")
+                )
+                .disabled(!pdfPaymentQR)
+                .listRowBackground(highlight("Nazwa odbiorcy na kodzie QR"))
+                if paymentQRRecipientName.count > PaymentQRCode.nameMaxLength {
+                    Label(
+                        "Nazwa dłuższa niż \(PaymentQRCode.nameMaxLength) znaków zostanie skrócona na kodzie.",
+                        systemImage: "info.circle"
+                    )
+                    .font(.callout)
+                    .foregroundStyle(.orange)
+                }
+            } header: {
+                Text("Kod QR płatności")
+            } footer: {
+                Text("Kod QR w standardzie 2D Związku Banków Polskich pozwala odbiorcy zapłacić przez zeskanowanie go aplikacją banku (rachunek, kwota i tytuł uzupełniają się automatycznie). Pojawia się wyłącznie na Twoich fakturach sprzedaży w PLN z podanym rachunkiem i niezerowym saldem — kwota to kwota pozostała do zapłaty. Pole nazwy odbiorcy w tym standardzie ma tylko \(PaymentQRCode.nameMaxLength) znaków; jeśli pełna nazwa firmy się nie mieści, podaj tu czytelny skrót (np. „IT-KRAK”). Puste = pełna nazwa skracana automatycznie na granicy słowa. Nie ma wpływu na kod weryfikacyjny KSeF.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
