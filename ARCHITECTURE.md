@@ -69,6 +69,10 @@ Sources/KsefiarzCore/
                KSeFQRCode (linki weryfikacyjne KOD I/II + render QR),
                InvoiceEmailService (okno wiadomości Mail przez
                NSSharingService; załączniki PDF/XML z katalogu tymczasowego),
+               InvoiceOCRService (rozpoznawanie tekstu skanu/PDF faktury
+               kosztowej: PDF z warstwą tekstową wprost przez PDFKit,
+               skan przez Vision VNRecognizeTextRequest — szczegóły
+               w sekcji „OCR faktur kosztowych"),
                InvoicePDFGenerator ma wariant dwujęzyczny
                (pdfData(for:bilingual:branding:), etykiety w InvoicePDFLabels);
                PDFBrandingLogoProcessor skaluje importowane logo do maks.
@@ -163,6 +167,11 @@ Sources/KsefiarzCore/
                zbiór viesCountryCodes 27 państw UE + XI, GR→EL, PL wykluczone),
                ContractorHistory (dopasowanie dokumentów po znormalizowanym
                NIP, salda per waluta, średni czas płatności i scoring),
+               InvoiceOCRParser (czysta logika wyciągania pól polskiej
+               faktury z linii tekstu OCR: InvoiceOCRExtraction —
+               opcjonalne pola, resolvedAmounts, applied(to:) na
+               ManualPurchaseDraft; heurystyki po etykietach odporne
+               na brak diakrytyków),
                ProformaValidator (czysta walidacja proformy — NIP nabywcy
                opcjonalny, walidowany gdy podany; osobny ProformaValidationError)
   Views/       MainContentView (NavigationSplitView), InvoiceListView, InvoiceDetailView,
@@ -572,6 +581,44 @@ kwoty per kontrahent, zaokrąglenie do złotych. **Import usług** (zakup usług
 z UE) i **procedura OSS** świadomie POZA VAT-UE (tylko JPK_V7 / procedura
 unijna). Wygenerowany dokument (WDT+WNT+usługi, EL, XI) zweryfikowany
 oficjalną XSD (xmllint, 12.07.2026).
+
+## OCR faktur kosztowych — macOS Vision (D1)
+
+- Cel: skan/zdjęcie albo PDF papierowej faktury → wstępnie wypełniony
+  formularz „zakupu spoza KSeF" (`NewPurchaseView`). Przetwarzanie w całości
+  lokalne (Vision + PDFKit), bez zależności zewnętrznych. OCR jest
+  heurystyczny — UI zawsze każe zweryfikować dane przed zapisem, a wynik
+  nadpisuje wyłącznie pola rozpoznane (nabywca, status opłacenia, uwagi,
+  kategoria i kurs zostają nietknięte — `InvoiceOCRExtraction.applied(to:)`).
+- **Podział warstw**: `InvoiceOCRService` (Services) zamienia plik na linie
+  tekstu; `InvoiceOCRParser` (Logic, czysta funkcja z pełnymi testami)
+  zamienia linie na `InvoiceOCRExtraction`. PDF z warstwą tekstową
+  (≥ 32 znaki na stronę) czytany jest wprost przez `PDFPage.string` — bez
+  strat OCR; strona-skan jest renderowana do bitmapy (300 DPI, limit 4000 px)
+  i przechodzi przez `VNRecognizeTextRequest` (`.accurate`, korekcja
+  językowa). Limit 4 stron PDF. Języki żądania filtrowane przez
+  `supportedRecognitionLanguages()` (pl/en) — żądanie niewspieranego języka
+  kończy się błędem `perform`. Obserwacje sortowane w kolejność czytania
+  (współrzędne Vision są znormalizowane z początkiem w lewym dolnym rogu).
+- **Heurystyki parsera** (wszystkie odporne na zgubione diakrytyki —
+  `normalized` foldinguje, `ł` zamieniane jawnie, bo nie jest znakiem
+  składanym): numer po „Faktura … nr"/etykietach (ucinany przed „z dnia"
+  i datami); daty `dd.MM.yyyy`/ISO/słownie z polskimi miesiącami (etykieta
+  w tej samej albo następnej linii; jedyna data w dokumencie = data
+  wystawienia); NIP z walidacją sumy kontrolnej (`InvoiceValidator`),
+  z pominięciem NIP własnej firmy i wyborem najbliższego od etykiety
+  „Sprzedawca"; zagraniczny VAT ID tylko z prefiksem z
+  `VIESVerification.viesCountryCodes` i tylko w linii z „VAT"/„NIP";
+  kwoty najpierw z wiersza podsumowania (netto+VAT=brutto uwiarygodnia
+  komplet, brutto = ostatnia kwota wiersza), potem z etykiet; rachunek
+  NRB przez `ElixirPaymentExporter.isValidNRB`. `resolvedAmounts()`
+  wyprowadza brakującą kwotę z równania netto+VAT=brutto (samo brutto →
+  netto=brutto, VAT=0 — przypadek paragonu); przy niespójnym komplecie
+  ufa brutto i netto.
+- Testy e2e prawdziwego Vision (syntetyczny „skan" rysowany Core Text →
+  PNG oraz PDF-obraz bez warstwy tekstowej) są w `InvoiceOCRServiceTests`
+  i przechodzą lokalnie w ~1 s; treść syntetyczna bez polskich znaków,
+  bo zestaw języków Vision zależy od wersji systemu.
 
 ## Faktura proforma (E2)
 

@@ -50,8 +50,9 @@ kolejność dowolna. ⚠️ operacje modyfikujące KSeF testować wyłącznie na
 
 #### D. Kontrahenci / dane wejściowe
 
-- [ ] ⭐ D1. OCR faktur kosztowych (macOS Vision) — skan/PDF papierowej faktury
-  → dane do „zakupu spoza KSeF"; natywnie, bez zależności zewnętrznych.
+- [x] ⭐ D1. OCR faktur kosztowych (macOS Vision) — skan/PDF papierowej faktury
+  → dane do „zakupu spoza KSeF"; natywnie, bez zależności zewnętrznych
+  (13.07.2026).
 - [x] D3. Weryfikacja VIES (kontrahenci UE) — sprawdzenie VAT-UE analogicznie
   do Białej listy dla krajowych (13.07.2026).
 - [ ] D4. Import wsadowy z CSV/Excel — masowy import kontrahentów, towarów,
@@ -79,6 +80,21 @@ kolejność dowolna. ⚠️ operacje modyfikujące KSeF testować wyłącznie na
   (dziś zaszyte PL/EN).
 
 ## Zrealizowane
+
+### OCR faktur kosztowych — macOS Vision (13.07.2026)
+
+- [x] D1. Przycisk „Wczytaj ze skanu / PDF (OCR)” w formularzu zakupu spoza
+  KSeF (+ upuszczenie pliku na okno): skan/zdjęcie (PNG, JPEG, TIFF, HEIC)
+  albo PDF papierowej faktury wstępnie wypełnia formularz — natywnie przez
+  Vision/PDFKit, bez zależności zewnętrznych i bez wysyłania danych. PDF
+  z warstwą tekstową czytany wprost (bez strat OCR), skan przez
+  `VNRecognizeTextRequest`. Czysty parser `InvoiceOCRParser`
+  (`InvoiceOCRExtraction.applied(to:)` nadpisuje tylko rozpoznane pola):
+  numer, daty (też słownie), sprzedawca z NIP (suma kontrolna, NIP własnej
+  firmy pomijany) / VAT ID UE, adres, kwoty (wiersz podsumowania
+  netto+VAT=brutto), waluta, NRB (IBAN mod 97), termin i forma płatności.
+  38 testów, w tym e2e prawdziwego Vision na syntetycznym skanie (PNG
+  i PDF-obraz). Heurystyki odporne na zgubione diakrytyki OCR.
 
 ### Weryfikacja VIES — kontrahenci UE (13.07.2026)
 

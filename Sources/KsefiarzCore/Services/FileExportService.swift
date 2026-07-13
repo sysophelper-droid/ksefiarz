@@ -91,6 +91,19 @@ public enum FileExportService {
         return try? Data(contentsOf: url)
     }
 
+    /// Panel wyboru pliku zwracający URL zamiast zawartości — np. skan/PDF
+    /// faktury do OCR, gdzie plik czytają PDFKit/Vision.
+    public static func importFileURL(allowedTypes: [UTType], message: String = "") -> URL? {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = allowedTypes
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        if !message.isEmpty { panel.message = message }
+
+        guard panel.runModal() == .OK else { return nil }
+        return panel.url
+    }
+
     /// Numer faktury bez znaków niedozwolonych w nazwie pliku.
     private static func sanitized(_ name: String) -> String {
         name.replacingOccurrences(of: "/", with: "-")

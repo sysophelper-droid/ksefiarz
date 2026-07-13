@@ -303,6 +303,16 @@ Tests/KsefiarzCoreTests/          # 781 testów (Swift Testing) — model, parse
   wyliczane), walutą z kursem NBP, kategorią kosztu i płatnością.
   Takie dokumenty mają odznakę „Spoza KSeF” i — w odróżnieniu od zakupów
   pobranych z KSeF — można je edytować i usuwać.
+- **OCR faktur kosztowych (macOS Vision)** — przycisk „Wczytaj ze skanu /
+  PDF (OCR)” w formularzu zakupu spoza KSeF (plik można też upuścić na
+  okno): skan/zdjęcie (PNG, JPEG, TIFF, HEIC) albo PDF papierowej faktury
+  jest rozpoznawany natywnie na komputerze (Vision, bez zależności
+  zewnętrznych i bez wysyłania danych) i wstępnie wypełnia formularz —
+  numer dokumentu, daty, sprzedawca z NIP/VAT ID i adresem (NIP walidowany
+  sumą kontrolną, NIP własnej firmy pomijany), kwoty netto/VAT/brutto,
+  waluta, rachunek NRB (walidacja IBAN), termin i forma płatności.
+  PDF z warstwą tekstową czytany jest wprost (bez strat OCR); rozpoznane
+  dane zawsze wymagają weryfikacji przed zapisem.
 - **Raporty sprzedaży i kosztów** (sekcja „Raporty” w pasku bocznym) —
   top kontrahenci sprzedaży (wykres + tabela: liczba faktur, netto,
   brutto), przychody per towar/usługa (z pozycji faktur) oraz koszty per
