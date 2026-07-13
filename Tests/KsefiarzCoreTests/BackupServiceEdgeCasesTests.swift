@@ -20,6 +20,7 @@ struct BackupServiceEdgeCasesTests {
         let container = try ModelContainer(
             for: Invoice.self, PaymentRecord.self, Contractor.self, Product.self,
             BankAccount.self, InvoiceTemplate.self, RecurringInvoice.self, SyncRun.self,
+            Proforma.self, ProformaLine.self,
             configurations: configuration
         )
         return ModelContext(container)

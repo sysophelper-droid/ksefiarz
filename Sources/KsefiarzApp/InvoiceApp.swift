@@ -17,7 +17,7 @@ enum AppModelContainer {
     static let shared: ModelContainer = {
         let schema = Schema([Invoice.self, PaymentRecord.self, Contractor.self, Product.self,
                              BankAccount.self, InvoiceTemplate.self, RecurringInvoice.self,
-                             SyncRun.self])
+                             SyncRun.self, Proforma.self, ProformaLine.self])
         let storeDirectory = URL.applicationSupportDirectory
             .appending(path: "Ksefiarz", directoryHint: .isDirectory)
         do {

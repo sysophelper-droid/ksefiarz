@@ -61,6 +61,10 @@ public enum AppSettingsKeys {
     public static let numberPatternUPR = "ksef.numberPattern.UPR"
     public static let numberPatternKOR = "ksef.numberPattern.KOR"
     public static let numberPatternRR = "ksef.numberPattern.RR"
+    /// Wzorzec numeracji faktur proforma — pusty oznacza domyślny wzorzec
+    /// proform (`InvoiceNumberGenerator.defaultProformaPattern`), NIE serię VAT
+    /// (proforma to osobny dokument handlowy z własną numeracją).
+    public static let numberPatternPRO = "ksef.numberPattern.PRO"
     /// Formy płatności traktowane jako opłacone z góry (kody rozdzielone przecinkami).
     public static let prepaidForms = "ksef.prepaidForms"
     /// Horyzont (w dniach) widgetu „Płatności w najbliższych dniach” na Kokpicie.

@@ -28,7 +28,12 @@ Sources/KsefiarzCore/
                pola faktury zawsze edytowalne ręcznie), SyncRun (@Model,
                historia przebiegów Centrum synchronizacji), FA3Attachment
                (bloki załącznika FA(3); na fakturze jako JSON
-               w Invoice.attachmentJSON)
+               w Invoice.attachmentJSON),
+               Proforma (@Model) + ProformaLine (@Model) — faktura proforma
+               jako OSOBNY model (dokument handlowy poza KSeF; izolacja
+               od agregacji faktur — szczegóły w sekcji „Faktura proforma"),
+               ProformaDraft (+ init(from: Proforma), invoiceDraft() →
+               InvoiceDraft do konwersji proformy na fakturę VAT)
   Services/    KSeFService (API 2.0), KSeFCrypto, FA2XML (generator+parser), InvoiceValidator,
                BackupService (format v8 obejmuje metadane KPiR),
                FileExportService (NSSave/OpenPanel), InvoicePDFGenerator (+ kody QR,
@@ -144,7 +149,9 @@ Sources/KsefiarzCore/
                OK/info/ostrzeżenie/krytyczne, budowa werdyktu z 3 źródeł —
                NIP, Biała lista, uprawnienia KSeF Received),
                ContractorHistory (dopasowanie dokumentów po znormalizowanym
-               NIP, salda per waluta, średni czas płatności i scoring)
+               NIP, salda per waluta, średni czas płatności i scoring),
+               ProformaValidator (czysta walidacja proformy — NIP nabywcy
+               opcjonalny, walidowany gdy podany; osobny ProformaValidationError)
   Views/       MainContentView (NavigationSplitView), InvoiceListView, InvoiceDetailView,
                NewInvoiceView (nowa/edycja/korekta), NewPurchaseView (zakup
                spoza KSeF), ReportsView (sekcja Raporty), DashboardView,
@@ -166,7 +173,10 @@ Sources/KsefiarzCore/
                z menu „Ewidencje” na listach faktur),
                BankTransferExportView (wybór zakupów, rachunku źródłowego,
                daty, kodowania i kwoty VAT MPP; zapis .pli),
-               DictionariesView (+ ContractorsView/ProductsView/BankAccountsView)
+               DictionariesView (+ ContractorsView/ProductsView/BankAccountsView),
+               ProformaListView + ProformaDetailView + NewProformaView
+               (formularz z lekkim ProformaLineEditor) + ProformaEmailView
+               (sekcja „Faktury proforma"; SidebarSection.proformas)
 Tests/KsefiarzCoreTests/               # Swift Testing (#expect/#require), nazwy PO POLSKU
 Scripts/build-app.sh                   # składanie bundla .app
 ```
@@ -498,6 +508,50 @@ kwoty per kontrahent, zaokrąglenie do złotych. **Import usług** (zakup usług
 z UE) i **procedura OSS** świadomie POZA VAT-UE (tylko JPK_V7 / procedura
 unijna). Wygenerowany dokument (WDT+WNT+usługi, EL, XI) zweryfikowany
 oficjalną XSD (xmllint, 12.07.2026).
+
+## Faktura proforma (E2)
+
+- Proforma to **dokument handlowy, nie księgowy**: nie idzie do KSeF, nie
+  tworzy obowiązku VAT, nie wchodzi do żadnej ewidencji (KPiR, ryczałt,
+  JPK_V7, VAT-UE) ani statystyk (Kokpit, raporty, historia kontrahenta,
+  terminy). Dlatego jest **osobnym modelem `Proforma` (+ `ProformaLine`)**,
+  a NIE flagą na `Invoice`. Dzięki izolacji typem proforma strukturalnie nie
+  może trafić do żadnego z ~20 miejsc czytających `FetchDescriptor<Invoice>` /
+  `@Query<Invoice>` — nie trzeba pamiętać o jej wykluczaniu (i żadna przyszła
+  agregacja jej nie policzy przez pomyłkę). Świadoma decyzja zgodna z filozofią
+  niezmienników domenowych.
+- Cykl życia: aktywna → (opcjonalnie opłacona zaliczkowo) → **rozliczona**
+  właściwą fakturą VAT. Konwersja: `ProformaDetailView`/`ProformaListView`
+  otwierają `NewInvoiceView(initialDraft: proforma.invoiceDraft(), …)` — numer
+  nadawany z serii VAT, pełna walidacja faktury; po zapisie/wysyłce nowy
+  callback `onCreatedInvoice` oznacza proformę jako rozliczoną z numerem
+  powstałej faktury (`Proforma.markConverted`). Ręcznie potwierdzone opłacenie
+  proformy jest przenoszone na fakturę (nigdy nie cofa statusu już ustawionego
+  na fakturze). Dla waluty obcej kurs informacyjny proformy nie jest kopiowany:
+  nowa data faktury wymaga uzupełnienia właściwego kursu przed zapisem.
+- PDF i e-mail reużywają infrastruktury faktur przez **przejściową
+  (nieutrwaloną) `Invoice`** — `Proforma.transientInvoice()` buduje obiekt
+  `kind == .sales`, `documentTypeRaw == "PRO"`, bez `ksefId`. Generator PDF
+  dostał case „PRO" (tytuł „Faktura PROFORMA" + adnotacja „nie jest fakturą
+  VAT"); brak numeru/offline oznacza brak kodów weryfikacyjnych KSeF, a kod QR
+  płatności 2D ZBP powstaje normalnie (klient płaci za proformę).
+  `ProformaEmailView` używa `InvoiceEmailService.composeDocument` z własnym
+  tematem/treścią „proforma" i nazwą załącznika `Proforma-…pdf`.
+- Walidacja: `ProformaValidator` (czysta logika, testy). W odróżnieniu od
+  faktury VAT **NIP nabywcy jest opcjonalny** (proforma bywa dla konsumenta
+  albo kontrahenta zagranicznego) — sprawdzany tylko, gdy podany. NIP
+  sprzedawcy (nasza firma) wymagany.
+- Daty proformy są datami kalendarzowymi: „ważna do" i termin płatności
+  obejmują cały wskazany dzień; status wygasłej/zaległej pojawia się od dnia
+  następnego.
+- Edycja pozycji używa `Proforma.replaceLines(with:in:)`, które jawnie usuwa
+  poprzednie `ProformaLine`; samo przypisanie relacji zostawia w SwiftData
+  osierocone rekordy mimo reguły kaskadowej na usunięcie całej proformy.
+- Numeracja: osobna seria (domyślny wzorzec `PF/{RRRR}/{MM}/{NNN}`,
+  `InvoiceNumberGenerator.defaultProformaPattern`, klucz `numberPatternPRO`;
+  puste pole = domyślny wzorzec PF, a NIE seria VAT). Kopia zapasowa v11
+  obejmuje proformy (`BackupProforma`/`BackupProformaLine`, import z pominięciem
+  duplikatów po id/numerze).
 
 ## Gdzie przechowywane są dane
 

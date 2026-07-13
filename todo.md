@@ -59,8 +59,6 @@ kolejność dowolna. ⚠️ operacje modyfikujące KSeF testować wyłącznie na
 
 #### E. Dokumenty / wygląd
 
-- [ ] E2. Faktura proforma — dokument handlowy (nie idzie do KSeF),
-  z konwersją proforma → właściwa faktura.
 - [ ] E3. Eksport do formatów programów księgowych — struktura importowalna
   w Symfonii/Comarch/WAPRO (najlepiej pod konkretny program księgowej). Duży
   koszt, formaty zamknięte.
@@ -81,6 +79,31 @@ kolejność dowolna. ⚠️ operacje modyfikujące KSeF testować wyłącznie na
   (dziś zaszyte PL/EN).
 
 ## Zrealizowane
+
+### Faktura proforma — dokument handlowy (13.07.2026)
+
+- [x] E2. Faktury proforma jako OSOBNY model (`Proforma` + `ProformaLine`),
+  a nie flaga na `Invoice` — proforma strukturalnie nie może trafić do żadnego
+  `FetchDescriptor<Invoice>`/`@Query<Invoice>`, więc żadna ewidencja (KPiR,
+  ryczałt, JPK_V7, VAT-UE) ani statystyka (Kokpit, raporty, historia
+  kontrahenta, terminy) nie policzy jej przez pomyłkę — proforma nie jest
+  dokumentem księgowym i nie idzie do KSeF. Osobna sekcja „Faktury proforma"
+  w pasku bocznym (lista, filtry stanu rozliczenia, akcje). Formularz
+  `NewProformaView` (bez trybów KSeF/offline, załączników i pól podatkowych;
+  NIP nabywcy opcjonalny — proforma bywa dla konsumenta). Czysty
+  `ProformaValidator` z testami. PDF i e-mail reużywają infrastruktury faktur
+  przez PRZEJŚCIOWĄ, nieutrwaloną `Invoice` (`transientInvoice()`): wydruk
+  „Faktura PROFORMA" z adnotacją „nie jest fakturą VAT", kod QR płatności 2D
+  ZBP, brak kodów weryfikacyjnych KSeF; e-mail z proforma-specyficznym tematem
+  i treścią. **Konwersja proforma → faktura VAT**: „Konwertuj na fakturę VAT"
+  otwiera `NewInvoiceView` wypełniony danymi proformy (numer z serii VAT), a po
+  zapisie/wysyłce proforma zostaje oznaczona jako rozliczona z numerem faktury
+  (nowy `onCreatedInvoice` na `NewInvoiceView`). Osobna numeracja (wzorzec
+  `PF/…`, klucz `numberPatternPRO`) i kopia zapasowa v11. Review doprecyzował
+  semantykę konwersji: status zapłaty przechodzi na fakturę, walutowy kurs
+  proformy nie jest kopiowany do dokumentu z nową datą, a daty ważności i
+  płatności obejmują cały wskazany dzień. Edycja jawnie usuwa stare pozycje,
+  żeby nie zostawiać osieroconych rekordów `ProformaLine` w SwiftData.
 
 ### Plik przelewów do banku — Elixir-O (13.07.2026)
 
