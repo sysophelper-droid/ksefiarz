@@ -253,8 +253,11 @@ extension KSeFService {
             bearer: try requireAccessToken()
         )
 
-        // 7. Oczekiwanie na koniec przetwarzania (best effort — duża paczka
-        // może przekroczyć budżet; wtedy domknięciem zajmie się synchronizacja).
+        // 7. Oczekiwanie na koniec przetwarzania. Od chwili zamknięcia sesji
+        // paczka jest już przekazana do KSeF, więc błąd sieci przy odpytywaniu
+        // NIE może wywrócić wysyłki wyjątkiem — dokumenty muszą zostać
+        // oznaczone jako „w toku” z numerem sesji (inaczej ponowna wysyłka
+        // groziłaby duplikatami); domknięciem zajmie się synchronizacja.
         var status = KSeFBatchSessionStatus(
             code: nil,
             description: "Paczka przekazana do przetworzenia.",
@@ -264,10 +267,14 @@ extension KSeFService {
         )
         for attempt in 0..<maxPollAttempts {
             await notify(onPhase, .waitingForProcessing(attempt: attempt + 1))
-            status = try await fetchBatchSessionStatus(referenceNumber: session.referenceNumber)
+            if let fresh = try? await fetchBatchSessionStatus(
+                referenceNumber: session.referenceNumber
+            ) {
+                status = fresh
+            }
             if status.isTerminal { break }
             if attempt < maxPollAttempts - 1, pollInterval > 0 {
-                try await Task.sleep(nanoseconds: UInt64(pollInterval * 1_000_000_000))
+                try? await Task.sleep(nanoseconds: UInt64(pollInterval * 1_000_000_000))
             }
         }
 

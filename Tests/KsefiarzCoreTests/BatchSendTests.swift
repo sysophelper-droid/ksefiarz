@@ -785,6 +785,30 @@ struct KSeFBatchServiceTests {
         }
     }
 
+    @Test("Błąd sieci po zamknięciu sesji nie wywraca wysyłki wyjątkiem")
+    func bladPoZamknieciuSesji() async throws {
+        // Po zamknięciu sesji paczka jest już w KSeF — wyjątek zgubiłby numer
+        // sesji, dokumenty zostałyby „lokalne” i ponowna wysyłka groziłaby
+        // duplikatami. Wysyłka ma zwrócić stan nieterminalny do domknięcia
+        // przez synchronizację.
+        let transport = MockTransport()
+        let keys = TestRSAKeyPair()
+        routeAuth(transport)
+        // Odpytanie o status pada — rejestrowane przed trasami przepływu.
+        transport.route("sessions/BATCH-REF-1/invoices") { _ in (500, Data()) }
+        transport.route("sessions/BATCH-REF-1") { _ in (500, Data("awaria".utf8)) }
+        routeBatchFlow(transport, statusCounter: CallCounter())
+        let service = makeService(transport: transport, keys: keys)
+        service.maxPollAttempts = 3
+        service.rateLimitRetryDelay = 0
+
+        let result = try await service.sendInvoicesBatch(files: files, schema: .fa3)
+
+        #expect(result.sessionReferenceNumber == "BATCH-REF-1")
+        #expect(result.sessionStatus.isTerminal == false)
+        #expect(result.invoiceOutcomes.isEmpty)
+    }
+
     @Test("Pusta paczka jest odrzucana przed komunikacją z API")
     func pustaPaczka() async throws {
         let transport = MockTransport()
