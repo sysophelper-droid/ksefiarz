@@ -250,6 +250,22 @@ struct JPKV7GeneratorTests {
         #expect(result.warnings.contains { $0.contains("rozliczenia bankowego") })
     }
 
+    @Test("Korekta VAT RR bez zmiany kwot nie tworzy wiersza ani ostrzeżenia")
+    func rrZeroAmountCorrectionIsSilentlyOmitted() {
+        let correction = makeRRPurchase(
+            number: "KOR/RR/7/2026", issue: "2026-06-05",
+            payment: nil, net: 0, vat: 0, correction: true
+        )
+        let result = JPKV7Generator.generate(
+            invoices: [correction], options: makeOptions()
+        )
+
+        #expect(result.purchaseCount == 0)
+        #expect(result.inputVAT == 0)
+        #expect(!result.xml.contains("<DokumentZakupu>VAT_RR</DokumentZakupu>"))
+        #expect(!result.warnings.contains { $0.contains("VAT RR pominięty") })
+    }
+
     @Test("Zmniejszająca korekta VAT RR obniża K_42/K_43 w okresie zwrotu rolnika")
     func rrCorrectionByRefundDate() {
         let correction = makeRRPurchase(

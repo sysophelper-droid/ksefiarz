@@ -25,14 +25,18 @@ public enum JPKV7VATRRPolicy {
 
     public enum Decision: Equatable, Sendable {
         case recognize(Recognition)
+        /// Pominięcie wymagające ostrzeżenia — warunki art. 116 niespełnione.
         case omit(reason: String)
+        /// Pominięcie oczywiste (dokument nie wpływa na K_42/K_43, np. korekta
+        /// bez zmiany kwot) — bez wiersza ewidencji i bez ostrzeżenia.
+        case omitSilently
     }
 
     /// Klasyfikuje wyłącznie zakupową fakturę VAT RR / VAT RR KOREKTA.
     /// Zwykłe zakupy nie podlegają tej polityce.
     public static func decision(for invoice: Invoice) -> Decision {
         guard invoice.kind == .purchase, invoice.isRR else {
-            return .omit(reason: "dokument nie jest zakupową fakturą VAT RR")
+            return .omitSilently
         }
 
         // Korekta bez zmiany kwot nie wpływa na K_42/K_43 i nie tworzy
@@ -40,7 +44,7 @@ public enum JPKV7VATRRPolicy {
         if invoice.isCorrection,
            abs(invoice.netAmount) < tolerance,
            abs(invoice.vatAmount) < tolerance {
-            return .omit(reason: "korekta VAT RR nie zmienia kwot K_42/K_43")
+            return .omitSilently
         }
 
         guard let paymentEvidence = bankPaymentEvidence(invoice) else {
@@ -49,15 +53,20 @@ public enum JPKV7VATRRPolicy {
             )
         }
 
+        // Wyróżnikiem korekty zmniejszającej jest saldo brutto — to jego zwrot
+        // przez rolnika warunkuje ujęcie (art. 116 ust. 6c); ten sam predykat
+        // steruje komunikatem o brakującej dacie i treścią przypomnienia.
+        let isRefundCorrection = invoice.isCorrection && invoice.grossAmount < 0
+
         guard let date = settlementDate(invoice, evidence: paymentEvidence) else {
-            let action = invoice.isCorrection && invoice.grossAmount < 0
+            let action = isRefundCorrection
                 ? "zwrotu kwoty przez rolnika"
                 : "pełnej zapłaty wraz ze zryczałtowanym zwrotem"
             return .omit(reason: "brak daty \(action)")
         }
 
         let advisory: String
-        if invoice.isCorrection && invoice.vatAmount < 0 {
+        if isRefundCorrection {
             advisory = "VAT RR ujęty według daty zwrotu przez rolnika; zweryfikuj bankowy dowód zwrotu i dane faktury VAT RR KOREKTA (art. 116 ust. 6a i 6c)."
         } else {
             advisory = "VAT RR ujęty według daty zapłaty; zweryfikuj związek nabycia ze sprzedażą opodatkowaną oraz numer/data faktury lub numer KSeF na dowodzie zapłaty (art. 116 ust. 6)."

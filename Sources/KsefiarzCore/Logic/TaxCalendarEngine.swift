@@ -167,13 +167,13 @@ public enum TaxCalendarEngine {
                     case .omit(let reason):
                         if vatPeriod.contains(
                             JPKV7Generator.periodDate(invoice), calendar: calendar
-                        ) && !(invoice.isCorrection
-                            && abs(invoice.netAmount) < JPKV7VATRRPolicy.tolerance
-                            && abs(invoice.vatAmount) < JPKV7VATRRPolicy.tolerance) {
+                        ) {
                             warnings.append(
                                 "Faktura \(invoice.invoiceNumber): VAT RR pominięty w prognozie VAT — \(reason)."
                             )
                         }
+                    case .omitSilently:
+                        break
                     }
                     continue
                 }

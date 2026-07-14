@@ -435,13 +435,11 @@ public enum JPKV7Generator {
                     }
                     warnings.append("Faktura \(invoice.invoiceNumber): \(recognition.advisory)")
                 case .omit(let reason):
-                    // Korekta bez zmiany kwot nie wymaga wiersza ani alarmu.
-                    if inMonths(periodDate(invoice), year: year, months: months)
-                        && !(invoice.isCorrection
-                        && abs(invoice.netAmount) < JPKV7VATRRPolicy.tolerance
-                        && abs(invoice.vatAmount) < JPKV7VATRRPolicy.tolerance) {
+                    if inMonths(periodDate(invoice), year: year, months: months) {
                         warnings.append("Faktura \(invoice.invoiceNumber): VAT RR pominięty w JPK_V7 — \(reason).")
                     }
+                    return nil
+                case .omitSilently:
                     return nil
                 }
             } else {

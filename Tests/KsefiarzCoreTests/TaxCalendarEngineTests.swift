@@ -185,6 +185,21 @@ struct TaxCalendarEngineTests {
         #expect(forecast.warnings.contains { $0.contains("brak daty pełnej zapłaty") })
     }
 
+    @Test("Prognoza VAT nie ostrzega o korekcie VAT RR bez zmiany kwot")
+    func zeroAmountVATRRCorrectionIsSilent() {
+        let correction = invoice(
+            number: "KOR/RR/4", kind: .purchase, date: date(2026, 7, 3),
+            net: 0, vat: 0
+        )
+        correction.documentTypeRaw = "KOR_VAT_RR"
+        correction.paymentForm = .transfer
+        correction.paymentBankAccount = "61109010140000071219812874"
+
+        let forecast = snapshot(invoices: [correction], now: date(2026, 7, 13)).forecast
+        #expect(forecast.inputVAT == 0)
+        #expect(!forecast.warnings.contains { $0.contains("VAT RR") })
+    }
+
     @Test("Prognoza VAT nie ostrzega o niezapłaconym VAT RR spoza bieżącego okresu")
     func unpaidVATRROutsidePeriodDoesNotWarn() {
         let purchase = invoice(
