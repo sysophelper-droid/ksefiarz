@@ -51,19 +51,13 @@ public enum FileExportService {
         )
     }
 
-    /// Łączy faktury w jeden PDF i zapisuje go przez systemowy panel.
+    /// Otwiera systemowe okno drukowania macOS dla gotowego dokumentu PDF.
+    /// Budowanie zbiorczego PDF pozostaje po stronie wywołującego
+    /// (`BatchInvoicePDFBuilder`), aby jego błąd nie mylił się z anulowaniem.
     @discardableResult
-    public static func exportBatchPDF(of invoices: [Invoice], suggestedName: String) -> Bool {
-        guard let result = BatchInvoicePDFBuilder.makePDF(invoices: invoices) else { return false }
-        return save(data: result.data, suggestedName: suggestedName, contentType: .pdf)
-    }
-
-    /// Łączy faktury w jeden PDF i otwiera systemowe okno drukowania macOS.
-    @discardableResult
-    public static func printBatchPDF(of invoices: [Invoice]) -> Bool {
+    public static func printPDF(data: Data) -> Bool {
         guard
-            let result = BatchInvoicePDFBuilder.makePDF(invoices: invoices),
-            let document = PDFDocument(data: result.data),
+            let document = PDFDocument(data: data),
             let operation = document.printOperation(
                 for: NSPrintInfo.shared,
                 scalingMode: .pageScaleToFit,

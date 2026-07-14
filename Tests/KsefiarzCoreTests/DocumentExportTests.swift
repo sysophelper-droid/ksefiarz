@@ -156,6 +156,55 @@ struct WaproXMLExporterTests {
         #expect(WaproXMLExporter.clarionTime(reference, calendar: calendar) == 4_500_301)
     }
 
+    @Test("Data Clarion nie zależy od kalendarza systemowego użytkownika")
+    func clarionDateNonGregorian() {
+        var gregorian = Calendar(identifier: .gregorian)
+        gregorian.timeZone = TimeZone(secondsFromGMT: 0)!
+        var buddhist = Calendar(identifier: .buddhist)
+        buddhist.timeZone = TimeZone(secondsFromGMT: 0)!
+        let date = gregorian.date(from: DateComponents(year: 2026, month: 7, day: 14))!
+
+        #expect(
+            WaproXMLExporter.clarionDate(date, calendar: buddhist)
+                == WaproXMLExporter.clarionDate(date, calendar: gregorian)
+        )
+    }
+
+    @Test("Stawka VAT z częścią ułamkową nie jest przekłamywana w KOD_VAT")
+    func vatRateNormalization() throws {
+        let doc = invoice(number: "FV/VAT", kind: .sales)
+        doc.lines = [
+            InvoiceLine(index: 1, name: "Usługa", quantity: 1,
+                        unitNetPrice: 100, netAmount: 100, vatRate: "23.00", vatAmount: 23),
+            InvoiceLine(index: 2, name: "Towar", quantity: 1,
+                        unitNetPrice: 50, netAmount: 50, vatRate: "8,0", vatAmount: 4),
+        ]
+        let result = try WaproXMLExporter.export(invoices: [doc])
+        let xml = try document(result.data)
+
+        #expect(try texts("//POZYCJA_DOKUMENTU/KOD_VAT", in: xml) == ["23", "8"])
+        #expect(try texts("//VAT/STAWKA/KOD_VAT", in: xml) == ["23", "8"])
+    }
+
+    @Test("Zagraniczny IBAN nie jest zapisywany jako przekłamany NRB")
+    func foreignAccountOmitted() throws {
+        let doc = invoice(number: "FV/GB", kind: .sales)
+        doc.paymentBankAccount = "GB29 NWBK 6016 1331 9268 19"
+        let result = try WaproXMLExporter.export(invoices: [doc])
+        let xml = try document(result.data)
+
+        #expect(try xml.nodes(forXPath: "//NAGLOWEK_DOKUMENTU/NUMER_RACHUNKU").isEmpty)
+    }
+
+    @Test("Kwota VAT dla MPP jest przeliczana do złotych po kursie dokumentu")
+    func splitPaymentVATInPLN() throws {
+        let foreign = invoice(number: "EUR/MPP", kind: .sales, currency: "EUR", exchangeRate: 4.2)
+        let result = try WaproXMLExporter.export(invoices: [foreign])
+        let xml = try document(result.data)
+
+        #expect(try texts("//PODZIELONA_PLATNOSC/PP_KW_VAT_R", in: xml) == ["113.40"])
+    }
+
     @Test("Eksporter odrzuca pusty wybór i limit powyżej 999 dokumentów")
     func limits() throws {
         #expect(throws: WaproXMLExporter.ExportError.noDocuments) {

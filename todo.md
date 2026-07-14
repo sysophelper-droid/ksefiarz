@@ -60,7 +60,9 @@ kolejność dowolna. ⚠️ operacje modyfikujące KSeF testować wyłącznie na
   pól i dokumentów wg oficjalnej specyfikacji; brak kursu/pozycji daje jawne
   ostrzeżenie. Comarch publikuje strukturę własnego XML tylko partnerom,
   a Symfonia nie publikuje kompletnego szablonu Formatu 3.0 — zakres świadomie
-  nie zgaduje zamkniętych formatów. 7 testów generatora i parsera XML.
+  nie zgaduje zamkniętych formatów. 11 testów generatora i parsera XML
+  (w tym niezależność dat Clarion od kalendarza systemowego, normalizacja
+  stawek VAT, NRB-only dla NUMER_RACHUNKU i MPP w PLN po kursie).
 - [x] E4. Zbiorczy PDF/druk wielu faktur z menu „Dokumenty” i menu
   kontekstowego multiselectu: zaznaczone albo wszystkie widoczne dokumenty
   są łączone w kolejności listy ze wszystkimi stronami, następnie zapisywane

@@ -85,8 +85,11 @@ public enum WaproXMLExporter {
     }
 
     /// Data Clarion wg wzoru WAPRO: liczba dni SQL od 1900-01-01 + 36163.
+    /// Liczona zawsze w kalendarzu gregoriańskim — kalendarz systemowy inny
+    /// niż gregoriański (np. buddyjski) przesunąłby rok 1900 o setki lat;
+    /// z przekazanego kalendarza brana jest wyłącznie strefa czasowa.
     static func clarionDate(_ date: Date, calendar source: Calendar = .current) -> Int {
-        var calendar = source
+        var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = source.timeZone
         let components = calendar.dateComponents([.year, .month, .day], from: date)
         let day = calendar.date(from: components) ?? date
@@ -123,6 +126,7 @@ public enum WaproXMLExporter {
         let header = XMLElement(name: "NAGLOWEK_DOKUMENTU")
         let isSales = invoice.kind == .sales
         let isForeign = invoice.currency.uppercased() != "PLN"
+        let factor = isForeign && invoice.exchangeRate > 0 ? invoice.exchangeRate : 1
 
         add("RODZAJ_DOKUMENTU", "H", to: header)
         add("NUMER", limited(invoice.invoiceNumber, to: 30), to: header)
@@ -152,7 +156,7 @@ public enum WaproXMLExporter {
             }
         }
         let transactionCodes = transactionCodes(for: invoice)
-        add("RODZAJ_TRANSAKCJI_HANDLOWEJ", transactionCodes.joined(separator: " "), to: header, unlessEmpty: true)
+        add("RODZAJ_TRANSAKCJI_HANDLOWEJ", limited(transactionCodes.joined(separator: " "), to: 255), to: header, unlessEmpty: true)
         add("PODLEGA_PP", invoice.splitPayment ? 1 : 0, to: header)
 
         if let ksefID = invoice.ksefId, !ksefID.isEmpty {
@@ -171,7 +175,8 @@ public enum WaproXMLExporter {
             add("PP_NR_FAKTURY", limited(invoice.invoiceNumber, to: 30), to: split)
             let payerIdentity = taxIdentity(isSales ? invoice.buyerNIP : invoice.sellerNIP)
             add("PP_NIP", limited(payerIdentity.number, to: 30), to: split)
-            add("PP_KW_VAT_R", decimal(invoice.vatAmount), to: split)
+            // MPP rozlicza się w złotych — kwota VAT po kursie dokumentu.
+            add("PP_KW_VAT_R", decimal(invoice.vatAmount * factor), to: split)
             header.addChild(split)
         }
 
@@ -183,7 +188,6 @@ public enum WaproXMLExporter {
         header.addChild(dates)
 
         let values = XMLElement(name: "WARTOSCI_NAGLOWKA")
-        let factor = isForeign && invoice.exchangeRate > 0 ? invoice.exchangeRate : 1
         add("NETTO_SPRZEDAZY", decimal(isSales ? invoice.netAmount * factor : 0), to: values)
         add("BRUTTO_SPRZEDAZY", decimal(isSales ? invoice.grossAmount * factor : 0), to: values)
         add("NETTO_ZAKUPU", decimal(isSales ? 0 : invoice.netAmount * factor), to: values)
@@ -340,10 +344,19 @@ public enum WaproXMLExporter {
     }
 
     private static func normalizedVATRate(_ value: String) -> String {
-        switch value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        switch trimmed.lowercased() {
         case "zw", "zw.": return "ZW"
         case "np", "np.": return "NP"
-        default: return value.replacingOccurrences(of: ".0", with: "")
+        default:
+            // Obcinana jest wyłącznie zbędna część ułamkowa ("8.0", "23,00"),
+            // nigdy cyfry samej stawki.
+            var rate = trimmed.replacingOccurrences(of: ",", with: ".")
+            if rate.contains(".") {
+                while rate.hasSuffix("0") { rate.removeLast() }
+                if rate.hasSuffix(".") { rate.removeLast() }
+            }
+            return rate
         }
     }
 
@@ -377,8 +390,14 @@ public enum WaproXMLExporter {
         value.uppercased().filter { $0.isLetter || $0.isNumber }
     }
 
+    /// NUMER_RACHUNKU to wg specyfikacji STR(26) — mieści wyłącznie polski
+    /// NRB (bez prefiksu PL). Rachunek innego kształtu, np. zagraniczny IBAN,
+    /// jest pomijany zamiast zapisu w postaci obciętej i przekłamanej.
     private static func normalizedAccount(_ value: String?) -> String {
-        String((value ?? "").filter(\.isNumber).suffix(26))
+        let compact = normalizedIdentifier(value ?? "")
+        let digits = compact.hasPrefix("PL") ? String(compact.dropFirst(2)) : compact
+        guard digits.count == 26, digits.allSatisfy(\.isNumber) else { return "" }
+        return digits
     }
 
     private static func taxIdentity(_ identifier: String) -> (country: String, number: String) {

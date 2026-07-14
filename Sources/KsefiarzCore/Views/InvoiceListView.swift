@@ -307,15 +307,12 @@ public struct InvoiceListView: View {
                 }
                 Divider()
                 Button {
-                    FileExportService.exportBatchPDF(
-                        of: documentScope,
-                        suggestedName: batchPDFFileName
-                    )
+                    exportBatchPDF(documentScope)
                 } label: {
                     Label("Zapisz jako jeden PDF…", systemImage: "doc.richtext")
                 }
                 Button {
-                    FileExportService.printBatchPDF(of: documentScope)
+                    printBatchPDF(documentScope)
                 } label: {
                     Label("Drukuj…", systemImage: "printer")
                 }
@@ -542,13 +539,10 @@ public struct InvoiceListView: View {
                 exportWaproXML(selected)
             }
             Button(selected.count == 1 ? "Zapisz jako PDF…" : "Zapisz \(selected.count) jako jeden PDF…") {
-                FileExportService.exportBatchPDF(
-                    of: selected,
-                    suggestedName: batchPDFFileName(for: selected)
-                )
+                exportBatchPDF(selected)
             }
             Button(selected.count == 1 ? "Drukuj…" : "Drukuj \(selected.count) faktur…") {
-                FileExportService.printBatchPDF(of: selected)
+                printBatchPDF(selected)
             }
         }
     }
@@ -565,14 +559,33 @@ public struct InvoiceListView: View {
         return filteredInvoices.filter { selection.contains($0.id) }
     }
 
-    private var batchPDFFileName: String {
-        batchPDFFileName(for: documentScope)
-    }
-
     private func batchPDFFileName(for invoices: [Invoice]) -> String {
         let kindName = kind == .purchase ? "zakupy" : "sprzedaz"
         let date = FA2Format.dateFormatter.string(from: .now)
         return "faktury_\(kindName)_\(invoices.count)_\(date).pdf"
+    }
+
+    /// Zapisuje wspólny PDF; błąd budowania jest zgłaszany użytkownikowi,
+    /// zamiast wyglądać identycznie jak anulowanie panelu zapisu.
+    private func exportBatchPDF(_ invoices: [Invoice]) {
+        guard let result = BatchInvoicePDFBuilder.makePDF(invoices: invoices) else {
+            errorMessage = "Nie udało się przygotować wspólnego PDF dla wybranych faktur."
+            return
+        }
+        FileExportService.exportData(
+            result.data,
+            suggestedName: batchPDFFileName(for: invoices),
+            contentType: .pdf
+        )
+    }
+
+    /// Drukuje wspólny PDF przez systemowe okno drukowania macOS.
+    private func printBatchPDF(_ invoices: [Invoice]) {
+        guard let result = BatchInvoicePDFBuilder.makePDF(invoices: invoices) else {
+            errorMessage = "Nie udało się przygotować wspólnego PDF dla wybranych faktur."
+            return
+        }
+        FileExportService.printPDF(data: result.data)
     }
 
     /// Eksportuje aktualny zasięg do jawnego, publicznie opisanego formatu

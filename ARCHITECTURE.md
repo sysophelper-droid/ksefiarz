@@ -425,10 +425,14 @@ Scripts/build-app.sh                   # składanie bundla .app
   `KARTOTEKA_KONTRAHENTOW`, `KARTOTEKA_PRACOWNIKOW` i
   `KARTOTEKA_ARTYKULOW`. Kontrahenci są deduplikowani po znormalizowanym NIP,
   a bez NIP po nazwie; jedna karta może być jednocześnie odbiorcą i dostawcą.
-  Dane dokumentu obejmują nagłówek, daty Clarion (dni SQL + 36163), wartości
+  Dane dokumentu obejmują nagłówek, daty Clarion (dni SQL + 36163, zawsze
+  w kalendarzu gregoriańskim niezależnie od ustawień systemu), wartości
   bazowe i walutowe, kurs, formę płatności mapowaną do słownika WAPRO, NRB,
-  pozycje, podsumowanie VAT per stawka, MPP, numer KSeF oraz unikalne kody
-  GTU/procedur. Napisy są ograniczane do limitów `STR(n)`, liczby używają
+  pozycje, podsumowanie VAT per stawka, MPP (kwota VAT po kursie, w PLN),
+  numer KSeF oraz unikalne kody GTU/procedur. `NUMER_RACHUNKU` to `STR(26)`,
+  więc trafia tam wyłącznie poprawny polski NRB (26 cyfr, bez prefiksu `PL`);
+  rachunek innego kształtu, np. zagraniczny IBAN, jest pomijany zamiast
+  obcinania. Napisy są ograniczane do limitów `STR(n)`, liczby używają
   kropki, a Foundation `XMLDocument` odpowiada za poprawne kodowanie UTF-8
   i escapowanie.
 - Waluta obca z dodatnim `Invoice.exchangeRate` jest przeliczana do wartości
@@ -439,16 +443,23 @@ Scripts/build-app.sh                   # składanie bundla .app
   nie zmienia w modelach i należy importować najpierw do bufora księgowości.
 - Specyfikacja źródłowa: [WAPRO — struktura XML](https://wapro.pl/dokumentacja-erp/desktop/docs/finanse-i-ksiegowosc/informacje-uzupelniajace/kh-99.010-specyfikacja-pliku-XML/)
   oraz [WAPRO Kaper — import dokumentów](https://wapro.pl/dokumentacja-erp/desktop/docs/ksiega-podatkowa/narzedzia-i-moduly/kp-90.20.005-import-dokumentow/).
-  Wersja HTML ma literówkę `DBIORCA`; oficjalny PDF specyfikacji i starsze
-  wydania używają rzeczywistego elementu `ODBIORCA`, który emituje generator.
-  Comarch udostępnia opis własnego XML tylko autoryzowanym partnerom, a pomoc
-  Symfonii opisuje Format 3.0 bez kompletnego szablonu pól; dlatego nie
-  generujemy formatów o zgadywanej strukturze.
+  Wersja HTML ma literówkę `DBIORCA`; oficjalny PDF specyfikacji
+  (`wapro.pl/doc/Specyfikacja_pliku_WAPRO_xml.pdf`) używa rzeczywistego
+  elementu `ODBIORCA`, który emituje generator. `RODZAJ_POZYCJI` jest
+  w specyfikacji opisane tylko jako „P – przychodowa, R – rozchodowa" bez
+  glosy; generator przyjmuje odczyt księgowy (sprzedaż = `P`/przychód,
+  zakup = `R`), pole jest opcjonalne, a klasyfikację dokumentu i tak
+  wyznacza nagłówkowe `ZAKUP_SPRZEDAZ`. Comarch udostępnia opis własnego
+  XML tylko autoryzowanym partnerom, a pomoc Symfonii opisuje Format 3.0
+  bez kompletnego szablonu pól; dlatego nie generujemy formatów
+  o zgadywanej strukturze.
 - `BatchInvoicePDFBuilder` generuje osobny wydruk każdej faktury istniejącym
   `InvoicePDFGenerator`, po czym kopiuje wszystkie `PDFPage` do jednego
   `PDFDocument`. Błąd któregokolwiek składnika przerywa całość, aby nie zapisać
-  po cichu niekompletnego zestawu. `FileExportService.exportBatchPDF` zapisuje
-  wynik, a `printBatchPDF` przekazuje ten sam dokument do systemowego
+  po cichu niekompletnego zestawu — `InvoiceListView` buduje PDF przed
+  otwarciem panelu i błąd budowania zgłasza alertem (nie myli się z
+  anulowaniem zapisu). Gotowe dane zapisuje `FileExportService.exportData`,
+  a `FileExportService.printPDF` przekazuje je do systemowego
   `NSPrintOperation` ze skalowaniem do strony i automatycznym obrotem.
 
 ## Eksport przelewów Elixir-O
