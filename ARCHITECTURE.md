@@ -539,7 +539,8 @@ Scripts/build-app.sh                   # składanie bundla .app
   bez odsetek (art. 20 KPC), zaokrąglona w górę (art. 126(1) § 3 KPC).
   W EPU tylko roszczenia wymagalne w ostatnich 3 latach (art. 505(29a)
   KPC) i kwoty w złotych — pozycje walutowe/przedawnione silnik jawnie
-  wyłącza z listą pominięć. EPU nie przyjmuje załączników — dowody
+  wyłącza z listą pominięć; walidacja ostrzega też o brakach danych obu
+  stron i braku wcześniejszego wezwania. EPU nie przyjmuje załączników — dowody
   wyłącznie wskazuje się w pozwie; właściwy jest zawsze Sąd Rejonowy
   Lublin-Zachód w Lublinie (VI Wydział Cywilny).
 - **Przypomnienia e-mail** (C4): `PaymentReminderEngine.candidates` wybiera
@@ -548,9 +549,12 @@ Scripts/build-app.sh                   # składanie bundla .app
   i cykliczne ponaglenia po terminie (`repeatAfterDays`). Pamięcią doręczeń
   jest `collectionReminderAt` (wspólna z C3 — pismo PDF i e-mail liczą się
   tak samo); etap ≥ wezwanie WSTRZYMUJE miękkie przypomnienia (sprzeczny
-  ton podważałby wezwanie). Brak adresu e-mail → jawne pominięcie.
-  Cykl w `MainContentView` (start + co 6 h, przełącznik
-  `reminder.emails.enabled`, domyślnie wyłączony).
+  ton podważałby wezwanie). Brak adresu e-mail → jawne pominięcie i dzienne
+  powiadomienie z numerami faktur (dedup przez
+  `reminder.emails.omissionsNotifiedDay`).
+  Cykl w `MainContentView` (natychmiast po starcie/włączeniu/zmianie
+  konfiguracji + co 6 h, przełącznik `reminder.emails.enabled`, domyślnie
+  wyłączony).
 - **Automatyzacja Mail**: `MailAutomationService` wykonuje AppleScript
   (NSAppleScript, main thread) — `save theMessage` tworzy szkic w Wersjach
   roboczych, `send theMessage` wysyła; wiadomość z `visible:false` nie

@@ -1,7 +1,7 @@
 import Foundation
 
 /// Ustawienia automatycznych przypomnień e-mail o płatnościach.
-public struct PaymentReminderSettings: Equatable, Sendable {
+public struct PaymentReminderSettings: Equatable, Hashable, Sendable {
     /// Ile dni przed terminem wysłać uprzedzające przypomnienie
     /// (okno obejmuje też dzień terminu). 0 = tylko w dniu terminu.
     public var daysBeforeDue: Int
@@ -11,8 +11,31 @@ public struct PaymentReminderSettings: Equatable, Sendable {
     public init(daysBeforeDue: Int = 3, repeatAfterDays: Int = 7) {
         // Wartości spoza zakresu (ręczna edycja UserDefaults) nie mogą
         // zapętlić przypomnień ani cofnąć okna przed datę wystawienia.
-        self.daysBeforeDue = max(0, daysBeforeDue)
-        self.repeatAfterDays = max(1, repeatAfterDays)
+        self.daysBeforeDue = min(30, max(0, daysBeforeDue))
+        self.repeatAfterDays = min(60, max(1, repeatAfterDays))
+    }
+}
+
+/// Tożsamość cyklu automatyzacji SwiftUI. Zmiana dowolnego ustawienia
+/// istotnego dla przebiegu restartuje task, dzięki czemu nowa konfiguracja
+/// obowiązuje od razu, bez oczekiwania do kolejnego uruchomienia aplikacji.
+struct PaymentReminderAutomationConfiguration: Equatable, Hashable, Sendable {
+    let isEnabled: Bool
+    let settings: PaymentReminderSettings
+    let deliveryModeRaw: String
+
+    init(
+        isEnabled: Bool,
+        daysBeforeDue: Int,
+        repeatAfterDays: Int,
+        deliveryModeRaw: String
+    ) {
+        self.isEnabled = isEnabled
+        self.settings = PaymentReminderSettings(
+            daysBeforeDue: daysBeforeDue,
+            repeatAfterDays: repeatAfterDays
+        )
+        self.deliveryModeRaw = deliveryModeRaw
     }
 }
 
@@ -37,7 +60,15 @@ public struct PaymentReminderCandidate {
 /// Faktura pominięta przez silnik przypomnień — z jawnym powodem
 /// (transparentność zamiast cichego pomijania).
 public struct PaymentReminderOmission: Equatable, Sendable {
+    public enum Kind: Equatable, Sendable {
+        /// Miękkie przypomnienie celowo wstrzymane po formalnym wezwaniu.
+        case formalCollection
+        /// Brak adresu, który użytkownik powinien uzupełnić w słowniku.
+        case missingRecipient
+    }
+
     public let invoiceNumber: String
+    public let kind: Kind
     public let reason: String
 }
 
@@ -85,6 +116,7 @@ public enum PaymentReminderEngine {
             if invoice.collectionStage >= .demanded {
                 omissions.append(PaymentReminderOmission(
                     invoiceNumber: invoice.invoiceNumber,
+                    kind: .formalCollection,
                     reason: "formalna windykacja w toku (\(invoice.collectionStage.displayName))"
                 ))
                 continue
@@ -112,6 +144,7 @@ public enum PaymentReminderEngine {
             guard !recipient.isEmpty else {
                 omissions.append(PaymentReminderOmission(
                     invoiceNumber: invoice.invoiceNumber,
+                    kind: .missingRecipient,
                     reason: "brak adresu e-mail w słowniku kontrahentów"
                 ))
                 continue
@@ -136,6 +169,21 @@ public enum PaymentReminderEngine {
                 < ($1.invoice.paymentDueDate ?? .distantPast)
         }
         return (candidates, omissions)
+    }
+
+    /// Treść dziennego podsumowania faktur, dla których automat nie mógł
+    /// przygotować wiadomości z powodu braku adresu. Celowe wstrzymanie po
+    /// formalnym wezwaniu nie jest błędem i nie trafia do powiadomienia.
+    public static func missingRecipientNotificationBody(
+        omissions: [PaymentReminderOmission]
+    ) -> String? {
+        let missing = omissions.filter { $0.kind == .missingRecipient }
+        guard !missing.isEmpty else { return nil }
+        let listed = missing.prefix(5).map(\.invoiceNumber).joined(separator: ", ")
+        let suffix = missing.count > 5 ? "…" : ""
+        let noun = missing.count == 1 ? "faktury" : "faktur"
+        return "Brak adresu e-mail dla \(missing.count) \(noun): \(listed)\(suffix). "
+            + "Uzupełnij dane kontrahentów w słowniku."
     }
 
     // MARK: Treść wiadomości

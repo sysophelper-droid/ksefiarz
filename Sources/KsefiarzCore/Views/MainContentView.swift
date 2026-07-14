@@ -96,6 +96,15 @@ public struct MainContentView: View {
     @AppStorage(AppSettingsKeys.reminderRepeatDays) private var reminderRepeatDays = 7
     @AppStorage(AppSettingsKeys.reminderDeliveryMode) private var reminderDeliveryModeRaw = MailAutomationService.DeliveryMode.draft.rawValue
 
+    private var paymentReminderAutomationConfiguration: PaymentReminderAutomationConfiguration {
+        PaymentReminderAutomationConfiguration(
+            isEnabled: reminderEmailsEnabled,
+            daysBeforeDue: reminderDaysBefore,
+            repeatAfterDays: reminderRepeatDays,
+            deliveryModeRaw: reminderDeliveryModeRaw
+        )
+    }
+
     public init() {}
 
     /// Sekcje widoczne w pasku bocznym. Ewidencja podatkowa zależy od wybranej
@@ -194,7 +203,6 @@ public struct MainContentView: View {
             if syncOnLaunch { await syncBothKinds(trigger: .launch) }
             await postDeadlineNotifications()
             await renewCertificatesIfNeeded()
-            await processPaymentReminders()
         }
         // Latarnia MF nie wymaga uwierzytelnienia. Status i komunikaty są
         // odświeżane co minutę; komunikat kończący uzupełnia termin tylko
@@ -241,12 +249,13 @@ public struct MainContentView: View {
         // Automatyczne przypomnienia e-mail o płatnościach — sprawdzane
         // co 6 godzin (przypomnienia mają ziarnistość dnia; deduplikacja
         // po dacie ostatniego przypomnienia na fakturze).
-        .task(id: "payment-reminders-\(reminderEmailsEnabled)") {
-            guard reminderEmailsEnabled else { return }
+        .task(id: paymentReminderAutomationConfiguration) {
+            let configuration = paymentReminderAutomationConfiguration
+            guard configuration.isEnabled else { return }
             while !Task.isCancelled {
+                await processPaymentReminders(configuration: configuration)
                 try? await Task.sleep(for: .seconds(6 * 3600))
                 guard !Task.isCancelled else { return }
-                await processPaymentReminders()
             }
         }
         // Odnowienie certyfikatów sprawdzane cyklicznie (okno ~30 dni przed
@@ -423,20 +432,23 @@ public struct MainContentView: View {
     /// doręczeń, wspólna ze ścieżką windykacji. Błąd automatyzacji (np. brak
     /// zgody) przerywa przebieg i jest zgłaszany powiadomieniem raz dziennie.
     @MainActor
-    private func processPaymentReminders() async {
-        guard reminderEmailsEnabled else { return }
+    private func processPaymentReminders(
+        configuration: PaymentReminderAutomationConfiguration
+    ) async {
+        guard configuration.isEnabled else { return }
         let invoices = (try? modelContext.fetch(FetchDescriptor<Invoice>())) ?? []
         let contractors = (try? modelContext.fetch(FetchDescriptor<Contractor>())) ?? []
         let result = PaymentReminderEngine.candidates(
             invoices: invoices,
             contractors: contractors,
-            settings: PaymentReminderSettings(
-                daysBeforeDue: reminderDaysBefore,
-                repeatAfterDays: reminderRepeatDays
-            )
+            settings: configuration.settings
         )
-        guard !result.candidates.isEmpty else { return }
-        let mode = MailAutomationService.DeliveryMode(rawValue: reminderDeliveryModeRaw) ?? .draft
+        let missingRecipientBody = PaymentReminderEngine
+            .missingRecipientNotificationBody(omissions: result.omissions)
+        guard !result.candidates.isEmpty || missingRecipientBody != nil else { return }
+        let mode = MailAutomationService.DeliveryMode(
+            rawValue: configuration.deliveryModeRaw
+        ) ?? .draft
 
         var deliveredNumbers: [String] = []
         var failure: Error?
@@ -464,6 +476,10 @@ public struct MainContentView: View {
         let center = UNUserNotificationCenter.current()
         let granted = (try? await center.requestAuthorization(options: [.alert, .sound, .badge])) ?? false
         guard granted else { return }
+        let dayKey = ISO8601DateFormatter.string(
+            from: .now, timeZone: .current,
+            formatOptions: [.withFullDate]
+        )
 
         if !deliveredNumbers.isEmpty {
             let content = UNMutableNotificationContent()
@@ -482,13 +498,36 @@ public struct MainContentView: View {
                 trigger: nil
             ))
         }
+        if let missingRecipientBody {
+            // Braki adresów nie dostają stempla, więc wracają w każdym
+            // cyklu. Jedno dzienne podsumowanie jest jawne, ale nie spamuje.
+            let lastNotified = UserDefaults.standard.string(
+                forKey: AppSettingsKeys.reminderOmissionsNotifiedDay
+            )
+            if lastNotified != dayKey {
+                let content = UNMutableNotificationContent()
+                content.title = "Pominięto przypomnienia o płatnościach"
+                content.body = missingRecipientBody
+                content.sound = .default
+                do {
+                    try await center.add(UNNotificationRequest(
+                        identifier: "ksefiarz.reminders.omissions.\(dayKey)",
+                        content: content,
+                        trigger: nil
+                    ))
+                    UserDefaults.standard.set(
+                        dayKey,
+                        forKey: AppSettingsKeys.reminderOmissionsNotifiedDay
+                    )
+                } catch {
+                    // Brak stempla pozwoli ponowić powiadomienie w kolejnym
+                    // cyklu, gdy centrum powiadomień znów będzie dostępne.
+                }
+            }
+        }
         if let failure {
             // Jedno powiadomienie o problemie dziennie — cykl co 6 godzin
             // nie powinien czterokrotnie powtarzać tej samej diagnozy.
-            let dayKey = ISO8601DateFormatter.string(
-                from: .now, timeZone: .current,
-                formatOptions: [.withFullDate]
-            )
             let lastNotified = UserDefaults.standard.string(
                 forKey: AppSettingsKeys.reminderErrorNotifiedDay
             )

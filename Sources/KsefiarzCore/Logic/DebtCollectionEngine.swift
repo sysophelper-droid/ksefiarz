@@ -198,15 +198,13 @@ public enum DebtCollectionEngine {
     ) -> (eligible: [PaymentDemandItem], omissions: [(invoiceNumber: String, reason: String)]) {
         var eligible: [PaymentDemandItem] = []
         var omissions: [(invoiceNumber: String, reason: String)] = []
-        let calendar = Calendar.current
-        let threeYearsAgo = calendar.date(byAdding: .year, value: -3, to: asOf) ?? asOf
         for item in items {
-            if item.currency != "PLN" {
-                omissions.append((item.invoiceNumber,
-                    "waluta \(item.currency) — pozew EPU obejmuje kwoty w złotych"))
-            } else if item.dueDate < threeYearsAgo {
-                omissions.append((item.invoiceNumber,
-                    "roszczenie wymagalne ponad 3 lata temu — poza zakresem EPU (art. 505(29a) KPC)"))
+            if let reason = epuOmissionReason(
+                currency: item.currency,
+                dueDate: item.dueDate,
+                asOf: asOf
+            ) {
+                omissions.append((item.invoiceNumber, reason))
             } else {
                 eligible.append(item)
             }
@@ -214,12 +212,58 @@ public enum DebtCollectionEngine {
         return (eligible, omissions)
     }
 
+    /// Faktury spełniające techniczne kryteria EPU używane przy
+    /// odnotowaniu przygotowania pozwu. Dzięki temu faktura pokazana na
+    /// liście pominięć (waluta obca / ponad 3 lata) nie dostaje fałszywego
+    /// statusu „EPU przygotowane”. Pozostałe warunki (sprzedaż, saldo,
+    /// widoczność) zapewnia widok windykacji przed wywołaniem tej funkcji.
+    public static func epuEligibleInvoices(
+        from invoices: [Invoice],
+        asOf: Date = .now
+    ) -> [Invoice] {
+        invoices.filter { invoice in
+            guard let dueDate = invoice.paymentDueDate else { return false }
+            return epuOmissionReason(
+                currency: invoice.currency,
+                dueDate: dueDate,
+                asOf: asOf
+            ) == nil
+        }
+    }
+
+    /// Powód wyłączenia wspólny dla pozycji pozwu i odpowiadających im
+    /// faktur. Porównujemy początki dni, żeby roszczenie dokładnie na
+    /// granicy trzech lat nie wypadało z EPU tylko dlatego, że pozew jest
+    /// przygotowywany później niż o północy.
+    private static func epuOmissionReason(
+        currency: String,
+        dueDate: Date,
+        asOf: Date
+    ) -> String? {
+        if currency != "PLN" {
+            return "waluta \(currency) — pozew EPU obejmuje kwoty w złotych"
+        }
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: asOf)
+        let threeYearsAgo = calendar.date(byAdding: .year, value: -3, to: today) ?? today
+        if calendar.startOfDay(for: dueDate) < threeYearsAgo {
+            return "roszczenie wymagalne ponad 3 lata temu — poza zakresem EPU (art. 505(29a) KPC)"
+        }
+        return nil
+    }
+
     /// Wartość przedmiotu sporu: suma należności głównych (bez odsetek —
     /// art. 20 KPC), zaokrąglona w górę do pełnego złotego (art. 126(1) § 3 KPC).
     public static func epuDisputeValue(of items: [PaymentDemandItem]) -> Int {
-        let sum = items.reduce(0) { $0 + $1.outstanding }
-        guard sum > 0 else { return 0 }
-        return Int(sum.rounded(.up))
+        // Kwoty faktur są groszowe, ale model przechowuje je jako Double.
+        // Sumowanie Double przed ceil potrafi zmienić dokładne 988,00 na
+        // 988,0000000000001 i zawyżyć WPS o złotówkę. Najpierw zamieniamy
+        // każdą pozycję na grosze, potem wykonujemy arytmetykę całkowitą.
+        let totalCents = items.reduce(Int64(0)) { result, item in
+            result + Int64((item.outstanding * 100).rounded())
+        }
+        guard totalCents > 0 else { return 0 }
+        return Int((totalCents + 99) / 100)
     }
 
     /// Opłata od pozwu w EPU: czwarta część opłaty z art. 13 ustawy
@@ -287,6 +331,18 @@ public enum DebtCollectionEngine {
                 + "czy strony podjęły próbę polubownego rozwiązania sporu "
                 + "(art. 187 § 1 pkt 3 KPC) — wyślij najpierw wezwanie."
             )
+        }
+        if parties.claimantName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            warnings.append("Brak nazwy powoda — uzupełnij dane firmy w Ustawieniach.")
+        }
+        if parties.claimantNIP.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            warnings.append("Brak NIP powoda — uzupełnij dane firmy w Ustawieniach.")
+        }
+        if parties.claimantAddress.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            warnings.append("Brak adresu powoda — uzupełnij dane firmy w Ustawieniach.")
+        }
+        if parties.defendantName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            warnings.append("Brak nazwy pozwanego — uzupełnij dane kontrahenta.")
         }
         if parties.defendantAddress.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             warnings.append(

@@ -213,6 +213,33 @@ struct DebtCollectionEngineTests {
         #expect(result.omissions.contains { $0.invoiceNumber == "FV/3" && $0.reason.contains("3 lata") })
     }
 
+    @Test("EPU: granica trzech lat jest liczona po dniach, bez wpływu godziny")
+    func epuThreeYearBoundary() {
+        let boundary = makeItem(number: "FV/granica", due: "2023-07-15")
+        let tooOld = makeItem(number: "FV/stara", due: "2023-07-14")
+        let result = DebtCollectionEngine.epuEligibleItems(
+            from: [boundary, tooOld], asOf: now
+        )
+        #expect(result.eligible.map(\.invoiceNumber) == ["FV/granica"])
+        #expect(result.omissions.map(\.invoiceNumber) == ["FV/stara"])
+    }
+
+    @Test("EPU: status przygotowania dostają tylko faktury ujęte w pozwie")
+    func epuEligibleInvoicesForRecording() {
+        let eligible = makeInvoice(number: "FV/PLN")
+        let foreign = makeInvoice(number: "FV/EUR", currency: "EUR")
+        let stale = makeInvoice(number: "FV/stara", due: "2023-06-30")
+
+        let included = DebtCollectionEngine.epuEligibleInvoices(
+            from: [eligible, foreign, stale], asOf: now
+        )
+        DebtCollectionEngine.record(.epu, on: included, at: now)
+
+        #expect(eligible.collectionStage == .epuPrepared)
+        #expect(foreign.collectionStage == .none)
+        #expect(stale.collectionStage == .none)
+    }
+
     @Test("WPS: suma należności głównych zaokrąglona w górę do pełnego złotego")
     func epuDisputeValue() {
         #expect(DebtCollectionEngine.epuDisputeValue(of: []) == 0)
@@ -220,6 +247,17 @@ struct DebtCollectionEngineTests {
             makeItem(outstanding: 100.01), makeItem(outstanding: 200.50)
         ]) == 301)
         #expect(DebtCollectionEngine.epuDisputeValue(of: [makeItem(outstanding: 500)]) == 500)
+    }
+
+    @Test("WPS: arytmetyka Double nie zawyża pełnej sumy o złotówkę")
+    func epuDisputeValueAvoidsFloatingPointCeilError() {
+        // W Double ta suma ma reprezentację 988,0000000000001.
+        let items = [
+            makeItem(outstanding: 362.29),
+            makeItem(outstanding: 625.69),
+            makeItem(outstanding: 0.02),
+        ]
+        #expect(DebtCollectionEngine.epuDisputeValue(of: items) == 988)
     }
 
     @Test("Opłata EPU: 1/4 opłaty z art. 13 uksc, nie mniej niż 30 zł")
@@ -271,6 +309,26 @@ struct DebtCollectionEngineTests {
         #expect(warnings.contains { $0.contains("adresu pozwanego") })
         #expect(warnings.contains { $0.contains("NIP pozwanego") })
         #expect(warnings.contains { $0.contains("Brak roszczeń") })
+    }
+
+    @Test("Ostrzeżenia EPU ujawniają brak danych identyfikujących obie strony")
+    func epuPartyWarnings() {
+        var incomplete = parties
+        incomplete.claimantName = " "
+        incomplete.claimantNIP = ""
+        incomplete.claimantAddress = "\n"
+        incomplete.defendantName = ""
+
+        let warnings = DebtCollectionEngine.epuWarnings(
+            parties: incomplete,
+            items: [makeItem()],
+            demandSentAt: now
+        )
+        #expect(warnings.count == 4)
+        #expect(warnings.contains { $0.contains("nazwy powoda") })
+        #expect(warnings.contains { $0.contains("NIP powoda") })
+        #expect(warnings.contains { $0.contains("adresu powoda") })
+        #expect(warnings.contains { $0.contains("nazwy pozwanego") })
     }
 
     @Test("Tekst danych EPU: strony, WPS, opłata, odsetki od dnia po terminie i dowody")
@@ -367,10 +425,15 @@ struct DebtCollectionEngineTests {
         BackupService.applySetting(
             key: AppSettingsKeys.nip, value: "5260250274", defaults: defaults
         )
+        BackupService.applySetting(
+            key: AppSettingsKeys.pdfPaymentQR, value: "nieznane", defaults: defaults
+        )
         #expect(defaults.object(forKey: AppSettingsKeys.reminderEmailsEnabled) as? Bool == true)
         #expect(defaults.object(forKey: AppSettingsKeys.reminderDaysBefore) as? Int == 5)
         #expect(defaults.object(forKey: AppSettingsKeys.demandInterestRate) as? Double == 13.5)
         // NIP pozostaje tekstem — mimo że wygląda jak liczba.
         #expect(defaults.object(forKey: AppSettingsKeys.nip) as? String == "5260250274")
+        // Nieznany zapis Bool nie jest po cichu zamieniany na false.
+        #expect(defaults.object(forKey: AppSettingsKeys.pdfPaymentQR) as? String == "nieznane")
     }
 }

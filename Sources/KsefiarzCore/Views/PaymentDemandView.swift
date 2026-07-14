@@ -387,9 +387,13 @@ public struct PaymentDemandView: View {
 
     /// Odnotowanie działania windykacyjnego na zaznaczonych fakturach —
     /// od tego zapisu zależy status windykacji i wstrzymanie miękkich
-    /// przypomnień po formalnym wezwaniu.
+    /// przypomnień po formalnym wezwaniu. Dla EPU stemplujemy wyłącznie
+    /// faktury rzeczywiście ujęte w danych pozwu, nie pozycje pominięte.
     private func recordCollectionAction() {
-        DebtCollectionEngine.record(kind.collectionAction, on: selectedInvoices)
+        let invoices = kind == .epu
+            ? DebtCollectionEngine.epuEligibleInvoices(from: selectedInvoices)
+            : selectedInvoices
+        DebtCollectionEngine.record(kind.collectionAction, on: invoices)
         try? modelContext.save()
     }
 

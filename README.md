@@ -524,7 +524,8 @@ Tests/KsefiarzCoreTests/          # Swift Testing — model, parser, usługa, kr
   — pierwsze użycie prosi o systemową zgodę na sterowanie Mail, a wynik
   przebiegu podsumowuje powiadomienie. Formalne wezwanie do zapłaty
   wstrzymuje miękkie przypomnienia danej faktury; faktury bez adresu
-  e-mail są jawnie raportowane, nie po cichu pomijane.
+  e-mail są raportowane w dziennym powiadomieniu z numerami dokumentów,
+  nie po cichu pomijane.
 - **Paczka dla księgowości** — eksport wybranego okresu (miesiąc albo
   własny zakres dat) do jednego pliku ZIP: zestawienia CSV osobno dla
   sprzedaży i zakupu, oryginalne dokumenty XML, wydruki PDF oraz

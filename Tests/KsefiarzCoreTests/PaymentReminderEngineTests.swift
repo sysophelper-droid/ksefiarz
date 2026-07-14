@@ -174,6 +174,7 @@ struct PaymentReminderEngineTests {
         )
         #expect(result.candidates.isEmpty)
         #expect(result.omissions.count == 1)
+        #expect(result.omissions.first?.kind == .formalCollection)
         #expect(result.omissions.first?.reason.contains("windykacja") == true)
     }
 
@@ -186,7 +187,31 @@ struct PaymentReminderEngineTests {
             asOf: now
         )
         #expect(result.candidates.isEmpty)
+        #expect(result.omissions.first?.kind == .missingRecipient)
         #expect(result.omissions.first?.reason.contains("e-mail") == true)
+    }
+
+    @Test("Braki adresów tworzą jawne podsumowanie, formalna windykacja nie")
+    func missingRecipientNotificationSummary() {
+        let omissions = [
+            PaymentReminderOmission(
+                invoiceNumber: "FV/1", kind: .formalCollection,
+                reason: "formalna windykacja w toku"
+            ),
+            PaymentReminderOmission(
+                invoiceNumber: "FV/2", kind: .missingRecipient,
+                reason: "brak adresu e-mail"
+            ),
+        ]
+        let body = PaymentReminderEngine.missingRecipientNotificationBody(
+            omissions: omissions
+        )
+        #expect(body?.contains("1 faktury") == true)
+        #expect(body?.contains("FV/2") == true)
+        #expect(body?.contains("FV/1") == false)
+        #expect(PaymentReminderEngine.missingRecipientNotificationBody(
+            omissions: [omissions[0]]
+        ) == nil)
     }
 
     // MARK: Treść wiadomości
@@ -245,9 +270,47 @@ struct PaymentReminderEngineTests {
 
     @Test("Ustawienia spoza zakresu są przycinane (bez pętli przypomnień)")
     func settingsClamped() {
-        let clamped = PaymentReminderSettings(daysBeforeDue: -5, repeatAfterDays: 0)
-        #expect(clamped.daysBeforeDue == 0)
-        #expect(clamped.repeatAfterDays == 1)
+        let tooLow = PaymentReminderSettings(daysBeforeDue: -5, repeatAfterDays: 0)
+        #expect(tooLow.daysBeforeDue == 0)
+        #expect(tooLow.repeatAfterDays == 1)
+
+        let tooHigh = PaymentReminderSettings(daysBeforeDue: 365, repeatAfterDays: 365)
+        #expect(tooHigh.daysBeforeDue == 30)
+        #expect(tooHigh.repeatAfterDays == 60)
+    }
+
+    @Test("Cykl automatyzacji restartuje się po zmianie każdego ustawienia")
+    func automationConfigurationIdentity() {
+        let base = PaymentReminderAutomationConfiguration(
+            isEnabled: true,
+            daysBeforeDue: 3,
+            repeatAfterDays: 7,
+            deliveryModeRaw: "draft"
+        )
+        #expect(base != PaymentReminderAutomationConfiguration(
+            isEnabled: false,
+            daysBeforeDue: 3,
+            repeatAfterDays: 7,
+            deliveryModeRaw: "draft"
+        ))
+        #expect(base != PaymentReminderAutomationConfiguration(
+            isEnabled: true,
+            daysBeforeDue: 5,
+            repeatAfterDays: 7,
+            deliveryModeRaw: "draft"
+        ))
+        #expect(base != PaymentReminderAutomationConfiguration(
+            isEnabled: true,
+            daysBeforeDue: 3,
+            repeatAfterDays: 14,
+            deliveryModeRaw: "draft"
+        ))
+        #expect(base != PaymentReminderAutomationConfiguration(
+            isEnabled: true,
+            daysBeforeDue: 3,
+            repeatAfterDays: 7,
+            deliveryModeRaw: "send"
+        ))
     }
 
     // MARK: Skrypt AppleScript dla Mail

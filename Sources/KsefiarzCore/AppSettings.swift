@@ -128,6 +128,9 @@ public enum AppSettingsKeys {
     /// Dzień ostatniego powiadomienia o błędzie automatyzacji Mail
     /// (dedup — jedno powiadomienie o problemie dziennie).
     public static let reminderErrorNotifiedDay = "reminder.emails.errorNotifiedDay"
+    /// Dzień ostatniego powiadomienia o fakturach pominiętych z powodu
+    /// braku adresu e-mail (dedup — jedno podsumowanie dziennie).
+    public static let reminderOmissionsNotifiedDay = "reminder.emails.omissionsNotifiedDay"
     /// Ikona Ksefiarza w pasku menu (status synchronizacji i dosłań).
     public static let menuBarExtra = "ksef.menuBarExtra"
     /// Automatyczne odnawianie certyfikatów KSeF przed wygaśnięciem

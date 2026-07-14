@@ -343,14 +343,26 @@ public enum BackupService {
     /// Zapisuje przywracane ustawienie pod właściwym typem. Wartość
     /// nieparsowalna zostaje tekstem (nie przepada — jak dotychczas).
     public static func applySetting(key: String, value: String, defaults: UserDefaults) {
-        if boolSettingsKeys.contains(key) {
-            defaults.set((value as NSString).boolValue, forKey: key)
+        if boolSettingsKeys.contains(key), let boolValue = parseBool(value) {
+            defaults.set(boolValue, forKey: key)
         } else if integerSettingsKeys.contains(key), let intValue = Int(value) {
             defaults.set(intValue, forKey: key)
         } else if doubleSettingsKeys.contains(key), let doubleValue = Double(value) {
             defaults.set(doubleValue, forKey: key)
         } else {
             defaults.set(value, forKey: key)
+        }
+    }
+
+    /// `NSString.boolValue` zwraca `false` także dla dowolnego śmieciowego
+    /// tekstu, przez co uszkodzona kopia po cichu wyłączałaby ustawienie.
+    /// Rozpoznajemy wyłącznie reprezentacje rzeczywiście używane przez
+    /// UserDefaults i popularne starsze warianty tekstowe.
+    private static func parseBool(_ value: String) -> Bool? {
+        switch value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+        case "1", "true", "yes": return true
+        case "0", "false", "no": return false
+        default: return nil
         }
     }
 

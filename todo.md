@@ -61,21 +61,23 @@ kolejność dowolna. ⚠️ operacje modyfikujące KSeF testować wyłącznie na
   terminie do dnia zapłaty”, dowody i propozycja uzasadnienia; pozycje
   walutowe i wymagalne ponad 3 lata temu (art. 505(29a) KPC) jawnie poza
   pozwem; ostrzeżenia o braku wezwania (art. 187 § 1 pkt 3 KPC), adresu
-  i NIP pozwanego.
+  oraz danych identyfikujących obie strony.
 - [x] C4. Automatyczne przypomnienia e-mail przed/po terminie —
   `PaymentReminderEngine` (czysta logika): uprzedzenie w oknie N dni przed
   terminem (jedno na okno, obejmuje dzień terminu) i cykliczne ponaglenia
   po terminie co M dni; treść PL/EN (kontrahent dwujęzyczny) z saldem,
   terminem i rachunkiem; adresat ze słownika, braki adresu jawnie
-  raportowane. Pamięć doręczeń wspólna z C3 (`collectionReminderAt`);
+  raportowane dziennym powiadomieniem z numerami faktur. Pamięć doręczeń
+  wspólna z C3 (`collectionReminderAt`);
   formalne wezwanie wstrzymuje miękkie przypomnienia. Dostarczanie przez
   aplikację Mail (`MailAutomationService`, NSAppleScript — czysty builder
   skryptu z escapingiem, testowany na wstrzyknięcia): tryb „szkice
   w Wersjach roboczych” albo automatyczna wysyłka; zgoda TCC na
   automatyzację (NSAppleEventsUsageDescription w bundlu), wynik przebiegu
   w powiadomieniu, błąd automatyzacji deduplikowany do jednego dziennie.
-  Cykl w MainContentView (start + co 6 h), funkcja domyślnie WYŁĄCZONA
-  (Ustawienia → Faktury). Przy okazji: typowane przywracanie ustawień
+  Cykl w MainContentView (natychmiast po starcie/włączeniu/zmianie ustawień
+  + co 6 h), funkcja domyślnie WYŁĄCZONA (Ustawienia → Faktury). Przy okazji:
+  typowane przywracanie ustawień
   logicznych/liczbowych z kopii (`BackupService.applySetting` — naprawia
   też starsze przełączniki przywracane jako tekst). 32 nowe testy
   (etapy/eskalacja/EPU/opłaty, okna przypomnień, escaping AppleScript,
