@@ -34,13 +34,6 @@ kolejność dowolna. ⚠️ operacje modyfikujące KSeF testować wyłącznie na
 - [ ] C4. Automatyczne przypomnienia e-mail przed/po terminie — cykliczne
   miękkie ponaglenia do kontrahentów (dziś powiadomienia tylko systemowe).
 
-#### E. Dokumenty / wygląd
-
-- [ ] E3. Eksport do formatów programów księgowych — struktura importowalna
-  w Symfonii/Comarch/WAPRO (najlepiej pod konkretny program księgowej). Duży
-  koszt, formaty zamknięte.
-- [ ] E4. Wydruk wielu faktur naraz (batch PDF/druk) — jeden PDF/wydruk
-  z zaznaczonych.
 #### F. Skala / wielofirmowość / UX
 
 - [ ] F1. Wielofirmowość (przełączanie kontekstu NIP) — kilka firm/NIP
@@ -56,6 +49,26 @@ kolejność dowolna. ⚠️ operacje modyfikujące KSeF testować wyłącznie na
   (dziś zaszyte PL/EN).
 
 ## Zrealizowane
+
+### Dokumenty / wygląd — eksport księgowy i wydruk zbiorczy (14.07.2026)
+
+- [x] E3. Eksport do programu księgowego jako publicznie opisany WAPRO XML
+  (`MAGIK_EKSPORT` 4.3.2), importowany przez WAPRO Kaper i WAPRO Fakir:
+  zaznaczone albo wszystkie widoczne faktury sprzedaży/zakupu, korekty,
+  kartoteka kontrahentów, pozycje, VAT per stawka, waluty i kurs, płatność,
+  MPP, numer KSeF oraz GTU/procedury. Daty i czas w formacie Clarion, limity
+  pól i dokumentów wg oficjalnej specyfikacji; brak kursu/pozycji daje jawne
+  ostrzeżenie. Comarch publikuje strukturę własnego XML tylko partnerom,
+  a Symfonia nie publikuje kompletnego szablonu Formatu 3.0 — zakres świadomie
+  nie zgaduje zamkniętych formatów. 11 testów generatora i parsera XML
+  (w tym niezależność dat Clarion od kalendarza systemowego, normalizacja
+  stawek VAT, NRB-only dla NUMER_RACHUNKU i MPP w PLN po kursie).
+- [x] E4. Zbiorczy PDF/druk wielu faktur z menu „Dokumenty” i menu
+  kontekstowego multiselectu: zaznaczone albo wszystkie widoczne dokumenty
+  są łączone w kolejności listy ze wszystkimi stronami, następnie zapisywane
+  jako jeden PDF lub przekazywane do systemowego okna drukowania macOS.
+  Niekompletny zestaw nie jest zapisywany; 2 testy PDFKit obejmują pusty
+  wybór, liczbę stron i kolejność treści.
 
 ### JPK_FA na żądanie — pełny JPK faktur sprzedaży (14.07.2026)
 

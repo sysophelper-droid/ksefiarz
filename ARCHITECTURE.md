@@ -43,9 +43,11 @@ Sources/KsefiarzCore/
                pojedynczego XML po numerze KSeF i danych identyfikujących,
                bez tokenu/certyfikatu — sekcja „Anonimowy dostęp"),
                BackupService (format v8 obejmuje metadane KPiR),
-               FileExportService (NSSave/OpenPanel), InvoicePDFGenerator (+ kody QR,
+               FileExportService (NSSave/OpenPanel + systemowy druk PDF),
+               InvoicePDFGenerator (+ kody QR,
                opcjonalny branding własnych dokumentów: logo, dwa kolory,
-               stopka na każdej stronie),
+               stopka na każdej stronie), BatchInvoicePDFBuilder (PDFKit:
+               scalenie kompletnych wydruków wielu faktur w kolejności listy),
                TokenStore (token w pęku kluczy), ContractorLookupService (Biała
                lista VAT, wl-api.mf.gov.pl — publiczne, bez klucza),
                VIESLookupService (weryfikacja VAT-UE kontrahentów UE, REST API
@@ -137,6 +139,8 @@ Sources/KsefiarzCore/
                PaymentMatcher (propozycje dopasowań przelewów),
                ElixirPaymentExporter (czysty eksport paczki zobowiązań:
                walidacja NRB/MPP, 16 pól Elixir-O, kodowania tekstowe),
+               WaproXMLExporter (czysty eksport dokumentów do WAPRO XML
+               MAGIK_EKSPORT 4.3.2 — szczegóły w sekcji „WAPRO XML"),
                ZipWriter (archiwum ZIP bez zależności; AccountingPackageBuilder
                w Services — paczka dla księgowości),
                InvoiceEmailComposer (adresat ze słownika po NIP — invoiceEmail
@@ -239,6 +243,8 @@ Sources/KsefiarzCore/
                listach faktur),
                BankTransferExportView (wybór zakupów, rachunku źródłowego,
                daty, kodowania i kwoty VAT MPP; zapis .pli),
+               InvoiceListView menu „Dokumenty" (WAPRO XML + zapis/druk
+               wspólnego PDF; multiselect albo wszystkie widoczne),
                DictionariesView (+ ContractorsView/ProductsView/BankAccountsView),
                BulkImportView (kreator plik → mapowanie → bilans/podgląd →
                zapis kontrahentów, produktów albo faktur),
@@ -406,6 +412,55 @@ Scripts/build-app.sh                   # składanie bundla .app
   skracana przez `truncatedName` na granicy słowa (gdy zostawia ≥ połowę
   limitu), inaczej twarde ucięcie. Override wstrzykiwany do
   `zbpTransferContent(for:recipientNameOverride:)` przez `makeQRCodes`.
+
+## Eksport dokumentów: WAPRO XML i zbiorczy PDF
+
+- `WaproXMLExporter` generuje jeden dokument `MAGIK_EKSPORT` w wersji 4.3.2
+  dla 1–999 faktur. Zakres pochodzi z listy: multiselect, a bez zaznaczenia
+  wszystkie widoczne rekordy (ukryte nie są pobierane przez `@Query`). Eksport
+  zachowuje kolejność wejścia i obejmuje oba kierunki (`S`/`Z`) oraz korekty
+  (`KF` + numer dokumentu pierwotnego). Punktem wejścia jest menu „Dokumenty”
+  w `InvoiceListView`; te same akcje są w menu kontekstowym zaznaczenia.
+- Struktura ma wymagane sekcje `INFO_EKSPORTU`, `DOKUMENTY`,
+  `KARTOTEKA_KONTRAHENTOW`, `KARTOTEKA_PRACOWNIKOW` i
+  `KARTOTEKA_ARTYKULOW`. Kontrahenci są deduplikowani po znormalizowanym NIP,
+  a bez NIP po nazwie; jedna karta może być jednocześnie odbiorcą i dostawcą.
+  Dane dokumentu obejmują nagłówek, daty Clarion (dni SQL + 36163, zawsze
+  w kalendarzu gregoriańskim niezależnie od ustawień systemu), wartości
+  bazowe i walutowe, kurs, formę płatności mapowaną do słownika WAPRO, NRB,
+  pozycje, podsumowanie VAT per stawka, MPP (kwota VAT po kursie, w PLN),
+  numer KSeF oraz unikalne kody GTU/procedur. `NUMER_RACHUNKU` to `STR(26)`,
+  więc trafia tam wyłącznie poprawny polski NRB (26 cyfr, bez prefiksu `PL`);
+  rachunek innego kształtu, np. zagraniczny IBAN, jest pomijany zamiast
+  obcinania. Napisy są ograniczane do limitów `STR(n)`, liczby używają
+  kropki, a Foundation `XMLDocument` odpowiada za poprawne kodowanie UTF-8
+  i escapowanie.
+- Waluta obca z dodatnim `Invoice.exchangeRate` jest przeliczana do wartości
+  bazowych PLN, a oryginalne kwoty trafiają do pól `*_WALUTA`. Brak kursu nie
+  tworzy fałszywego przeliczenia: bazą zostaje kwota dokumentu i użytkownik
+  dostaje po zapisie jawne ostrzeżenie. Tak samo raportowany jest brak pozycji
+  (wtedy pozostaje nagłówek i syntetyczne podsumowanie VAT). Eksport niczego
+  nie zmienia w modelach i należy importować najpierw do bufora księgowości.
+- Specyfikacja źródłowa: [WAPRO — struktura XML](https://wapro.pl/dokumentacja-erp/desktop/docs/finanse-i-ksiegowosc/informacje-uzupelniajace/kh-99.010-specyfikacja-pliku-XML/)
+  oraz [WAPRO Kaper — import dokumentów](https://wapro.pl/dokumentacja-erp/desktop/docs/ksiega-podatkowa/narzedzia-i-moduly/kp-90.20.005-import-dokumentow/).
+  Wersja HTML ma literówkę `DBIORCA`; oficjalny PDF specyfikacji
+  (`wapro.pl/doc/Specyfikacja_pliku_WAPRO_xml.pdf`) używa rzeczywistego
+  elementu `ODBIORCA`, który emituje generator. `RODZAJ_POZYCJI` jest
+  w specyfikacji opisane tylko jako „P – przychodowa, R – rozchodowa" bez
+  glosy; generator przyjmuje odczyt księgowy (sprzedaż = `P`/przychód,
+  zakup = `R`), pole jest opcjonalne, a klasyfikację dokumentu i tak
+  wyznacza nagłówkowe `ZAKUP_SPRZEDAZ`. Comarch udostępnia opis własnego
+  XML tylko autoryzowanym partnerom, a pomoc Symfonii opisuje Format 3.0
+  bez kompletnego szablonu pól; dlatego nie generujemy formatów
+  o zgadywanej strukturze.
+- `BatchInvoicePDFBuilder` generuje osobny wydruk każdej faktury istniejącym
+  `InvoicePDFGenerator`, po czym kopiuje wszystkie `PDFPage` do jednego
+  `PDFDocument`. Błąd któregokolwiek składnika przerywa całość, aby nie zapisać
+  po cichu niekompletnego zestawu — `InvoiceListView` buduje PDF przed
+  otwarciem panelu i błąd budowania zgłasza alertem (nie myli się z
+  anulowaniem zapisu). Gotowe dane zapisuje `FileExportService.exportData`,
+  a `FileExportService.printPDF` przekazuje je do systemowego
+  `NSPrintOperation` ze skalowaniem do strony i automatycznym obrotem.
 
 ## Eksport przelewów Elixir-O
 
