@@ -240,6 +240,42 @@ struct JPKFAGeneratorTests {
         #expect(result.warnings.contains { $0.contains("P_19A") })
     }
 
+    @Test("Stawki historyczne 22, 7, 4 i 3 trafiają do właściwych koszyków")
+    func stawkiHistoryczne() {
+        let sale = makeSale(lines: [
+            line("Stawka 22%", net: 100, rate: "22", vat: 22),
+            line("Stawka 7%", net: 200, rate: "7", vat: 14),
+            line("Stawka 4%", net: 300, rate: "4", vat: 12),
+            line("Stawka 3%", net: 400, rate: "3", vat: 12),
+        ], net: 1000, vat: 60)
+        let result = JPKFAGenerator.generate(invoices: [sale], options: makeOptions())
+        #expect(result.xml.contains("<P_13_1>100.00</P_13_1>"))
+        #expect(result.xml.contains("<P_14_1>22.00</P_14_1>"))
+        #expect(result.xml.contains("<P_13_2>200.00</P_13_2>"))
+        #expect(result.xml.contains("<P_14_2>14.00</P_14_2>"))
+        #expect(result.xml.contains("<P_13_4>700.00</P_13_4>"))
+        #expect(result.xml.contains("<P_14_4>24.00</P_14_4>"))
+        #expect(result.xml.contains("<P_18>false</P_18>"))
+        #expect(!result.warnings.contains { $0.contains("nieznana stawka") })
+    }
+
+    @Test("Stawki oo i np mapują sumy faktury oraz znacznik odwrotnego obciążenia")
+    func odwrotneObciazenieINiepodlegajace() {
+        let sale = makeSale(lines: [
+            line("Odwrotne obciążenie", net: 100, rate: "oo", vat: 0),
+            line("Poza terytorium kraju", net: 200, rate: "np", vat: 0),
+        ], net: 300, vat: 0)
+        let result = JPKFAGenerator.generate(invoices: [sale], options: makeOptions())
+        #expect(result.xml.contains("<P_13_4>100.00</P_13_4>"))
+        #expect(result.xml.contains("<P_14_4>0.00</P_14_4>"))
+        #expect(result.xml.contains("<P_13_5>200.00</P_13_5>"))
+        #expect(!result.xml.contains("<P_14_5>"))
+        #expect(result.xml.contains("<P_18>true</P_18>"))
+        #expect(result.xml.contains("<P_12>oo</P_12>"))
+        #expect(result.xml.contains("<P_12>np</P_12>"))
+        #expect(!result.xml.contains("<P_13_1>"))
+    }
+
     @Test("Faktura bez pozycji wchodzi kwotami jako stawka podstawowa z ostrzeżeniem")
     func fakturaBezPozycji() {
         let result = JPKFAGenerator.generate(invoices: [makeSale()], options: makeOptions())
@@ -421,6 +457,34 @@ struct JPKFAGeneratorTests {
         #expect(result.xml.contains("<ZamowienieWiersz>"))
         #expect(result.xml.contains("<P_11NettoZ>100.00</P_11NettoZ>"))
         #expect(result.warnings.contains { $0.contains("zaliczkowy bez pozycji") })
+    }
+
+    @Test("Plik bez FakturaWiersz nie jest gotowy do eksportu zgodnego z XSD")
+    func gotowoscSchemy() {
+        let onlyAdvance = JPKFAGenerator.generate(
+            invoices: [makeSale(number: "ZAL/1", documentType: "ZAL")],
+            options: makeOptions()
+        )
+        #expect(!onlyAdvance.isSchemaReady)
+
+        let regular = JPKFAGenerator.generate(
+            invoices: [makeSale(lines: [line("Usługa", net: 100, rate: "23", vat: 23)])],
+            options: makeOptions()
+        )
+        #expect(regular.isSchemaReady)
+    }
+
+    @Test("Gotowość opcji wymaga poprawnego NIP i niepustego pełnego adresu")
+    func gotowoscOpcji() {
+        #expect(makeOptions().isReadyForExport)
+
+        var invalidNIP = makeOptions()
+        invalidNIP.sellerNIP = "123"
+        #expect(!invalidNIP.isReadyForExport)
+
+        var blankAddress = makeOptions()
+        blankAddress.gmina = "   "
+        #expect(!blankAddress.isReadyForExport)
     }
 
     // MARK: Wiersze i sumy kontrolne

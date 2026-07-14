@@ -69,13 +69,14 @@ kolejność dowolna. ⚠️ operacje modyfikujące KSeF testować wyłącznie na
   w imieniu dostawców — należą do JPK_FA dostawcy, bez VAT RR — osobna
   struktura JPK_FA_RR); sprzedaż z adnotacją P_17 wchodzi. Kwoty w walucie
   faktury, podatek przeliczony w P_14_xW; WDT/eksport → P_13_6, OSS →
-  P_13_5/P_14_5 + P_12_XII; korekty kwotami różnicy z NrFaKorygowanej;
+  P_13_5/P_14_5 + P_12_XII, `oo` → P_13_4/P_14_4 + P_18, `np` → P_13_5;
+  korekty kwotami różnicy z NrFaKorygowanej;
   ROZ jako VAT z NrFaZaliczkowej; ZAL/KOR_ZAL bez wierszy — pozycje
   w węźle Zamowienie z ZamowienieCtrl; elementy adresu Podmiot1
   kwalifikowane prefiksem etd (pułapka jak w VAT-UE). CelZlozenia=1 na
   stałe (JPK na żądanie nie podlega korekcie). Dokument z pełnym
   przekrojem przypadków zweryfikowany oficjalną XSD
-  Schemat_JPK_FA(4)_v1-0 (xmllint, 14.07.2026); 39 testów jednostkowych.
+  Schemat_JPK_FA(4)_v1-0 (xmllint, 14.07.2026); 43 testy jednostkowe.
 
 ### Anonimowy dostęp / pobranie faktury po numerze KSeF (14.07.2026)
 

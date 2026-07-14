@@ -482,12 +482,15 @@ Tests/KsefiarzCoreTests/          # Swift Testing — model, parser, usługa, kr
   (trafiają do JPK_FA dostawcy) i bez faktur VAT RR (osobna struktura
   JPK_FA_RR). Zakres pliku wyznaczają daty wystawienia dopasowane do
   wezwania; kwoty pozostają w walucie faktury, a podatek przeliczony na
-  złote trafia do pól P_14_xW. Faktury zaliczkowe i ich korekty prezentują
-  pozycje w węźle Zamowienie, rozliczające (ROZ) wykazują numery faktur
+  złote trafia do pól P_14_xW. Historyczne stawki oraz oznaczenia `oo`/`np`
+  z zaimportowanych pozycji są mapowane do właściwych pól JPK_FA. Faktury
+  zaliczkowe i ich korekty prezentują pozycje w węźle Zamowienie,
+  rozliczające (ROZ) wykazują numery faktur
   zaliczkowych, korekty wchodzą kwotami różnicy. Arkusz (menu „Ewidencje”)
-  wymaga strukturalnego adresu podmiotu (wymóg XSD — osobne pola
-  województwo/powiat/gmina itd., zapamiętywane w ustawieniach) i pokazuje
-  sumy kontrolne oraz ostrzeżenia. Plik zgodny z oficjalną XSD
+  wymaga prawidłowego NIP i strukturalnego adresu podmiotu (wymóg XSD —
+  osobne pola województwo/powiat/gmina itd., zapamiętywane w ustawieniach) i pokazuje
+  sumy kontrolne oraz ostrzeżenia; nie pozwala zapisać dokumentu bez
+  obowiązkowych wierszy faktur. Plik zgodny z oficjalną XSD
   Schemat_JPK_FA(4)_v1-0 (zweryfikowany xmllint). JPK na żądanie nie
   podlega korekcie i nie przekazuje się go e-mailem (Klient JPK WEB albo
   nośnik danych).

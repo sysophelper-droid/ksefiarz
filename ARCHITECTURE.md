@@ -866,11 +866,13 @@ nabywca UE) zweryfikowany oficjalną XSD (xmllint, 14.07.2026).
   pól W). Sumy kontrolne (WartoscFaktur = suma P_15, WartoscWierszyFaktur =
   suma P_11) są sumami nominalnymi — przy wielu walutach ostrzeżenie.
 - **Mapowanie stawek** (pyt. 6 i 9): 23/22→P_13_1/P_14_1, 8/7→P_13_2/P_14_2,
-  5→P_13_3/P_14_3, **eksport towarów i WDT→P_13_6** (stawka 0), zw→P_13_7
+  5→P_13_3/P_14_3, 4/3 oraz odwrotne obciążenie (`oo`)→P_13_4/P_14_4,
+  transakcje poza terytorium kraju (`np`)→P_13_5, **eksport towarów
+  i WDT→P_13_6** (stawka 0), zw→P_13_7
   (+P_19=true; aplikacja nie przechowuje podstawy zwolnienia — P_19A–C
   puste z ostrzeżeniem), OSS→P_13_5+P_14_5 z **P_12_XII** w wierszu
-  (pyt. 16; pole przyjmuje dowolną stawkę państwa konsumpcji). Odwrotne
-  obciążenie (P_13_4, P_12="oo") i „np" nie są modelowane w aplikacji.
+  (pyt. 16; pole przyjmuje dowolną stawkę państwa konsumpcji). `oo` i `np`
+  mogą pochodzić z zaimportowanych pozycji; `oo` ustawia także P_18=true.
   P_12 w wierszu to enum (23|22|8|7|5|4|3|0|zw|oo|np) — stawka spoza
   słownika (np. historyczna RR 6,5%) pomija pole z ostrzeżeniem.
 - **Rodzaje dokumentów**: RodzajFaktury ∈ {VAT, KOREKTA, ZAL}.
@@ -889,8 +891,8 @@ nabywca UE) zweryfikowany oficjalną XSD (xmllint, 14.07.2026).
 - **Ograniczenia XSD**: plik wymaga ≥1 Faktura i ≥1 FakturaWiersz
   (TNaturalnyJPK jest minExclusive 0) — pusty okres albo plik z samymi
   zaliczkami nie przejdzie walidacji; generator ostrzega, a UI blokuje
-  zapis pustego pliku. P_16 (metoda kasowa) i P_18 (odwrotne obciążenie)
-  nie są modelowane — zawsze false, jak w generatorze FA(3). Procedury
+  zapis pliku bez obowiązkowych wierszy. P_16 (metoda kasowa) nie jest
+  modelowane i pozostaje false. P_18 jest wyprowadzane z pozycji `oo`. Procedury
   marży mapowane z `marginProcedureRaw`: "2"→P_106E_2,
   "3_1/3_2/3_3"→P_106E_3 + wymagana adnotacja P_106E_3A.
 - **Przekazanie**: elektronicznie (Klient JPK WEB, e-mikrofirma) albo na

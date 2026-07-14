@@ -58,6 +58,21 @@ public struct JPKFAOptions: Sendable {
         self.miejscowosc = miejscowosc
         self.kodPocztowy = kodPocztowy
     }
+
+    /// Czy dane wprowadzone w arkuszu wystarczą do zbudowania dokumentu
+    /// zgodnego z ograniczeniami nagłówka i Podmiot1 w XSD JPK_FA(4).
+    public var isReadyForExport: Bool {
+        let requiredAddressParts = [
+            wojewodztwo, powiat, gmina, nrDomu, miejscowosc, kodPocztowy,
+        ]
+        return dateFrom <= dateTo
+            && InvoiceValidator.isValidNIP(sellerNIP)
+            && !sellerName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && taxOfficeCode.filter(\.isNumber).count == 4
+            && requiredAddressParts.allSatisfy {
+                !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            }
+    }
 }
 
 /// Wynik generowania: dokument XML + sumy kontrolne i ostrzeżenia
@@ -80,6 +95,12 @@ public struct JPKFAResult: Sendable {
     /// Waluty występujące w pliku (informacyjnie dla UI).
     public var currencies: [String]
     public var warnings: [String]
+
+    /// XSD wymaga co najmniej jednej faktury i jednego FakturaWiersz.
+    /// Sam węzeł Zamowienie nie zastępuje obowiązkowej sekcji wierszy.
+    public var isSchemaReady: Bool {
+        invoiceCount > 0 && lineCount > 0
+    }
 }
 
 /// Generator pliku JPK_FA(4) — jednolity plik kontrolny faktur VAT
@@ -124,9 +145,11 @@ public enum JPKFAGenerator {
         var net23 = 0.0; var vat23 = 0.0      // P_13_1 / P_14_1
         var net8 = 0.0; var vat8 = 0.0        // P_13_2 / P_14_2
         var net5 = 0.0; var vat5 = 0.0        // P_13_3 / P_14_3
-        var netOSS = 0.0; var vatOSS = 0.0    // P_13_5 / P_14_5
+        var netThird = 0.0; var vatThird = 0.0 // P_13_4 / P_14_4
+        var netOutside = 0.0; var vatOutside = 0.0 // P_13_5 / P_14_5
         var net0 = 0.0                        // P_13_6
         var netExempt = 0.0                   // P_13_7
+        var hasReverseCharge = false          // P_18
     }
 
     /// Generuje plik JPK_FA(4) dla faktur sprzedaży wystawionych we
@@ -312,30 +335,36 @@ public enum JPKFAGenerator {
         }
         for line in invoice.sortedLines {
             if line.ossRate != nil {
-                buckets.netOSS += line.netAmount
-                buckets.vatOSS += line.vatAmount
+                buckets.netOutside += line.netAmount
+                buckets.vatOutside += line.vatAmount
                 continue
             }
-            switch VATRate(rawValue: line.vatRate) {
-            case .standard:
+            switch line.vatRate {
+            case "23", "22":
                 buckets.net23 += line.netAmount; buckets.vat23 += line.vatAmount
-            case .reducedFirst:
+            case "8", "7":
                 buckets.net8 += line.netAmount; buckets.vat8 += line.vatAmount
-            case .reducedSecond:
+            case "5":
                 buckets.net5 += line.netAmount; buckets.vat5 += line.vatAmount
-            case .zero:
+            case "4", "3":
+                buckets.netThird += line.netAmount; buckets.vatThird += line.vatAmount
+            case "oo":
+                buckets.netThird += line.netAmount; buckets.vatThird += line.vatAmount
+                buckets.hasReverseCharge = true
+            case "np":
+                buckets.netOutside += line.netAmount; buckets.vatOutside += line.vatAmount
+            case "0":
                 buckets.net0 += line.netAmount
-            case .exempt:
+            case "zw":
                 buckets.netExempt += line.netAmount
-            case .rr, .rrHistorical:
-                // Stawki zryczałtowanego zwrotu nie występują na fakturze
-                // sprzedażowej FA(3) — defensywnie jako stawka obniżona
-                // pierwsza (7% to historyczna stawka obniżona w schemie).
+            case "6.5":
+                // Historyczna stawka zryczałtowanego zwrotu nie występuje
+                // na zwykłej fakturze sprzedażowej i nie należy do enum P_12.
                 buckets.net8 += line.netAmount; buckets.vat8 += line.vatAmount
                 warnings.append(
                     "Faktura \(invoice.invoiceNumber): stawka VAT RR (\(line.vatRate)%) na dokumencie sprzedażowym wykazana jako stawka obniżona pierwsza."
                 )
-            case nil:
+            default:
                 buckets.net23 += line.netAmount; buckets.vat23 += line.vatAmount
                 warnings.append(
                     "Faktura \(invoice.invoiceNumber): nieznana stawka „\(line.vatRate)” wykazana jako podstawowa."
@@ -409,9 +438,18 @@ public enum JPKFAGenerator {
                 xml += "    <P_14_3W>\(amount(buckets.vat5 * invoice.exchangeRate))</P_14_3W>\n"
             }
         }
-        if buckets.netOSS != 0 || buckets.vatOSS != 0 {
-            xml += "    <P_13_5>\(amount(buckets.netOSS))</P_13_5>\n"
-            xml += "    <P_14_5>\(amount(buckets.vatOSS))</P_14_5>\n"
+        if buckets.netThird != 0 || buckets.vatThird != 0 {
+            xml += "    <P_13_4>\(amount(buckets.netThird))</P_13_4>\n"
+            xml += "    <P_14_4>\(amount(buckets.vatThird))</P_14_4>\n"
+            if emitW {
+                xml += "    <P_14_4W>\(amount(buckets.vatThird * invoice.exchangeRate))</P_14_4W>\n"
+            }
+        }
+        if buckets.netOutside != 0 || buckets.vatOutside != 0 {
+            xml += "    <P_13_5>\(amount(buckets.netOutside))</P_13_5>\n"
+            if buckets.vatOutside != 0 {
+                xml += "    <P_14_5>\(amount(buckets.vatOutside))</P_14_5>\n"
+            }
         }
         if buckets.net0 != 0 {
             xml += "    <P_13_6>\(amount(buckets.net0))</P_13_6>\n"
@@ -420,11 +458,11 @@ public enum JPKFAGenerator {
             xml += "    <P_13_7>\(amount(buckets.netExempt))</P_13_7>\n"
         }
         xml += "    <P_15>\(amount(invoice.grossAmount))</P_15>\n"
-        // Znaczniki: metoda kasowa (P_16) i odwrotne obciążenie (P_18) nie
-        // są modelowane w aplikacji — zawsze false, jak w generatorze FA(3).
+        // Metoda kasowa nie jest modelowana. Odwrotne obciążenie można
+        // jednoznacznie odtworzyć z zachowanej na pozycji stawki „oo”.
         xml += "    <P_16>false</P_16>\n"
         xml += "    <P_17>\(invoice.isSelfInvoicing ? "true" : "false")</P_17>\n"
-        xml += "    <P_18>false</P_18>\n"
+        xml += "    <P_18>\(buckets.hasReverseCharge ? "true" : "false")</P_18>\n"
         xml += "    <P_18A>\(invoice.splitPayment ? "true" : "false")</P_18A>\n"
         let exempt = buckets.netExempt != 0
         xml += "    <P_19>\(exempt ? "true" : "false")</P_19>\n"

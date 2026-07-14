@@ -59,15 +59,8 @@ public struct JPKFAExportView: View {
         JPKFAGenerator.generate(invoices: invoices, options: options)
     }
 
-    private var isAddressReady: Bool {
-        !wojewodztwo.isEmpty && !powiat.isEmpty && !gmina.isEmpty
-            && !nrDomu.isEmpty && !miejscowosc.isEmpty && !kodPocztowy.isEmpty
-    }
-
     private var isReady: Bool {
-        !sellerNIP.isEmpty && !sellerName.isEmpty && isAddressReady
-            && taxOfficeCode.filter(\.isNumber).count == 4
-            && dateFrom <= dateTo
+        options.isReadyForExport
     }
 
     public var body: some View {
@@ -147,14 +140,25 @@ public struct JPKFAExportView: View {
                     Label("Zapisz JPK_FA", systemImage: "square.and.arrow.down")
                 }
                 .keyboardShortcut(.defaultAction)
-                .disabled(!isReady || result.invoiceCount == 0)
-                .help(isReady
-                    ? "Zapisuje plik XML JPK_FA(4)"
-                    : "Uzupełnij dane podmiotu (nazwa i NIP w Ustawieniach, kod urzędu i pełny adres powyżej)")
+                .disabled(!isReady || !result.isSchemaReady)
+                .help(exportHelp(for: result))
             }
             .padding()
         }
         .frame(minWidth: 620, minHeight: 620)
         .navigationTitle("Eksport JPK_FA (na żądanie)")
+    }
+
+    private func exportHelp(for result: JPKFAResult) -> String {
+        if !isReady {
+            return "Uzupełnij dane podmiotu (prawidłowa nazwa i NIP w Ustawieniach, kod urzędu i pełny adres powyżej)"
+        }
+        if result.invoiceCount == 0 {
+            return "Brak faktur sprzedaży w wybranym okresie"
+        }
+        if result.lineCount == 0 {
+            return "Plik bez pozycji FakturaWiersz nie jest zgodny z XSD JPK_FA(4)"
+        }
+        return "Zapisuje plik XML JPK_FA(4)"
     }
 }
