@@ -62,6 +62,17 @@ struct EmailTemplateTests {
         #expect(EmailTemplate.render("{Numer}", values: ["numer": "X"]) == "{Numer}")
     }
 
+    @Test("Szablon złożony wyłącznie z białych znaków wraca do domyślnego")
+    func whitespaceOnlyTemplateFallsBackToDefault() {
+        let key = EmailTemplate.storageKey(
+            kind: .invoice, field: "body", language: .polish
+        )
+        let templates = EmailTemplates(custom: [key: " \t\n\n "])
+        #expect(EmailTemplate.isBlank(" \t\n\n "))
+        #expect(templates.bodyTemplate(kind: .invoice, language: .polish)
+            == EmailTemplate.defaultBodyTemplate(kind: .invoice, language: .polish))
+    }
+
     @Test("Temat renderuje się do jednego wiersza")
     func subjectSingleLine() {
         let subject = EmailTemplate.renderSubject(

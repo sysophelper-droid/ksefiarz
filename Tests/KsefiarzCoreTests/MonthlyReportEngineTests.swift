@@ -132,6 +132,30 @@ struct MonthlyReportEngineTests {
         #expect(summary.missingRateCount == 1)
     }
 
+    @Test("Ostrzeżenie o kursie obejmuje starsze należności, a przyszłe faktury są pomijane")
+    func receivablesRespectReportDateAndMissingRates() {
+        let invoices = [
+            // Poza raportowanym miesiącem, ale nadal w saldzie należności.
+            makeInvoice(number: "E0", issued: "2026-05-05", kind: .sales,
+                        net: 100, vat: 0, gross: 100, isPaid: false,
+                        due: "2026-05-20", currency: "EUR", exchangeRate: 0),
+            // Dokument z przyszłą datą nie istnieje jeszcze w stanie na 1 lipca.
+            makeInvoice(number: "F1", issued: "2026-07-10", kind: .sales,
+                        net: 500, vat: 0, gross: 500, isPaid: false,
+                        due: "2026-07-20", currency: "USD", exchangeRate: 0),
+        ]
+        let summary = MonthlyReportEngine.summary(
+            invoices: invoices,
+            periodStart: date("2026-06-01"),
+            asOf: date("2026-07-01")
+        )
+        #expect(summary.receivablesCount == 1)
+        #expect(summary.receivablesTotal == 100)
+        #expect(summary.overdueCount == 1)
+        #expect(summary.missingRateCount == 1)
+        #expect(MonthlyReportEngine.body(for: summary).contains("faktura walutowa bez kursu"))
+    }
+
     // MARK: Treść wiadomości
 
     @Test("Temat i treść zawierają nazwę miesiąca, kwoty i ostrzeżenie o braku kursu")
@@ -182,8 +206,8 @@ struct MonthlyReportEngineTests {
         )
         #expect(fallback.recipient == "jpk@firma.pl")
         let none = MonthlyReportAutomationConfiguration(
-            isEnabled: true, recipient: "",
-            fallbackRecipient: "", deliveryModeRaw: "draft"
+            isEnabled: true, recipient: "\n\t",
+            fallbackRecipient: "\n", deliveryModeRaw: "draft"
         )
         #expect(none.recipient.isEmpty)
     }

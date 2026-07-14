@@ -63,6 +63,17 @@ struct GlobalSearchEngineTests {
         #expect(GlobalSearchEngine.search("firma", in: items, limit: 3).count == 3)
     }
 
+    @Test("Tabulatory i nowe linie rozdzielają wyrazy zapytania")
+    func allWhitespaceSeparatesTokens() {
+        let items = [
+            item(title: "ACME Kraków"),
+            item(title: "ACME Warszawa"),
+        ]
+        let results = GlobalSearchEngine.search("acme\n\tkraków", in: items)
+        #expect(results.map(\.title) == ["ACME Kraków"])
+        #expect(GlobalSearchEngine.search("\n\t", in: items).isEmpty)
+    }
+
     @Test("Kontrahent jest znajdowany po NIP ze słów kluczowych")
     func contractorFoundByNIP() {
         let contractor = Contractor()

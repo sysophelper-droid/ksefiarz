@@ -39,17 +39,19 @@ kolejność dowolna. ⚠️ operacje modyfikujące KSeF testować wyłącznie na
   słowo > fragment > słowa kluczowe. Wybór otwiera szczegóły dokumentu /
   kartę kontrahenta w arkuszu, sekcję w pasku bocznym albo skacze do
   ustawienia z podświetleniem wiersza (`SettingsNavigator`); faktury
-  ukryte poza wynikami. 9 testów silnika.
+  ukryte poza wynikami; dowolne białe znaki rozdzielają tokeny zapytania.
+  10 testów silnika.
 - [x] F4. Cykliczny raport e-mail (podsumowanie miesiąca) —
   `MonthlyReportEngine` (czysta logika): raport za zamknięty poprzedni
   miesiąc (sprzedaż netto/VAT/brutto, zakupy, saldo VAT poglądowo,
-  należności ogółem i po terminie na dzień raportu; PLN po kursie
-  z faktury, braki kursu jawnie policzone; ukryte pomijane). Cykl
+  należności ogółem i po terminie na dzień raportu (bez faktur wystawionych
+  w przyszłości); PLN po kursie z faktury, braki kursu jawnie policzone
+  także dla starszych należności; ukryte pomijane). Cykl
   w MainContentView (start + co 12 h), dostarczanie przez aplikację Mail
   (szkic albo automatyczna wysyłka), dedup po kluczu okresu „RRRR-MM”
   stemplowany dopiero po udanym przekazaniu; adresat własny albo e-mail
   podatnika z ustawień JPK; funkcja domyślnie wyłączona (Ustawienia →
-  E-mail). 9 testów silnika i konfiguracji.
+  E-mail). 10 testów silnika i konfiguracji.
 - [x] F5. Konfigurowalne szablony e-mail — `EmailTemplate` (czysty render
   symboli `{numer}/{data}/{kwota}/{saldo}/{termin}/{rachunek}/{ksef}/
   {sprzedawca}/{nabywca}/{dni_po_terminie}`; wiersz z samymi pustymi
@@ -59,9 +61,9 @@ kolejność dowolna. ⚠️ operacje modyfikujące KSeF testować wyłącznie na
   i przypomnienia przed/po terminie, osobno PL i EN (16 kluczy w kopii
   zapasowej). Wbudowane wzory odtwarzają dotychczasowe treści 1:1 (test
   bajt w bajt). Edytor w Ustawieniach → E-mail pokazuje obowiązujący
-  wzór; zapis tekstu równego wbudowanemu czyści klucz (przyszłe zmiany
-  wbudowanych wzorów nie są zamrażane). 16 testów renderu i integracji
-  z composerem/przypomnieniami.
+  wzór; zapis tekstu równego wbudowanemu albo zawierającego wyłącznie
+  białe znaki czyści klucz (przyszłe zmiany wbudowanych wzorów nie są
+  zamrażane). 17 testów renderu i integracji z composerem/przypomnieniami.
 
 ### JPK_V7 — podatek naliczony z VAT RR (14.07.2026)
 

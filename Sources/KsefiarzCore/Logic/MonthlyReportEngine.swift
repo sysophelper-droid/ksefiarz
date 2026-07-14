@@ -29,7 +29,9 @@ public struct MonthlyReportSummary: Equatable, Sendable {
     public let overdueCount: Int
     public let overdueTotal: Double
 
-    /// Faktury miesiąca w walucie obcej bez kursu (kwoty nominalne).
+    /// Faktury uwzględnione w sumach miesiąca lub należnościach, które są
+    /// w walucie obcej bez kursu (kwoty nominalne). Dokument występujący
+    /// w obu grupach jest liczony tylko raz.
     public let missingRateCount: Int
 }
 
@@ -50,8 +52,8 @@ struct MonthlyReportAutomationConfiguration: Equatable, Hashable, Sendable {
         deliveryModeRaw: String
     ) {
         self.isEnabled = isEnabled
-        let own = recipient.trimmingCharacters(in: .whitespaces)
-        let fallback = fallbackRecipient.trimmingCharacters(in: .whitespaces)
+        let own = recipient.trimmingCharacters(in: .whitespacesAndNewlines)
+        let fallback = fallbackRecipient.trimmingCharacters(in: .whitespacesAndNewlines)
         self.recipient = own.isEmpty ? fallback : own
         self.deliveryModeRaw = deliveryModeRaw
     }
@@ -121,18 +123,24 @@ public enum MonthlyReportEngine {
             invoices.reduce(0) { $0 + DashboardAnalytics.inPLN(amount($1), invoice: $1) }
         }
 
-        // Należności liczone ze WSZYSTKICH widocznych faktur sprzedaży —
-        // zaległość z maja jest nadal należnością w raporcie za czerwiec.
+        // Należności liczone ze WSZYSTKICH widocznych faktur sprzedaży
+        // wystawionych najpóźniej na dzień raportu — zaległość z maja jest
+        // nadal należnością w raporcie za czerwiec, ale dokument z przyszłą
+        // datą wystawienia nie zawyża bieżącego stanu.
         let today = calendar.startOfDay(for: asOf)
         var receivablesCount = 0
         var receivablesTotal = 0.0
         var overdueCount = 0
         var overdueTotal = 0.0
-        for invoice in visible where invoice.kind == .sales && !invoice.isPaid {
+        var receivableInvoices: [Invoice] = []
+        for invoice in visible where invoice.kind == .sales
+            && !invoice.isPaid
+            && calendar.startOfDay(for: invoice.issueDate) <= today {
             let outstanding = DashboardAnalytics.inPLN(
                 invoice.outstandingAmount, invoice: invoice
             )
             guard outstanding > 0.005 else { continue }
+            receivableInvoices.append(invoice)
             receivablesCount += 1
             receivablesTotal += outstanding
             if let due = invoice.paymentDueDate, calendar.startOfDay(for: due) < today {
@@ -140,6 +148,10 @@ public enum MonthlyReportEngine {
                 overdueTotal += outstanding
             }
         }
+
+        let missingRateIDs = Set((inPeriod + receivableInvoices)
+            .filter { $0.currency != "PLN" && $0.exchangeRate <= 0 }
+            .map(\.id))
 
         return MonthlyReportSummary(
             periodStart: periodStart,
@@ -154,7 +166,7 @@ public enum MonthlyReportEngine {
             receivablesTotal: receivablesTotal,
             overdueCount: overdueCount,
             overdueTotal: overdueTotal,
-            missingRateCount: inPeriod.filter { $0.currency != "PLN" && $0.exchangeRate <= 0 }.count
+            missingRateCount: missingRateIDs.count
         )
     }
 

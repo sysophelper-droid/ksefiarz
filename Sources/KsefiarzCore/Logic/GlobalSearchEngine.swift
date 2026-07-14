@@ -71,7 +71,7 @@ public enum GlobalSearchEngine {
     /// Każdy wyraz zapytania musi pasować gdziekolwiek (tytuł, podtytuł
     /// albo słowa kluczowe); wynik to suma najlepszych trafień wyrazów.
     static func score(query: String, item: Item) -> Int? {
-        let tokens = normalized(query).split(separator: " ").map(String.init)
+        let tokens = normalized(query).split(whereSeparator: \.isWhitespace).map(String.init)
         guard !tokens.isEmpty else { return nil }
 
         let title = normalized(item.title)

@@ -616,6 +616,8 @@ Scripts/build-app.sh                   # składanie bundla .app
   `.diacriticInsensitive` — litera z kreską, nie znak łączący — więc
   jest zamieniane ręcznie), każdy token zapytania musi trafić, ranking
   prefiks tytułu > słowo tytułu > fragment tytułu > słowa kluczowe.
+  Tokeny rozdziela dowolny biały znak (także tabulator/nowa linia),
+  dzięki czemu wklejone wielowierszowe zapytanie zachowuje semantykę AND.
   Faktury ukryte są poza wynikami (ochrona jak w statystykach).
 - **Miesięczny raport e-mail (F4)**: cykl `task(id:)` w `MainContentView`
   (start + co 12 h; restart po zmianie ustawień przez
@@ -627,8 +629,10 @@ Scripts/build-app.sh                   # składanie bundla .app
   własny (`report.monthly.recipient`) z fail-backiem do `jpk.email`;
   bez adresu cykl w ogóle nie startuje (ostrzeżenie w Ustawieniach).
   Agregaty: sprzedaż/zakupy po dacie wystawienia miesiąca, należności
-  ze WSZYSTKICH widocznych nieopłaconych faktur sprzedaży na dzień
-  raportu; PLN po kursie z faktury, brak kursu jawnie policzony.
+  ze WSZYSTKICH widocznych nieopłaconych faktur sprzedaży wystawionych
+  najpóźniej w dniu raportu; PLN po kursie z faktury. Ostrzeżenie o braku
+  kursu obejmuje zarówno faktury miesiąca, jak i starsze należności
+  uwzględnione w raporcie (ten sam dokument jest liczony tylko raz).
   Saldo VAT to szacunek poglądowy (bez reguł JPK — treść raportu
   zawiera zastrzeżenie).
 - **Szablony e-mail (F5)**: `EmailTemplate` renderuje symbole
@@ -641,8 +645,9 @@ Scripts/build-app.sh                   # składanie bundla .app
   przy każdym użyciu (arkusze e-mail, cykl przypomnień) — zmiana działa
   od następnego renderu bez restartu cyklu. Edytor w Ustawieniach → E-mail
   pokazuje zawsze OBOWIĄZUJĄCY wzór; zapis tekstu identycznego
-  z wbudowanym czyści klucz, więc przyszłe zmiany wbudowanych wzorów nie
-  są zamrażane u użytkowników, którzy nic nie zmienili.
+  z wbudowanym lub złożonego wyłącznie z białych znaków (łącznie z nowymi
+  liniami) czyści klucz, więc przyszłe zmiany wbudowanych wzorów nie są
+  zamrażane u użytkowników, którzy nic nie zmienili.
 
 ## API KSeF 2.0 — fakty krytyczne
 

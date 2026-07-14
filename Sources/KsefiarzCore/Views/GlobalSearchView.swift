@@ -120,7 +120,7 @@ struct GlobalSearchView: View {
 
     /// Wyniki w kolejności rankingu (puste zapytanie = sekcje aplikacji).
     private var results: [GlobalSearchEngine.Item] {
-        let trimmed = query.trimmingCharacters(in: .whitespaces)
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return sectionItems }
         return GlobalSearchEngine.search(trimmed, in: allItems)
     }

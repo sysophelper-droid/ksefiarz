@@ -628,7 +628,7 @@ public struct SettingsView: View {
                     "Adresat raportu",
                     text: $monthlyReportRecipient,
                     prompt: Text(
-                        jpkEmail.trimmingCharacters(in: .whitespaces).isEmpty
+                        jpkEmail.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                             ? "np. ja@mojafirma.pl"
                             : "puste = \(jpkEmail) (e-mail podatnika z ustawień JPK)"
                     )
@@ -636,8 +636,8 @@ public struct SettingsView: View {
                 .disabled(!monthlyReportEnabled)
                 .listRowBackground(highlight("Raport miesięczny: adresat"))
                 if monthlyReportEnabled,
-                   monthlyReportRecipient.trimmingCharacters(in: .whitespaces).isEmpty,
-                   jpkEmail.trimmingCharacters(in: .whitespaces).isEmpty {
+                   monthlyReportRecipient.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                   jpkEmail.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     Label(
                         "Podaj adresata raportu — bez adresu raport nie zostanie przygotowany.",
                         systemImage: "exclamationmark.triangle.fill"

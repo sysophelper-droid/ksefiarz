@@ -35,6 +35,13 @@ public enum EmailTemplateKind: String, CaseIterable, Identifiable, Sendable {
 /// pokazuje błąd zamiast cicho go połykać.
 public enum EmailTemplate {
 
+    /// Czy tekst nie zawiera żadnej widocznej treści. Wspólna definicja
+    /// dla silnika i edytora ustawień — same spacje, tabulatory i znaki
+    /// nowej linii oznaczają powrót do szablonu domyślnego.
+    public static func isBlank(_ text: String) -> Bool {
+        text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
     // MARK: Renderowanie
 
     /// Renderuje szablon treści: podstawia symbole i stosuje regułę
@@ -310,7 +317,7 @@ public struct EmailTemplates: Equatable, Hashable, Sendable {
     }
 
     public init(custom: [String: String]) {
-        self.custom = custom.filter { !$0.value.isEmpty }
+        self.custom = custom.filter { !EmailTemplate.isBlank($0.value) }
     }
 
     /// Wczytuje własne szablony z UserDefaults (Ustawienia → E-mail).
@@ -330,7 +337,7 @@ public struct EmailTemplates: Equatable, Hashable, Sendable {
         language: InvoiceEmailComposer.Language
     ) -> String {
         let key = EmailTemplate.storageKey(kind: kind, field: "subject", language: language)
-        if let value = custom[key], !value.trimmingCharacters(in: .whitespaces).isEmpty {
+        if let value = custom[key], !EmailTemplate.isBlank(value) {
             return value
         }
         return EmailTemplate.defaultSubjectTemplate(kind: kind, language: language)
@@ -342,7 +349,7 @@ public struct EmailTemplates: Equatable, Hashable, Sendable {
         language: InvoiceEmailComposer.Language
     ) -> String {
         let key = EmailTemplate.storageKey(kind: kind, field: "body", language: language)
-        if let value = custom[key], !value.trimmingCharacters(in: .whitespaces).isEmpty {
+        if let value = custom[key], !EmailTemplate.isBlank(value) {
             return value
         }
         return EmailTemplate.defaultBodyTemplate(kind: kind, language: language)

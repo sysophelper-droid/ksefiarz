@@ -374,8 +374,8 @@ Tests/KsefiarzCoreTests/          # Swift Testing — model, parser, usługa, kr
   `{ksef}`, `{sprzedawca}`, `{nabywca}`, `{dni_po_terminie}` są
   podstawiane danymi dokumentu; wiersz, którego wszystkie symbole są
   puste (np. „Termin płatności: {termin}.” bez terminu), znika
-  z wiadomości. Puste/przywrócone pole wraca do wbudowanego wzoru;
-  własne szablony wchodzą do kopii zapasowej.
+  z wiadomości. Puste (także wielowierszowe)/przywrócone pole wraca do
+  wbudowanego wzoru; własne szablony wchodzą do kopii zapasowej.
 - **Faktury zaliczkowe i rozliczeniowe** — rodzaj dokumentu (VAT/ZAL/ROZ)
   do wyboru przy wystawianiu; ZAL z datą otrzymania zaliczki (P_6),
   ROZ ze wskazaniem numerów KSeF rozliczanych zaliczek.

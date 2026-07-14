@@ -110,8 +110,8 @@ struct EmailTemplateSettingsSection: View {
         let bodyKey = EmailTemplate.storageKey(kind: kind, field: "body", language: language)
         let storedSubject = defaults.string(forKey: subjectKey) ?? ""
         let storedBody = defaults.string(forKey: bodyKey) ?? ""
-        subject = storedSubject.isEmpty ? defaultSubject : storedSubject
-        bodyText = storedBody.isEmpty ? defaultBody : storedBody
+        subject = EmailTemplate.isBlank(storedSubject) ? defaultSubject : storedSubject
+        bodyText = EmailTemplate.isBlank(storedBody) ? defaultBody : storedBody
     }
 
     /// Utrwala pola: tekst równy wbudowanemu wzorowi czyści klucz.
@@ -119,12 +119,12 @@ struct EmailTemplateSettingsSection: View {
         let defaults = UserDefaults.standard
         let subjectKey = EmailTemplate.storageKey(kind: kind, field: "subject", language: language)
         let bodyKey = EmailTemplate.storageKey(kind: kind, field: "body", language: language)
-        if subject == defaultSubject || subject.trimmingCharacters(in: .whitespaces).isEmpty {
+        if subject == defaultSubject || EmailTemplate.isBlank(subject) {
             defaults.removeObject(forKey: subjectKey)
         } else {
             defaults.set(subject, forKey: subjectKey)
         }
-        if bodyText == defaultBody || bodyText.trimmingCharacters(in: .whitespaces).isEmpty {
+        if bodyText == defaultBody || EmailTemplate.isBlank(bodyText) {
             defaults.removeObject(forKey: bodyKey)
         } else {
             defaults.set(bodyText, forKey: bodyKey)
