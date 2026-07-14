@@ -91,6 +91,19 @@ public struct MainContentView: View {
     @AppStorage(AppSettingsKeys.notifyDeadlines) private var notifyDeadlines = true
     @AppStorage(AppSettingsKeys.autoRenewCertificates) private var autoRenewCertificates = true
     @AppStorage(AppSettingsKeys.taxForm) private var taxFormRaw = TaxForm.kpir.rawValue
+    @AppStorage(AppSettingsKeys.reminderEmailsEnabled) private var reminderEmailsEnabled = false
+    @AppStorage(AppSettingsKeys.reminderDaysBefore) private var reminderDaysBefore = 3
+    @AppStorage(AppSettingsKeys.reminderRepeatDays) private var reminderRepeatDays = 7
+    @AppStorage(AppSettingsKeys.reminderDeliveryMode) private var reminderDeliveryModeRaw = MailAutomationService.DeliveryMode.draft.rawValue
+
+    private var paymentReminderAutomationConfiguration: PaymentReminderAutomationConfiguration {
+        PaymentReminderAutomationConfiguration(
+            isEnabled: reminderEmailsEnabled,
+            daysBeforeDue: reminderDaysBefore,
+            repeatAfterDays: reminderRepeatDays,
+            deliveryModeRaw: reminderDeliveryModeRaw
+        )
+    }
 
     public init() {}
 
@@ -231,6 +244,18 @@ public struct MainContentView: View {
                 try? await Task.sleep(for: .seconds(60))
                 guard !Task.isCancelled else { return }
                 await reconcileOutstandingSubmissions(trigger: .automatic)
+            }
+        }
+        // Automatyczne przypomnienia e-mail o płatnościach — sprawdzane
+        // co 6 godzin (przypomnienia mają ziarnistość dnia; deduplikacja
+        // po dacie ostatniego przypomnienia na fakturze).
+        .task(id: paymentReminderAutomationConfiguration) {
+            let configuration = paymentReminderAutomationConfiguration
+            guard configuration.isEnabled else { return }
+            while !Task.isCancelled {
+                await processPaymentReminders(configuration: configuration)
+                try? await Task.sleep(for: .seconds(6 * 3600))
+                guard !Task.isCancelled else { return }
             }
         }
         // Odnowienie certyfikatów sprawdzane cyklicznie (okno ~30 dni przed
@@ -397,6 +422,128 @@ public struct MainContentView: View {
             Array(DeadlineNotificationEngine.prune(delivered: updatedDelivered)),
             forKey: AppSettingsKeys.deadlineNotifiedKeys
         )
+    }
+
+    /// Automatyczne przypomnienia e-mail o płatnościach (C4): silnik wybiera
+    /// faktury w oknie przed terminem i cykliczne ponaglenia po terminie,
+    /// a wiadomości trafiają do aplikacji Mail jako szkice albo są wysyłane
+    /// automatycznie (wg Ustawień). Każde przekazane przypomnienie jest
+    /// odnotowywane na fakturze (`collectionReminderAt`) — to jedyna pamięć
+    /// doręczeń, wspólna ze ścieżką windykacji. Błąd automatyzacji (np. brak
+    /// zgody) przerywa przebieg i jest zgłaszany powiadomieniem raz dziennie.
+    @MainActor
+    private func processPaymentReminders(
+        configuration: PaymentReminderAutomationConfiguration
+    ) async {
+        guard configuration.isEnabled else { return }
+        let invoices = (try? modelContext.fetch(FetchDescriptor<Invoice>())) ?? []
+        let contractors = (try? modelContext.fetch(FetchDescriptor<Contractor>())) ?? []
+        let result = PaymentReminderEngine.candidates(
+            invoices: invoices,
+            contractors: contractors,
+            settings: configuration.settings
+        )
+        let missingRecipientBody = PaymentReminderEngine
+            .missingRecipientNotificationBody(omissions: result.omissions)
+        guard !result.candidates.isEmpty || missingRecipientBody != nil else { return }
+        let mode = MailAutomationService.DeliveryMode(
+            rawValue: configuration.deliveryModeRaw
+        ) ?? .draft
+
+        var deliveredNumbers: [String] = []
+        var failure: Error?
+        for candidate in result.candidates {
+            do {
+                try MailAutomationService.deliver(
+                    recipient: candidate.recipient,
+                    subject: candidate.subject,
+                    body: candidate.body,
+                    mode: mode
+                )
+                DebtCollectionEngine.record(.reminder, on: [candidate.invoice])
+                deliveredNumbers.append(candidate.invoice.invoiceNumber)
+            } catch {
+                // Zwykle brak zgody na automatyzację — kolejne wywołania
+                // skończyłyby się tak samo, więc przerywamy przebieg.
+                failure = error
+                break
+            }
+        }
+        if !deliveredNumbers.isEmpty {
+            try? modelContext.save()
+        }
+
+        let center = UNUserNotificationCenter.current()
+        let granted = (try? await center.requestAuthorization(options: [.alert, .sound, .badge])) ?? false
+        guard granted else { return }
+        let dayKey = ISO8601DateFormatter.string(
+            from: .now, timeZone: .current,
+            formatOptions: [.withFullDate]
+        )
+
+        if !deliveredNumbers.isEmpty {
+            let content = UNMutableNotificationContent()
+            content.title = mode == .send
+                ? "Wysłano przypomnienia o płatnościach"
+                : "Przygotowano szkice przypomnień w Mail"
+            let listed = deliveredNumbers.prefix(5).joined(separator: ", ")
+            let suffix = deliveredNumbers.count > 5 ? "…" : ""
+            content.body = mode == .send
+                ? "Liczba wiadomości: \(deliveredNumbers.count) (\(listed)\(suffix))."
+                : "Liczba szkiców: \(deliveredNumbers.count) (\(listed)\(suffix)) — przejrzyj Wersje robocze w Mail i wyślij."
+            content.sound = .default
+            try? await center.add(UNNotificationRequest(
+                identifier: "ksefiarz.reminders.\(UUID().uuidString)",
+                content: content,
+                trigger: nil
+            ))
+        }
+        if let missingRecipientBody {
+            // Braki adresów nie dostają stempla, więc wracają w każdym
+            // cyklu. Jedno dzienne podsumowanie jest jawne, ale nie spamuje.
+            let lastNotified = UserDefaults.standard.string(
+                forKey: AppSettingsKeys.reminderOmissionsNotifiedDay
+            )
+            if lastNotified != dayKey {
+                let content = UNMutableNotificationContent()
+                content.title = "Pominięto przypomnienia o płatnościach"
+                content.body = missingRecipientBody
+                content.sound = .default
+                do {
+                    try await center.add(UNNotificationRequest(
+                        identifier: "ksefiarz.reminders.omissions.\(dayKey)",
+                        content: content,
+                        trigger: nil
+                    ))
+                    UserDefaults.standard.set(
+                        dayKey,
+                        forKey: AppSettingsKeys.reminderOmissionsNotifiedDay
+                    )
+                } catch {
+                    // Brak stempla pozwoli ponowić powiadomienie w kolejnym
+                    // cyklu, gdy centrum powiadomień znów będzie dostępne.
+                }
+            }
+        }
+        if let failure {
+            // Jedno powiadomienie o problemie dziennie — cykl co 6 godzin
+            // nie powinien czterokrotnie powtarzać tej samej diagnozy.
+            let lastNotified = UserDefaults.standard.string(
+                forKey: AppSettingsKeys.reminderErrorNotifiedDay
+            )
+            if lastNotified != dayKey {
+                UserDefaults.standard.set(dayKey, forKey: AppSettingsKeys.reminderErrorNotifiedDay)
+                let content = UNMutableNotificationContent()
+                content.title = "Przypomnienia o płatnościach wstrzymane"
+                content.body = failure.localizedDescription
+                content.sound = .default
+                try? await center.add(UNNotificationRequest(
+                    identifier: "ksefiarz.reminders.error.\(dayKey)",
+                    content: content,
+                    trigger: nil
+                ))
+            }
+        }
     }
 
     /// Automatyczne odnowienie certyfikatów KSeF: gdy któryś zbliża się do

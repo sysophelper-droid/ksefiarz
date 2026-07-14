@@ -102,6 +102,13 @@ public struct BackupInvoice: Codable, Equatable, Sendable {
     public var isSelfInvoicing: Bool?
     /// Pole od wersji 13 — powiązanie z komunikatem API Latarni KSeF.
     public var offlineEventId: Int?
+    /// Pola od wersji 14 — ścieżka windykacji (przypomnienie → wezwanie →
+    /// nota odsetkowa → dane do pozwu EPU).
+    public var collectionReminderAt: Date?
+    public var collectionReminderCount: Int?
+    public var collectionDemandAt: Date?
+    public var collectionInterestNoteAt: Date?
+    public var collectionEPUAt: Date?
 }
 
 /// Pozycja proformy w kopii zapasowej.
@@ -266,12 +273,13 @@ public struct BackupFile: Codable, Sendable {
 /// pobierania wszystkiego z KSeF.
 public enum BackupService {
 
-    /// Bieżąca wersja formatu pliku (13: + eventId Latarni KSeF; 12:
-    /// samofakturowanie — pole isSelfInvoicing i wzorzec numeracji samofaktur;
-    /// 11 dodała faktury proforma i wzorzec ich numeracji; 10 — ustawienia
-    /// kalendarza i prognozy podatkowej). Starsze pliki są nadal poprawnie
-    /// importowane.
-    public static let currentVersion = 13
+    /// Bieżąca wersja formatu pliku (14: windykacja — daty działań na
+    /// fakturze i ustawienia przypomnień/wezwań; 13: + eventId Latarni KSeF;
+    /// 12: samofakturowanie — pole isSelfInvoicing i wzorzec numeracji
+    /// samofaktur; 11 dodała faktury proforma i wzorzec ich numeracji;
+    /// 10 — ustawienia kalendarza i prognozy podatkowej). Starsze pliki są
+    /// nadal poprawnie importowane.
+    public static let currentVersion = 14
 
     /// Klucze ustawień obejmowane kopią zapasową.
     /// Tokenu KSeF celowo tu nie ma — sekret żyje w pęku kluczy i nie może
@@ -305,7 +313,58 @@ public enum BackupService {
         AppSettingsKeys.numberPatternSF,
         AppSettingsKeys.numberPatternPRO,
         AppSettingsKeys.rangeMode,
+        AppSettingsKeys.demandInterestRate,
+        AppSettingsKeys.demandPaymentDays,
+        AppSettingsKeys.reminderEmailsEnabled,
+        AppSettingsKeys.reminderDaysBefore,
+        AppSettingsKeys.reminderRepeatDays,
+        AppSettingsKeys.reminderDeliveryMode,
     ]
+
+    /// Klucze ustawień o typach natywnych innych niż String. Kopia zapasowa
+    /// przechowuje wartości jako tekst („1”, „7”, „13.5”), a `@AppStorage`
+    /// czyta z UserDefaults obiekt konkretnego typu — bez przywrócenia
+    /// natywnego typu ustawienie po imporcie wracałoby do wartości domyślnej.
+    static let boolSettingsKeys: Set<String> = [
+        AppSettingsKeys.isActiveVATPayer,
+        AppSettingsKeys.pdfBrandingEnabled,
+        AppSettingsKeys.pdfPaymentQR,
+        AppSettingsKeys.reminderEmailsEnabled,
+    ]
+    static let integerSettingsKeys: Set<String> = [
+        AppSettingsKeys.demandPaymentDays,
+        AppSettingsKeys.reminderDaysBefore,
+        AppSettingsKeys.reminderRepeatDays,
+    ]
+    static let doubleSettingsKeys: Set<String> = [
+        AppSettingsKeys.demandInterestRate,
+    ]
+
+    /// Zapisuje przywracane ustawienie pod właściwym typem. Wartość
+    /// nieparsowalna zostaje tekstem (nie przepada — jak dotychczas).
+    public static func applySetting(key: String, value: String, defaults: UserDefaults) {
+        if boolSettingsKeys.contains(key), let boolValue = parseBool(value) {
+            defaults.set(boolValue, forKey: key)
+        } else if integerSettingsKeys.contains(key), let intValue = Int(value) {
+            defaults.set(intValue, forKey: key)
+        } else if doubleSettingsKeys.contains(key), let doubleValue = Double(value) {
+            defaults.set(doubleValue, forKey: key)
+        } else {
+            defaults.set(value, forKey: key)
+        }
+    }
+
+    /// `NSString.boolValue` zwraca `false` także dla dowolnego śmieciowego
+    /// tekstu, przez co uszkodzona kopia po cichu wyłączałaby ustawienie.
+    /// Rozpoznajemy wyłącznie reprezentacje rzeczywiście używane przez
+    /// UserDefaults i popularne starsze warianty tekstowe.
+    private static func parseBool(_ value: String) -> Bool? {
+        switch value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+        case "1", "true", "yes": return true
+        case "0", "false", "no": return false
+        default: return nil
+        }
+    }
 
     /// Buduje pełną kopię bieżącego stanu aplikacji: wszystkie faktury,
     /// słowniki i ustawienia (bez tokenu KSeF). Wspólne dla eksportu
@@ -469,6 +528,11 @@ public enum BackupService {
         invoice.ryczaltEventDate = backup.ryczaltEventDate
         invoice.ryczaltAmountOverride = backup.ryczaltAmountOverride
         invoice.ryczaltNotes = backup.ryczaltNotes ?? ""
+        invoice.collectionReminderAt = backup.collectionReminderAt
+        invoice.collectionReminderCount = backup.collectionReminderCount ?? 0
+        invoice.collectionDemandAt = backup.collectionDemandAt
+        invoice.collectionInterestNoteAt = backup.collectionInterestNoteAt
+        invoice.collectionEPUAt = backup.collectionEPUAt
         return invoice
     }
 
@@ -800,7 +864,13 @@ public enum BackupService {
             ryczaltAmountOverride: invoice.ryczaltAmountOverride,
             ryczaltNotes: invoice.ryczaltNotes.isEmpty ? nil : invoice.ryczaltNotes,
             isSelfInvoicing: invoice.isSelfInvoicing ? true : nil,
-            offlineEventId: invoice.offlineEventId
+            offlineEventId: invoice.offlineEventId,
+            collectionReminderAt: invoice.collectionReminderAt,
+            collectionReminderCount: invoice.collectionReminderCount == 0
+                ? nil : invoice.collectionReminderCount,
+            collectionDemandAt: invoice.collectionDemandAt,
+            collectionInterestNoteAt: invoice.collectionInterestNoteAt,
+            collectionEPUAt: invoice.collectionEPUAt
         )
     }
 

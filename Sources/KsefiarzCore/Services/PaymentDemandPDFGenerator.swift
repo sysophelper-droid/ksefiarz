@@ -60,6 +60,8 @@ public enum PaymentDemandPDFGenerator {
     private static let itemsPerPage = 16
 
     public static func pdfData(for document: PaymentDemandDocument) -> Data? {
+        // Dane do EPU nie są pismem do dłużnika — nie mają wydruku PDF.
+        guard document.kind != .epu else { return nil }
         var chunks: [[PaymentDemandItem]] = []
         var remaining = document.items[...]
         repeat {
@@ -124,6 +126,11 @@ private struct PaymentDemandPageView: View {
 
     private var introText: String {
         switch document.kind {
+        case .reminder:
+            return "Uprzejmie przypominamy, że upłynął termin płatności niżej wymienionych "
+                + "faktur. Prosimy o uregulowanie należności w najbliższym możliwym terminie. "
+                + "Jeżeli płatność została już zrealizowana, prosimy o zignorowanie "
+                + "niniejszego pisma."
         case .demand:
             return "Wzywamy do zapłaty niżej wymienionych, przeterminowanych należności "
                 + "wraz z odsetkami za opóźnienie, w terminie \(document.paymentDays) dni "
@@ -132,8 +139,13 @@ private struct PaymentDemandPageView: View {
             return "Na podstawie art. 481 Kodeksu cywilnego oraz ustawy o przeciwdziałaniu "
                 + "nadmiernym opóźnieniom w transakcjach handlowych naliczamy odsetki "
                 + "za opóźnienie w zapłacie niżej wymienionych faktur."
+        case .epu:
+            return ""
         }
     }
+
+    /// Przypomnienie nie nalicza odsetek — kolumna i sumy odsetek znikają.
+    private var showsInterest: Bool { document.kind.includesInterest }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -200,7 +212,9 @@ private struct PaymentDemandPageView: View {
                 Text("Termin")
                 Text("Dni zwłoki")
                 Text("Należność")
-                Text("Odsetki")
+                if showsInterest {
+                    Text("Odsetki")
+                }
             }
             .font(.system(size: 8, weight: .semibold))
             .foregroundStyle(.secondary)
@@ -213,7 +227,9 @@ private struct PaymentDemandPageView: View {
                     Text(item.dueDate, format: .dateTime.day().month().year())
                     Text("\(item.daysOverdue)")
                     Text(item.outstanding, format: .currency(code: item.currency)).monospacedDigit()
-                    Text(item.interest, format: .currency(code: item.currency)).monospacedDigit()
+                    if showsInterest {
+                        Text(item.interest, format: .currency(code: item.currency)).monospacedDigit()
+                    }
                 }
                 .font(.system(size: 9))
             }
@@ -224,9 +240,11 @@ private struct PaymentDemandPageView: View {
         VStack(alignment: .trailing, spacing: 3) {
             Divider()
             ForEach(PaymentDemandEngine.totals(of: document.items), id: \.currency) { total in
-                let toPay = document.kind == .demand
-                    ? total.outstanding + total.interest
-                    : total.interest
+                let toPay: Double = switch document.kind {
+                case .interestNote: total.interest
+                case .reminder: total.outstanding
+                default: total.outstanding + total.interest
+                }
                 HStack {
                     Spacer()
                     if document.kind == .demand {
@@ -247,9 +265,11 @@ private struct PaymentDemandPageView: View {
 
     private var footer: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Odsetki naliczono według stopy \(document.annualRatePercent.formatted(.number.precision(.fractionLength(0...2))))% w skali roku, na dzień \(Self.dateFormatter.string(from: document.date)).")
-                .font(.system(size: 8))
-                .foregroundStyle(.secondary)
+            if showsInterest {
+                Text("Odsetki naliczono według stopy \(document.annualRatePercent.formatted(.number.precision(.fractionLength(0...2))))% w skali roku, na dzień \(Self.dateFormatter.string(from: document.date)).")
+                    .font(.system(size: 8))
+                    .foregroundStyle(.secondary)
+            }
             if !document.bankAccount.isEmpty {
                 Text("Wpłaty prosimy kierować na rachunek: \(document.bankAccount)")
                     .font(.system(size: 9, weight: .semibold))

@@ -252,6 +252,17 @@ public final class Invoice {
     /// zgadywania po dacie. `nil` oznacza wybór/daty ustawione ręcznie.
     public var offlineEventId: Int? = nil
 
+    /// Windykacja (tylko sprzedaż) — daty odnotowanych działań ścieżki
+    /// eskalacji: przypomnienie → wezwanie → nota odsetkowa → dane do EPU.
+    /// Z dat wyprowadzany jest status windykacji (`collectionStage`).
+    /// Wartości domyślne obowiązkowe (lekka migracja istniejącej bazy).
+    public var collectionReminderAt: Date? = nil
+    /// Liczba wysłanych przypomnień (miękkie ponaglenia bywają cykliczne).
+    public var collectionReminderCount: Int = 0
+    public var collectionDemandAt: Date? = nil
+    public var collectionInterestNoteAt: Date? = nil
+    public var collectionEPUAt: Date? = nil
+
     /// Czy dokument jest fakturą korygującą.
     public var isCorrection: Bool {
         ["KOR", "KOR_ZAL", "KOR_ROZ", "KOR_VAT_RR"].contains(documentTypeRaw)
@@ -489,6 +500,11 @@ public final class Invoice {
         self.marginProcedureRaw = marginProcedure
         self.isSelfInvoicing = isSelfInvoicing
         self.kindRaw = kind.rawValue
+    }
+
+    /// Etap windykacji — najdalszy odnotowany krok ścieżki eskalacji.
+    public var collectionStage: DebtCollectionStage {
+        DebtCollectionEngine.stage(for: self)
     }
 
     /// Czy faktura jest zaległa (nieopłacona i po terminie płatności) na wskazany moment.

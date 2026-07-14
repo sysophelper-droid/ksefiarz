@@ -435,10 +435,10 @@ extension DashboardView {
                 Button {
                     showingPaymentDemand = true
                 } label: {
-                    Label("Wezwanie do zapłaty…", systemImage: "envelope.badge.shield.half.filled")
+                    Label("Windykacja…", systemImage: "envelope.badge.shield.half.filled")
                 }
                 .font(.callout)
-                .help("Wygeneruj wezwanie do zapłaty albo notę odsetkową dla dłużnika z zaległymi fakturami")
+                .help("Ścieżka windykacji dłużnika z zaległymi fakturami: przypomnienie, wezwanie do zapłaty, nota odsetkowa albo dane do pozwu EPU (e-sąd)")
             }
         }
     }

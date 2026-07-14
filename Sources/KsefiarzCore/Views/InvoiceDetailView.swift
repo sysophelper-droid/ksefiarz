@@ -445,6 +445,8 @@ public struct InvoiceDetailView: View {
 
             paymentsSection
 
+            collectionSection
+
             Section("Akcje") {
                 HStack(spacing: 12) {
                     Button {
@@ -846,6 +848,54 @@ public struct InvoiceDetailView: View {
             Text("Wpłaty częściowe zmniejszają saldo; pełne pokrycie kwoty brutto oznacza fakturę jako opłaconą automatycznie. Wpłaty można też księgować hurtowo importem wyciągu bankowego (MT940) z listy faktur.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
+        }
+    }
+
+    /// Ścieżka windykacji (tylko sprzedaż): status z odnotowanych działań,
+    /// daty poszczególnych kroków i sugestia następnego kroku eskalacji.
+    /// Dokumenty tworzy się z menu listy sprzedaży albo z Kokpitu
+    /// (sekcja wiekowania) — tu tylko przegląd stanu.
+    @ViewBuilder
+    private var collectionSection: some View {
+        if invoice.kind == .sales,
+           invoice.collectionStage != .none || invoice.isOverdue {
+            Section("Windykacja") {
+                LabeledContent("Status") {
+                    Text(invoice.collectionStage == .none
+                        ? "Zaległa — bez działań"
+                        : invoice.collectionStage.displayName)
+                        .foregroundStyle(invoice.collectionStage == .none ? .orange : .primary)
+                }
+                if let reminded = invoice.collectionReminderAt {
+                    LabeledContent("Przypomnienie") {
+                        HStack(spacing: 4) {
+                            Text(reminded, style: .date)
+                            if invoice.collectionReminderCount > 1 {
+                                Text("(łącznie: \(invoice.collectionReminderCount))")
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                }
+                if let demanded = invoice.collectionDemandAt {
+                    LabeledContent("Wezwanie do zapłaty") { Text(demanded, style: .date) }
+                }
+                if let noted = invoice.collectionInterestNoteAt {
+                    LabeledContent("Nota odsetkowa") { Text(noted, style: .date) }
+                }
+                if let epu = invoice.collectionEPUAt {
+                    LabeledContent("Dane do pozwu EPU") { Text(epu, style: .date) }
+                }
+                if let suggestion = DebtCollectionEngine.suggestion(for: invoice) {
+                    Label {
+                        Text("Sugerowany krok: \(suggestion.action.displayName). \(suggestion.reason)")
+                            .font(.caption)
+                    } icon: {
+                        Image(systemName: "arrow.up.right.circle")
+                            .foregroundStyle(.orange)
+                    }
+                }
+            }
         }
     }
 

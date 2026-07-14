@@ -116,6 +116,21 @@ public enum AppSettingsKeys {
     public static let demandInterestRate = "demand.interestRate"
     /// Wezwania do zapłaty: termin zapłaty z wezwania (dni).
     public static let demandPaymentDays = "demand.paymentDays"
+    /// Automatyczne przypomnienia e-mail o płatnościach (przed/po terminie).
+    public static let reminderEmailsEnabled = "reminder.emails.enabled"
+    /// Ile dni przed terminem wysłać uprzedzające przypomnienie.
+    public static let reminderDaysBefore = "reminder.emails.daysBefore"
+    /// Co ile dni ponawiać miękkie ponaglenie po terminie.
+    public static let reminderRepeatDays = "reminder.emails.repeatDays"
+    /// Tryb dostarczania przypomnień (rawValue `MailAutomationService
+    /// .DeliveryMode`): szkice w Mail albo automatyczna wysyłka.
+    public static let reminderDeliveryMode = "reminder.emails.deliveryMode"
+    /// Dzień ostatniego powiadomienia o błędzie automatyzacji Mail
+    /// (dedup — jedno powiadomienie o problemie dziennie).
+    public static let reminderErrorNotifiedDay = "reminder.emails.errorNotifiedDay"
+    /// Dzień ostatniego powiadomienia o fakturach pominiętych z powodu
+    /// braku adresu e-mail (dedup — jedno podsumowanie dziennie).
+    public static let reminderOmissionsNotifiedDay = "reminder.emails.omissionsNotifiedDay"
     /// Ikona Ksefiarza w pasku menu (status synchronizacji i dosłań).
     public static let menuBarExtra = "ksef.menuBarExtra"
     /// Automatyczne odnawianie certyfikatów KSeF przed wygaśnięciem

@@ -496,12 +496,36 @@ Tests/KsefiarzCoreTests/          # Swift Testing — model, parser, usługa, kr
   Schemat_JPK_FA(4)_v1-0 (zweryfikowany xmllint). JPK na żądanie nie
   podlega korekcie i nie przekazuje się go e-mailem (Klient JPK WEB albo
   nośnik danych).
-- **Wezwania do zapłaty i noty odsetkowe** — dla dłużników z zaległymi
-  fakturami (kandydaci ze struktury wiekowej Kokpitu): wybór faktur,
-  odsetki naliczane od salda według konfigurowalnej stopy rocznej
-  (domyślnie odsetki za opóźnienie w transakcjach handlowych), PDF
-  z tabelą zaległości i sumami per waluta, zapis do pliku albo wysyłka
-  e-mailem na adres ze słownika kontrahentów.
+- **Ścieżka windykacji** — dla dłużników z zaległymi fakturami (kandydaci
+  ze struktury wiekowej Kokpitu, wejście też z menu listy sprzedaży) pełna
+  eskalacja: **przypomnienie o płatności** (miękkie pismo bez odsetek) →
+  **wezwanie do zapłaty** (odsetki od salda według konfigurowalnej stopy
+  rocznej — domyślnie odsetki za opóźnienie w transakcjach handlowych) →
+  **nota odsetkowa** → **dane do pozwu EPU** (e-sąd). Pisma powstają jako
+  PDF z tabelą zaległości i sumami per waluta — do zapisu albo wysyłki
+  e-mailem na adres ze słownika kontrahentów. Dane do EPU to komplet do
+  przepisania do formularza na e-sad.gov.pl: strony, wartość przedmiotu
+  sporu (bez odsetek, zaokrąglona w górę), wyliczona opłata od pozwu
+  (1/4 opłaty z art. 13 uksc, min. 30 zł), roszczenia z odsetkami „od dnia
+  następnego po terminie do dnia zapłaty”, lista dowodów i propozycja
+  uzasadnienia; roszczenia w walucie obcej i wymagalne ponad 3 lata temu są
+  jawnie wyłączane. Każdy utworzony dokument jest odnotowywany na fakturze —
+  **status windykacji** (znacznik na liście sprzedaży i sekcja w
+  szczegółach) pokazuje osiągnięty etap, a aplikacja podpowiada następny
+  krok eskalacji.
+- **Automatyczne przypomnienia e-mail o płatnościach** — cykliczne miękkie
+  ponaglenia do kontrahentów: uprzedzenie na kilka dni przed terminem
+  i powtarzane co N dni ponaglenia po terminie (dni konfigurowalne
+  w Ustawieniach → Faktury; funkcja domyślnie wyłączona). Wiadomości
+  (PL, a dla kontrahentów dwujęzycznych EN) zawierają saldo pozostałe do
+  zapłaty, termin i rachunek; adresat pochodzi ze słownika kontrahentów.
+  Dostarczanie przez aplikację Mail w dwóch trybach: **szkice** w Wersjach
+  roboczych do przejrzenia i wysłania ręcznie albo **automatyczna wysyłka**
+  — pierwsze użycie prosi o systemową zgodę na sterowanie Mail, a wynik
+  przebiegu podsumowuje powiadomienie. Formalne wezwanie do zapłaty
+  wstrzymuje miękkie przypomnienia danej faktury; faktury bez adresu
+  e-mail są raportowane w dziennym powiadomieniu z numerami dokumentów,
+  nie po cichu pomijane.
 - **Paczka dla księgowości** — eksport wybranego okresu (miesiąc albo
   własny zakres dat) do jednego pliku ZIP: zestawienia CSV osobno dla
   sprzedaży i zakupu, oryginalne dokumenty XML, wydruki PDF oraz

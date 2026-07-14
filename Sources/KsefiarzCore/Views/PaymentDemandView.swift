@@ -1,10 +1,14 @@
 import SwiftUI
 import SwiftData
+import AppKit
 
-/// Wezwanie do zapłaty / nota odsetkowa: wybór dłużnika z zaległymi
-/// fakturami sprzedażowymi (kandydaci ze struktury wiekowej), naliczenie
-/// odsetek według konfigurowalnej stopy rocznej, PDF do zapisu albo
-/// wysyłki e-mailem (adresat ze słownika kontrahentów).
+/// Windykacja należności: wybór dłużnika z zaległymi fakturami
+/// sprzedażowymi (kandydaci ze struktury wiekowej) i dokument ścieżki
+/// eskalacji — przypomnienie o płatności, wezwanie do zapłaty (odsetki
+/// według konfigurowalnej stopy rocznej), nota odsetkowa albo dane do
+/// pozwu EPU (e-sąd). PDF do zapisu lub wysyłki e-mailem (adresat ze
+/// słownika kontrahentów); utworzenie dokumentu jest odnotowywane na
+/// fakturach i buduje status windykacji.
 public struct PaymentDemandView: View {
 
     /// NIP dłużnika zaznaczonego na starcie (np. z menu listy sprzedaży).
@@ -13,6 +17,7 @@ public struct PaymentDemandView: View {
     @Query private var unpaidSales: [Invoice]
     @Query private var contractors: [Contractor]
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext) private var modelContext
 
     @AppStorage(AppSettingsKeys.sellerName) private var sellerName = ""
     @AppStorage(AppSettingsKeys.sellerAddress) private var sellerAddress = ""
@@ -28,6 +33,7 @@ public struct PaymentDemandView: View {
     @State private var kind: PaymentDemandKind = .demand
     @State private var documentNumber = ""
     @State private var errorMessage: String?
+    @State private var infoMessage: String?
     @State private var prefilled = false
 
     public init(preselectedBuyerNIP: String? = nil) {
@@ -68,7 +74,18 @@ public struct PaymentDemandView: View {
     }
 
     private var items: [PaymentDemandItem] {
-        PaymentDemandEngine.items(for: selectedInvoices, annualRatePercent: interestRate)
+        // Przypomnienie i dane EPU nie naliczają kwoty odsetek.
+        PaymentDemandEngine.items(
+            for: selectedInvoices,
+            annualRatePercent: kind.includesInterest ? interestRate : 0
+        )
+    }
+
+    /// Najdalej posunięta sugestia eskalacji dla faktur dłużnika.
+    private var suggestion: DebtCollectionSuggestion? {
+        debtorInvoices
+            .compactMap { DebtCollectionEngine.suggestion(for: $0) }
+            .max { $0.action.stage < $1.action.stage }
     }
 
     private var document: PaymentDemandDocument {
@@ -89,6 +106,51 @@ public struct PaymentDemandView: View {
         )
     }
 
+    // MARK: Dane do pozwu EPU
+
+    private var epuParties: DebtCollectionEngine.EPUParties {
+        let debtor = debtorInvoices.first
+        return DebtCollectionEngine.EPUParties(
+            claimantName: sellerName,
+            claimantNIP: sellerNIP,
+            claimantAddress: sellerAddress,
+            claimantBankAccount: defaultBankAccount,
+            defendantName: debtor?.buyerName ?? "",
+            defendantNIP: selectedBuyerNIP,
+            defendantAddress: debtor?.buyerAddress ?? ""
+        )
+    }
+
+    private var epuEligibility: (
+        eligible: [PaymentDemandItem],
+        omissions: [(invoiceNumber: String, reason: String)]
+    ) {
+        DebtCollectionEngine.epuEligibleItems(from: items)
+    }
+
+    /// Data ostatniego wezwania wśród zaznaczonych faktur (dowód w pozwie).
+    private var latestDemandDate: Date? {
+        selectedInvoices.compactMap(\.collectionDemandAt).max()
+    }
+
+    private var epuWarnings: [String] {
+        DebtCollectionEngine.epuWarnings(
+            parties: epuParties,
+            items: epuEligibility.eligible,
+            demandSentAt: latestDemandDate
+        )
+    }
+
+    private var epuText: String {
+        let eligibility = epuEligibility
+        return DebtCollectionEngine.epuText(
+            parties: epuParties,
+            items: eligibility.eligible,
+            demandSentAt: latestDemandDate,
+            omissions: eligibility.omissions
+        )
+    }
+
     public var body: some View {
         VStack(spacing: 0) {
             if debtors.isEmpty {
@@ -105,7 +167,7 @@ public struct PaymentDemandView: View {
             bottomBar
         }
         .frame(minWidth: 640, minHeight: 540)
-        .navigationTitle("Wezwanie do zapłaty")
+        .navigationTitle("Windykacja należności")
         .onAppear { prefillIfNeeded() }
         .alert(
             "Nie udało się przygotować dokumentu",
@@ -118,6 +180,17 @@ public struct PaymentDemandView: View {
         } message: {
             Text(errorMessage ?? "")
         }
+        .alert(
+            "Gotowe",
+            isPresented: Binding(
+                get: { infoMessage != nil },
+                set: { if !$0 { infoMessage = nil } }
+            )
+        ) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(infoMessage ?? "")
+        }
     }
 
     private var form: some View {
@@ -128,17 +201,30 @@ public struct PaymentDemandView: View {
                         Text(kind.displayName).tag(kind)
                     }
                 }
-                TextField("Numer dokumentu", text: $documentNumber, prompt: Text("opcjonalny, np. WZ/1/2026"))
+                if kind != .epu {
+                    TextField("Numer dokumentu", text: $documentNumber, prompt: Text("opcjonalny, np. WZ/1/2026"))
+                }
                 Picker("Dłużnik", selection: $selectedBuyerNIP) {
                     ForEach(debtors, id: \.nip) { debtor in
                         Text("\(debtor.name) (\(debtor.nip.isEmpty ? "bez NIP" : debtor.nip))")
                             .tag(debtor.nip)
                     }
                 }
-                TextField("Stopa odsetek rocznych (%)", value: $interestRate, format: .number)
-                    .help("Odsetki ustawowe za opóźnienie w transakcjach handlowych: stopa referencyjna NBP + 8 p.p. — sprawdź aktualne obwieszczenie MF.")
+                if kind.includesInterest {
+                    TextField("Stopa odsetek rocznych (%)", value: $interestRate, format: .number)
+                        .help("Odsetki ustawowe za opóźnienie w transakcjach handlowych: stopa referencyjna NBP + 8 p.p. — sprawdź aktualne obwieszczenie MF.")
+                }
                 if kind == .demand {
                     TextField("Termin zapłaty (dni od otrzymania)", value: $paymentDays, format: .number)
+                }
+                if let suggestion {
+                    Label {
+                        Text("Sugerowany krok: \(suggestion.action.displayName). \(suggestion.reason)")
+                            .font(.caption)
+                    } icon: {
+                        Image(systemName: "arrow.up.right.circle")
+                            .foregroundStyle(.orange)
+                    }
                 }
             }
             Section("Zaległe faktury dłużnika") {
@@ -155,6 +241,13 @@ public struct PaymentDemandView: View {
                     )) {
                         HStack {
                             Text(invoice.invoiceNumber)
+                            if invoice.collectionStage != .none {
+                                Text(invoice.collectionStage.displayName)
+                                    .font(.caption2)
+                                    .padding(.horizontal, 5)
+                                    .padding(.vertical, 1)
+                                    .background(Capsule().fill(.orange.opacity(0.2)))
+                            }
                             Spacer()
                             if let due = invoice.paymentDueDate {
                                 Text("termin: \(due, format: .dateTime.day().month().year())")
@@ -167,18 +260,22 @@ public struct PaymentDemandView: View {
                     }
                 }
             }
-            if !items.isEmpty {
+            if kind == .epu {
+                epuSection
+            } else if !items.isEmpty {
                 Section("Podsumowanie") {
                     ForEach(PaymentDemandEngine.totals(of: items), id: \.currency) { total in
                         LabeledContent("Należność główna (\(total.currency))") {
                             Text(total.outstanding, format: .currency(code: total.currency)).monospacedDigit()
                         }
-                        LabeledContent("Odsetki na dziś (\(total.currency))") {
-                            Text(total.interest, format: .currency(code: total.currency)).monospacedDigit()
+                        if kind.includesInterest {
+                            LabeledContent("Odsetki na dziś (\(total.currency))") {
+                                Text(total.interest, format: .currency(code: total.currency)).monospacedDigit()
+                            }
                         }
                         LabeledContent("Razem (\(total.currency))") {
                             Text(
-                                kind == .demand ? total.outstanding + total.interest : total.interest,
+                                kind == .interestNote ? total.interest : total.outstanding + total.interest,
                                 format: .currency(code: total.currency)
                             )
                             .monospacedDigit()
@@ -194,27 +291,80 @@ public struct PaymentDemandView: View {
         }
     }
 
+    @ViewBuilder
+    private var epuSection: some View {
+        Section("Dane do pozwu EPU (e-sąd)") {
+            let eligibility = epuEligibility
+            LabeledContent("Wartość przedmiotu sporu") {
+                Text("\(DebtCollectionEngine.epuDisputeValue(of: eligibility.eligible)) zł")
+                    .monospacedDigit()
+            }
+            LabeledContent("Opłata od pozwu (EPU)") {
+                Text("\(DebtCollectionEngine.epuCourtFee(disputeValue: DebtCollectionEngine.epuDisputeValue(of: eligibility.eligible))) zł")
+                    .monospacedDigit()
+            }
+            ForEach(epuWarnings, id: \.self) { warning in
+                Label {
+                    Text(warning).font(.caption)
+                } icon: {
+                    Image(systemName: "exclamationmark.triangle")
+                        .foregroundStyle(.orange)
+                }
+            }
+            ForEach(eligibility.omissions, id: \.invoiceNumber) { omission in
+                Label {
+                    Text("\(omission.invoiceNumber) — \(omission.reason)").font(.caption)
+                } icon: {
+                    Image(systemName: "minus.circle")
+                        .foregroundStyle(.secondary)
+                }
+            }
+            Text(epuText)
+                .font(.system(.caption, design: .monospaced))
+                .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
     private var bottomBar: some View {
         HStack {
-            Text("Kandydatów podpowiada struktura wiekowa Kokpitu — dokument obejmuje zaznaczone faktury po terminie.")
+            Text(kind == .epu
+                ? "EPU nie przyjmuje załączników — dane przepisz do formularza pozwu na e-sad.gov.pl."
+                : "Kandydatów podpowiada struktura wiekowa Kokpitu — dokument obejmuje zaznaczone faktury po terminie.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
             Spacer()
             Button("Anuluj") { dismiss() }
                 .keyboardShortcut(.cancelAction)
-            Button {
-                savePDF()
-            } label: {
-                Label("Zapisz PDF", systemImage: "square.and.arrow.down")
+            if kind == .epu {
+                Button {
+                    copyEPUData()
+                } label: {
+                    Label("Kopiuj dane", systemImage: "doc.on.doc")
+                }
+                .disabled(epuEligibility.eligible.isEmpty || sellerName.isEmpty)
+                Button {
+                    saveEPUData()
+                } label: {
+                    Label("Zapisz TXT", systemImage: "square.and.arrow.down")
+                }
+                .keyboardShortcut(.defaultAction)
+                .disabled(epuEligibility.eligible.isEmpty || sellerName.isEmpty)
+            } else {
+                Button {
+                    savePDF()
+                } label: {
+                    Label("Zapisz PDF", systemImage: "square.and.arrow.down")
+                }
+                .disabled(items.isEmpty || sellerName.isEmpty)
+                Button {
+                    sendByEmail()
+                } label: {
+                    Label("Wyślij e-mailem", systemImage: "envelope")
+                }
+                .keyboardShortcut(.defaultAction)
+                .disabled(items.isEmpty || sellerName.isEmpty)
             }
-            .disabled(items.isEmpty || sellerName.isEmpty)
-            Button {
-                sendByEmail()
-            } label: {
-                Label("Wyślij e-mailem", systemImage: "envelope")
-            }
-            .keyboardShortcut(.defaultAction)
-            .disabled(items.isEmpty || sellerName.isEmpty)
         }
         .padding()
     }
@@ -224,14 +374,42 @@ public struct PaymentDemandView: View {
         prefilled = true
         selectedBuyerNIP = preselectedBuyerNIP ?? debtors.first?.nip ?? ""
         selectedInvoiceIDs = Set(debtorInvoices.map(\.id))
+        // Startowy rodzaj dokumentu podąża za sugestią eskalacji.
+        if let suggested = suggestion?.action {
+            switch suggested {
+            case .reminder: kind = .reminder
+            case .demand: kind = .demand
+            case .interestNote: kind = .interestNote
+            case .epu: kind = .epu
+            }
+        }
+    }
+
+    /// Odnotowanie działania windykacyjnego na zaznaczonych fakturach —
+    /// od tego zapisu zależy status windykacji i wstrzymanie miękkich
+    /// przypomnień po formalnym wezwaniu. Dla EPU stemplujemy wyłącznie
+    /// faktury rzeczywiście ujęte w danych pozwu, nie pozycje pominięte.
+    private func recordCollectionAction() {
+        let invoices = kind == .epu
+            ? DebtCollectionEngine.epuEligibleInvoices(from: selectedInvoices)
+            : selectedInvoices
+        DebtCollectionEngine.record(kind.collectionAction, on: invoices)
+        try? modelContext.save()
     }
 
     private var suggestedFileName: String {
-        let prefix = kind == .demand ? "Wezwanie" : "Nota_odsetkowa"
+        let prefix: String
+        switch kind {
+        case .reminder: prefix = "Przypomnienie"
+        case .demand: prefix = "Wezwanie"
+        case .interestNote: prefix = "Nota_odsetkowa"
+        case .epu: prefix = "EPU_dane_pozwu"
+        }
         let debtor = (debtorInvoices.first?.buyerName ?? "dluznik")
             .replacingOccurrences(of: " ", with: "_")
             .replacingOccurrences(of: "/", with: "-")
-        return "\(prefix)_\(debtor)_\(FA2Format.dateFormatter.string(from: .now)).pdf"
+        let ext = kind == .epu ? "txt" : "pdf"
+        return "\(prefix)_\(debtor)_\(FA2Format.dateFormatter.string(from: .now)).\(ext)"
     }
 
     private func savePDF() {
@@ -240,8 +418,27 @@ public struct PaymentDemandView: View {
             return
         }
         if FileExportService.exportData(pdf, suggestedName: suggestedFileName, contentType: .pdf) {
+            recordCollectionAction()
             dismiss()
         }
+    }
+
+    private func saveEPUData() {
+        if FileExportService.exportData(
+            Data(epuText.utf8),
+            suggestedName: suggestedFileName,
+            contentType: .plainText
+        ) {
+            recordCollectionAction()
+            dismiss()
+        }
+    }
+
+    private func copyEPUData() {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(epuText, forType: .string)
+        recordCollectionAction()
+        infoMessage = "Dane pozwu EPU skopiowane do schowka."
     }
 
     private func sendByEmail() {
@@ -257,9 +454,15 @@ public struct PaymentDemandView: View {
             ?? matching.first(where: { !$0.email.isEmpty })?.email
             ?? ""
         let subject = "\(kind.displayName) — \(sellerName)"
-        let body = kind == .demand
-            ? "Dzień dobry,\n\nw załączeniu przekazujemy wezwanie do zapłaty zaległych należności wraz z naliczonymi odsetkami. Prosimy o uregulowanie płatności w terminie \(paymentDays) dni.\n\nPozdrawiamy\n\(sellerName)"
-            : "Dzień dobry,\n\nw załączeniu przekazujemy notę odsetkową z tytułu opóźnienia w zapłacie faktur.\n\nPozdrawiamy\n\(sellerName)"
+        let body: String
+        switch kind {
+        case .reminder:
+            body = "Dzień dobry,\n\nw załączeniu przekazujemy przypomnienie o płatności zaległych faktur. Jeżeli płatność została już zrealizowana, prosimy zignorować tę wiadomość.\n\nPozdrawiamy\n\(sellerName)"
+        case .interestNote:
+            body = "Dzień dobry,\n\nw załączeniu przekazujemy notę odsetkową z tytułu opóźnienia w zapłacie faktur.\n\nPozdrawiamy\n\(sellerName)"
+        default:
+            body = "Dzień dobry,\n\nw załączeniu przekazujemy wezwanie do zapłaty zaległych należności wraz z naliczonymi odsetkami. Prosimy o uregulowanie płatności w terminie \(paymentDays) dni.\n\nPozdrawiamy\n\(sellerName)"
+        }
         do {
             try InvoiceEmailService.composeDocument(
                 recipient: recipient,
@@ -268,6 +471,7 @@ public struct PaymentDemandView: View {
                 attachmentName: suggestedFileName,
                 attachmentData: pdf
             )
+            recordCollectionAction()
             dismiss()
         } catch {
             errorMessage = error.localizedDescription
