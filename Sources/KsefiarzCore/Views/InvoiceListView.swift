@@ -45,6 +45,8 @@ public struct InvoiceListView: View {
     /// Zamrożone zaznaczenie przekazywane do arkusza wysyłki wsadowej.
     @State private var batchSendPreselection = Set<UUID>()
     @State private var showingBatchSend = false
+    /// Ostrzeżenia po eksporcie WAPRO XML (np. brak kursu waluty).
+    @State private var documentExportMessage: String?
 
     @AppStorage(AppSettingsKeys.prepaidForms) private var prepaidFormsRaw = PaymentFormPolicy.encode(PaymentFormPolicy.defaultPrepaidForms)
 
@@ -195,7 +197,7 @@ public struct InvoiceListView: View {
                 PaymentDemandView(preselectedBuyerNIP: demandBuyerNIP)
             }
             .alert(
-                "Błąd synchronizacji z KSeF",
+                "Nie udało się wykonać operacji",
                 isPresented: Binding(
                     get: { errorMessage != nil },
                     set: { if !$0 { errorMessage = nil } }
@@ -204,6 +206,17 @@ public struct InvoiceListView: View {
                 Button("OK", role: .cancel) {}
             } message: {
                 Text(errorMessage ?? "")
+            }
+            .alert(
+                "Eksport WAPRO XML",
+                isPresented: Binding(
+                    get: { documentExportMessage != nil },
+                    set: { if !$0 { documentExportMessage = nil } }
+                )
+            ) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(documentExportMessage ?? "")
             }
         }
     }
@@ -279,13 +292,38 @@ public struct InvoiceListView: View {
                 .help("Eksportuj zaznaczone (albo wszystkie widoczne) zobowiązania do paczki Elixir-O")
             }
         }
-        ToolbarItem {
+        ToolbarItemGroup {
             Button {
                 showingAccountingPackage = true
             } label: {
                 Label("Paczka dla księgowości", systemImage: "archivebox")
             }
             .help("Eksportuj wybrany okres do ZIP: zestawienia CSV, XML, PDF i raport braków")
+            Menu {
+                Button {
+                    exportWaproXML(documentScope)
+                } label: {
+                    Label("WAPRO XML — Kaper/Fakir…", systemImage: "arrow.up.doc")
+                }
+                Divider()
+                Button {
+                    FileExportService.exportBatchPDF(
+                        of: documentScope,
+                        suggestedName: batchPDFFileName
+                    )
+                } label: {
+                    Label("Zapisz jako jeden PDF…", systemImage: "doc.richtext")
+                }
+                Button {
+                    FileExportService.printBatchPDF(of: documentScope)
+                } label: {
+                    Label("Drukuj…", systemImage: "printer")
+                }
+            } label: {
+                Label("Dokumenty", systemImage: "doc.on.doc")
+            }
+            .disabled(documentScope.isEmpty)
+            .help("Eksport lub wydruk zaznaczonych faktur; bez zaznaczenia obejmuje wszystkie widoczne")
         }
         ToolbarItem {
             Menu {
@@ -498,12 +536,67 @@ public struct InvoiceListView: View {
                 }
             }
         }
+        if !selected.isEmpty {
+            Divider()
+            Button("Eksportuj do WAPRO XML…") {
+                exportWaproXML(selected)
+            }
+            Button(selected.count == 1 ? "Zapisz jako PDF…" : "Zapisz \(selected.count) jako jeden PDF…") {
+                FileExportService.exportBatchPDF(
+                    of: selected,
+                    suggestedName: batchPDFFileName(for: selected)
+                )
+            }
+            Button(selected.count == 1 ? "Drukuj…" : "Drukuj \(selected.count) faktur…") {
+                FileExportService.printBatchPDF(of: selected)
+            }
+        }
     }
 
     /// Nazwa pliku CSV z rodzajem i bieżącą datą.
     private var csvFileName: String {
         let kindName = kind == .purchase ? "zakupy" : "sprzedaz"
         return "faktury_\(kindName)_\(FA2Format.dateFormatter.string(from: .now)).csv"
+    }
+
+    /// Zasięg akcji dokumentowych: zaznaczenie albo wszystkie widoczne.
+    private var documentScope: [Invoice] {
+        guard !selection.isEmpty else { return filteredInvoices }
+        return filteredInvoices.filter { selection.contains($0.id) }
+    }
+
+    private var batchPDFFileName: String {
+        batchPDFFileName(for: documentScope)
+    }
+
+    private func batchPDFFileName(for invoices: [Invoice]) -> String {
+        let kindName = kind == .purchase ? "zakupy" : "sprzedaz"
+        let date = FA2Format.dateFormatter.string(from: .now)
+        return "faktury_\(kindName)_\(invoices.count)_\(date).pdf"
+    }
+
+    /// Eksportuje aktualny zasięg do jawnego, publicznie opisanego formatu
+    /// WAPRO XML. Ostrzeżenia nie blokują zapisu, ale są pokazane po nim.
+    private func exportWaproXML(_ invoices: [Invoice]) {
+        do {
+            let result = try WaproXMLExporter.export(invoices: invoices)
+            let kindName = kind == .purchase ? "zakupy" : "sprzedaz"
+            let date = FA2Format.dateFormatter.string(from: .now)
+            let saved = FileExportService.exportData(
+                result.data,
+                suggestedName: "wapro_\(kindName)_\(date).xml",
+                contentType: .xml
+            )
+            if saved, !result.warnings.isEmpty {
+                let visibleWarnings = result.warnings.prefix(8).joined(separator: "\n")
+                let remainder = result.warnings.count - min(result.warnings.count, 8)
+                documentExportMessage = "Zapisano \(result.documentCount) dokumentów. Przed importem sprawdź:\n\n"
+                    + visibleWarnings
+                    + (remainder > 0 ? "\n…oraz \(remainder) dalszych ostrzeżeń." : "")
+            }
+        } catch {
+            errorMessage = error.localizedDescription
+        }
     }
 
     /// Pasek narzędzi respektuje multiselect: gdy nic nie zaznaczono,

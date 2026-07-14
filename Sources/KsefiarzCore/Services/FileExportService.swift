@@ -1,4 +1,5 @@
 import AppKit
+import PDFKit
 import UniformTypeIdentifiers
 
 /// Zapis plików faktur (XML / PDF) przez systemowy panel zapisu.
@@ -48,6 +49,30 @@ public enum FileExportService {
             suggestedName: "Faktura_\(sanitized(invoice.invoiceNumber))\(suffix).pdf",
             contentType: .pdf
         )
+    }
+
+    /// Łączy faktury w jeden PDF i zapisuje go przez systemowy panel.
+    @discardableResult
+    public static func exportBatchPDF(of invoices: [Invoice], suggestedName: String) -> Bool {
+        guard let result = BatchInvoicePDFBuilder.makePDF(invoices: invoices) else { return false }
+        return save(data: result.data, suggestedName: suggestedName, contentType: .pdf)
+    }
+
+    /// Łączy faktury w jeden PDF i otwiera systemowe okno drukowania macOS.
+    @discardableResult
+    public static func printBatchPDF(of invoices: [Invoice]) -> Bool {
+        guard
+            let result = BatchInvoicePDFBuilder.makePDF(invoices: invoices),
+            let document = PDFDocument(data: result.data),
+            let operation = document.printOperation(
+                for: NSPrintInfo.shared,
+                scalingMode: .pageScaleToFit,
+                autoRotate: true
+            )
+        else { return false }
+        operation.showsPrintPanel = true
+        operation.showsProgressPanel = true
+        return operation.run()
     }
 
     /// Otwiera NSSavePanel i zapisuje dane pod wybraną ścieżką.

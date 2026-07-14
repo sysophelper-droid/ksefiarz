@@ -38,6 +38,7 @@ Sources/
     │   ├── FA2XML.swift          # generator FA(3) i parser FA(2)/FA(3)/FA_RR(1)
     │   ├── FARRXML.swift         # generator VAT RR i dobór schemy sesji KSeF
     │   ├── InvoiceValidator.swift# walidacja pól + suma kontrolna NIP/PESEL
+    │   ├── BatchInvoicePDFBuilder.swift # wiele faktur w jednym PDF / wydruku
     │   ├── TabularFileReader.swift # odczyt CSV/TSV/XLSX do wspólnej tabeli
     │   └── BulkImportService.swift # zapis planu importu do SwiftData
     ├── Logic/
@@ -47,6 +48,7 @@ Sources/
     │   ├── PermissionsEngine.swift # walidacja i normalizacja uprawnień KSeF
     │   ├── InvoiceAutomationEngine.swift # duplikaty i terminy cykli
     │   ├── ElixirPaymentExporter.swift # walidacja i eksport paczki przelewów .pli
+    │   ├── WaproXMLExporter.swift # dokumenty do importu w WAPRO Kaper/Fakir
     │   ├── KPiREngine.swift       # KPiR 2026: klasyfikacja, sumy i CSV 1–19
     │   ├── RyczaltEngine.swift    # ryczałt 2026: stawki, przychód i CSV 1–17
     │   ├── ContractorHistory.swift # salda i scoring płatniczy kontrahenta
@@ -278,9 +280,9 @@ Tests/KsefiarzCoreTests/          # Swift Testing — model, parser, usługa, kr
   `~/Library/Application Support/Ksefiarz/Backups/` z konfigurowalną
   rotacją: liczba przechowywanych kopii albo liczba dni wstecz.
 - **Eksport** — zapis oryginalnego XML e-Faktury, generowanie PDF
-  z kwotą słownie (długie faktury są dzielone na wiele stron z numeracją)
-  oraz eksport widocznej listy faktur do CSV (format zgodny z polskim
-  Excelem).
+  z kwotą słownie (długie faktury są dzielone na wiele stron z numeracją),
+  eksport widocznej listy faktur do CSV (format zgodny z polskim Excelem),
+  wspólny PDF/druk wielu dokumentów oraz WAPRO XML dla księgowości.
 - **Logo i branding PDF** — w Ustawieniach → Firma można włączyć logo,
   wybrać kolor główny i akcent oraz wpisać własną stopkę drukowaną na każdej
   stronie. Logo jest automatycznie skalowane, a konfiguracja trafia do kopii
@@ -507,6 +509,23 @@ Tests/KsefiarzCoreTests/          # Swift Testing — model, parser, usługa, kr
   do KSeF, odrzucone, bez UPO, bez XML, offline w kolejce, brak NIP
   nabywcy). Faktury ukryte nie wchodzą do paczki. Archiwum ZIP powstaje
   w całości w aplikacji (bez zależności zewnętrznych).
+- **Eksport do WAPRO Kaper/Fakir** — menu „Dokumenty” na liście zapisuje
+  zaznaczone faktury, a bez zaznaczenia wszystkie widoczne, jako jeden plik
+  WAPRO XML (`MAGIK_EKSPORT`, wersja 4.3.2; maks. 999 dokumentów). Plik zawiera
+  kartotekę kontrahentów, sprzedaż/zakup i korekty, pozycje, rejestr VAT,
+  wartości walutowe i kurs, formę płatności, MPP, numer KSeF oraz kody
+  GTU/procedur. Import w WAPRO zaczyna się od „Narzędzia → Import dokumentów”
+  po zdefiniowaniu źródła WAPRO XML; dokumenty należy najpierw sprawdzić
+  w buforze. Brak kursu PLN lub pozycji nie jest ukrywany — po zapisie
+  aplikacja pokazuje ostrzeżenia. Format oparto na
+  [publicznej specyfikacji WAPRO](https://wapro.pl/dokumentacja-erp/desktop/docs/finanse-i-ksiegowosc/informacje-uzupelniajace/kh-99.010-specyfikacja-pliku-XML/)
+  i [instrukcji importu WAPRO Kaper](https://wapro.pl/dokumentacja-erp/desktop/docs/ksiega-podatkowa/narzedzia-i-moduly/kp-90.20.005-import-dokumentow/).
+- **Zbiorczy PDF i druk** — to samo menu „Dokumenty” oraz menu kontekstowe
+  multiselectu łączą wydruki zaznaczonych (albo wszystkich widocznych)
+  faktur w jeden PDF, zachowując kolejność listy i wszystkie strony każdej
+  faktury. Plik można zapisać lub od razu przekazać do systemowego okna
+  drukowania macOS. Faktury ukryte nie pojawiają się na liście, więc nie są
+  przypadkiem dołączane.
 - **Przelewy do banku (Elixir-O)** — z listy zakupów można wyeksportować
   zaznaczone faktury (albo wszystkie widoczne) do pliku `.pli` importowanego
   jako paczka przelewów w polskiej bankowości. Arkusz wybiera rachunek
@@ -537,7 +556,8 @@ Tests/KsefiarzCoreTests/          # Swift Testing — model, parser, usługa, kr
   od razu, formy odroczone (np. przelew) trafiają do „Do opłacenia”.
 - **Obsługa listy** — pojedyncze kliknięcie zaznacza, podwójne otwiera
   szczegóły; zaznaczanie wielu faktur (⌘/⇧) z akcjami zbiorczymi
-  w menu kontekstowym: oznacz jako opłacone/nieopłacone, ukryj (zakupy).
+  w menu kontekstowym: oznacz jako opłacone/nieopłacone, ukryj (zakupy),
+  eksportuj do WAPRO XML albo zapisz/drukuj jako jeden PDF.
   Ten sam wzorzec działa na liście najbliższych płatności w Kokpicie —
   szczegóły faktury otwierają się bez przechodzenia do listy zakupów.
 - **Ochrona przed nadużyciami** — „Ukryj fakturę (Nieuprawniony zakup)”
@@ -563,7 +583,7 @@ Wszystkie dane pozostają lokalnie na Twoim komputerze:
 | Ustawienia: dane firmy, branding PDF (w tym pomniejszone logo), środowisko, numeracja, filtry | `~/Library/Preferences/pl.itkrak.ksefiarz.plist` |
 | **Token KSeF** | pęk kluczy macOS (Keychain), pozycja `pl.itkrak.ksefiarz` |
 | **Certyfikaty KSeF (typ 1 i 2) z kluczami prywatnymi** | pęk kluczy macOS, pozycje `ksef.cert.*` w usłudze `pl.itkrak.ksefiarz` (osobno per środowisko) |
-| Eksporty (XML / PDF / CSV / UPO / kopia zapasowa) | lokalizacja wybrana w panelu zapisu |
+| Eksporty (XML / WAPRO XML / PDF / zbiorczy PDF / CSV / UPO / kopia zapasowa) | lokalizacja wybrana w panelu zapisu |
 
 🔐 **Token KSeF** jest przechowywany w systemowym pęku kluczy (Keychain) —
 zaszyfrowany przez system i niedostępny dla innych procesów bez Twojej zgody.
