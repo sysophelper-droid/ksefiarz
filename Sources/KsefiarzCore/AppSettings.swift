@@ -100,6 +100,17 @@ public enum AppSettingsKeys {
     public static let jpkTaxOfficeCode = "jpk.kodUrzedu"
     /// JPK_V7M: adres e-mail podatnika (Podmiot1/Email).
     public static let jpkEmail = "jpk.email"
+    /// JPK_FA (na żądanie): adres strukturalny podmiotu (etd:TAdresPolski1) —
+    /// XSD wymaga osobnych pól, których nie da się wyprowadzić
+    /// z jednolinijkowego adresu z Ustawień.
+    public static let jpkFAWojewodztwo = "jpk.fa.wojewodztwo"
+    public static let jpkFAPowiat = "jpk.fa.powiat"
+    public static let jpkFAGmina = "jpk.fa.gmina"
+    public static let jpkFAUlica = "jpk.fa.ulica"
+    public static let jpkFANrDomu = "jpk.fa.nrDomu"
+    public static let jpkFANrLokalu = "jpk.fa.nrLokalu"
+    public static let jpkFAMiejscowosc = "jpk.fa.miejscowosc"
+    public static let jpkFAKodPocztowy = "jpk.fa.kodPocztowy"
     /// Wezwania do zapłaty: roczna stopa odsetek za opóźnienie (%) —
     /// domyślnie odsetki ustawowe za opóźnienie w transakcjach handlowych.
     public static let demandInterestRate = "demand.interestRate"

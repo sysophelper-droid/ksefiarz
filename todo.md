@@ -19,8 +19,6 @@ kolejność dowolna. ⚠️ operacje modyfikujące KSeF testować wyłącznie na
 
 #### B. Podatki dochodowe / ewidencje
 
-- [ ] B4. JPK_FA na żądanie — pełny JPK faktur (nie ewidencja), format dla
-  kontroli US. Rzadkie.
 - [ ] B5. Ewidencja JPK_V7 dla VAT RR — ujęcie zryczałtowanego zwrotu po
   stronie podatku naliczonego nabywcy (art. 116). Faktury VAT RR są zapisywane
   jako `kind == .purchase`, a w `salesBuckets` jest dziś jedynie defensywne
@@ -58,6 +56,26 @@ kolejność dowolna. ⚠️ operacje modyfikujące KSeF testować wyłącznie na
   (dziś zaszyte PL/EN).
 
 ## Zrealizowane
+
+### JPK_FA na żądanie — pełny JPK faktur sprzedaży (14.07.2026)
+
+- [x] B4. Generator JPK_FA(4) (`JPKFAGenerator`) — pełny JPK faktur VAT
+  przekazywany na wezwanie organu podatkowego (art. 193a Ordynacji
+  podatkowej), osobny od ewidencji JPK_V7M/V7K. Wejście z menu „Ewidencje”
+  na listach faktur; arkusz z zakresem dat wystawienia (dopasowanym do
+  wezwania), strukturalnym adresem podmiotu (wymóg XSD, klucze `jpk.fa.*`),
+  sumami kontrolnymi i ostrzeżeniami. Zakres zgodny z broszurą MF:
+  wyłącznie faktury sprzedaży (bez zakupów, bez samofaktur wystawionych
+  w imieniu dostawców — należą do JPK_FA dostawcy, bez VAT RR — osobna
+  struktura JPK_FA_RR); sprzedaż z adnotacją P_17 wchodzi. Kwoty w walucie
+  faktury, podatek przeliczony w P_14_xW; WDT/eksport → P_13_6, OSS →
+  P_13_5/P_14_5 + P_12_XII; korekty kwotami różnicy z NrFaKorygowanej;
+  ROZ jako VAT z NrFaZaliczkowej; ZAL/KOR_ZAL bez wierszy — pozycje
+  w węźle Zamowienie z ZamowienieCtrl; elementy adresu Podmiot1
+  kwalifikowane prefiksem etd (pułapka jak w VAT-UE). CelZlozenia=1 na
+  stałe (JPK na żądanie nie podlega korekcie). Dokument z pełnym
+  przekrojem przypadków zweryfikowany oficjalną XSD
+  Schemat_JPK_FA(4)_v1-0 (xmllint, 14.07.2026); 39 testów jednostkowych.
 
 ### Anonimowy dostęp / pobranie faktury po numerze KSeF (14.07.2026)
 
