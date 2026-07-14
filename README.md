@@ -51,6 +51,7 @@ Sources/
     │   ├── WaproXMLExporter.swift # dokumenty do importu w WAPRO Kaper/Fakir
     │   ├── KPiREngine.swift       # KPiR 2026: klasyfikacja, sumy i CSV 1–19
     │   ├── RyczaltEngine.swift    # ryczałt 2026: stawki, przychód i CSV 1–17
+    │   ├── JPKV7VATRRPolicy.swift # art. 116: kwalifikacja VAT RR po zapłacie/zwrocie
     │   ├── ContractorHistory.swift # salda i scoring płatniczy kontrahenta
     │   └── BulkImportEngine.swift  # mapowanie, walidacja i deduplikacja importu
     └── Views/
@@ -465,6 +466,14 @@ Tests/KsefiarzCoreTests/          # Swift Testing — model, parser, usługa, kr
   historyczne schemy (2). Pliki są zgodne z oficjalnymi XSD;
   arkusz pokazuje podsumowanie i listę pozycji do ręcznej weryfikacji
   (m.in. pozycje OSS rozliczane poza JPK, procedura marży, brak kursu).
+  Faktury **VAT RR** są zakupem nabywcy: po zapisaniu pełnej zapłaty w historii
+  wpłat (albo przy dacie zapłaty z dokumentu), formie przelewu i rachunku
+  rolnika generator ujmuje je w okresie zapłaty z `DokumentZakupu=VAT_RR`,
+  wartością w `K_42` i zryczałtowanym zwrotem w `K_43`. Częściowa lub
+  nieudokumentowana zapłata jest bezpiecznie pomijana z ostrzeżeniem; korekta
+  zmniejszająca wymaga daty bankowego zwrotu przez rolnika. Przed wysyłką
+  trzeba potwierdzić związek nabycia ze sprzedażą opodatkowaną oraz prawidłowe
+  wskazanie faktury/numeru KSeF na dowodzie płatności (art. 116 ustawy o VAT).
 - **Eksport VAT-UE** — informacja podsumowująca za wybrany miesiąc
   (obok JPK_V7M/V7K w menu „Ewidencje”): wewnątrzwspólnotowe dostawy towarów
   (WDT, część C), nabycia towarów (WNT, część D) i świadczenie usług UE

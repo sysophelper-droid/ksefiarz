@@ -69,6 +69,28 @@ private func makePurchase(
     )
 }
 
+private func makeRRPurchase(
+    number: String = "RR/5/2026",
+    issue: String = "2026-05-20",
+    payment: String? = "2026-06-10",
+    net: Double = 1_000,
+    vat: Double = 70,
+    correction: Bool = false
+) -> Invoice {
+    Invoice(
+        invoiceNumber: number,
+        issueDate: FA2Format.dateFormatter.date(from: issue)!,
+        sellerName: "Jan Rolnik", sellerNIP: "9999999999",
+        buyerName: "ACME", buyerNIP: "5260250274",
+        netAmount: net, vatAmount: vat, grossAmount: net + vat,
+        paymentForm: .transfer,
+        paymentBankAccount: "61109010140000071219812874",
+        paymentDate: payment.flatMap { FA2Format.dateFormatter.date(from: $0) },
+        documentType: correction ? "KOR_VAT_RR" : "VAT_RR",
+        kind: .purchase
+    )
+}
+
 private func line(
     _ name: String, net: Double, rate: String, vat: Double,
     gtu: String = "", procedure: String = "", ossRate: Double? = nil
@@ -122,6 +144,128 @@ struct JPKV7GeneratorTests {
         #expect(result.xml.contains("<K_43>46.00</K_43>"))
         #expect(result.xml.contains("<NrDostawcy>9999999999</NrDostawcy>"))
         #expect(result.xml.contains("<PodatekNaliczony>46.00</PodatekNaliczony>"))
+    }
+
+    @Test("VAT RR trafia do zakupów po dacie zapłaty z oznaczeniem i zwrotem w K_43")
+    func paidRRByPaymentDate() {
+        let rr = makeRRPurchase()
+        let result = JPKV7Generator.generate(invoices: [rr], options: makeOptions())
+
+        #expect(result.purchaseCount == 1)
+        #expect(result.inputVAT == 70)
+        #expect(result.xml.contains("<DokumentZakupu>VAT_RR</DokumentZakupu>"))
+        #expect(result.xml.contains("<DataZakupu>2026-05-20</DataZakupu>"))
+        #expect(result.xml.contains("<K_42>1000.00</K_42>"))
+        #expect(result.xml.contains("<K_43>70.00</K_43>"))
+        #expect(result.xml.contains("<P_42>1000</P_42>"))
+        #expect(result.xml.contains("<P_43>70</P_43>"))
+        #expect(result.warnings.contains { $0.contains("art. 116 ust. 6") })
+    }
+
+    @Test("VAT RR nie trafia do okresu wystawienia przed zapłatą")
+    func rrNotRecognizedAtIssueDate() {
+        let rr = makeRRPurchase(payment: "2026-06-10")
+        let may = JPKV7Generator.generate(
+            invoices: [rr], options: makeOptions(month: 5)
+        )
+
+        #expect(may.purchaseCount == 0)
+        #expect(may.inputVAT == 0)
+        #expect(!may.xml.contains("<DokumentZakupu>VAT_RR</DokumentZakupu>"))
+    }
+
+    @Test("VAT RR bez pełnej zapłaty jest pomijany z jawnym ostrzeżeniem")
+    func unpaidRROmitted() {
+        let rr = makeRRPurchase(issue: "2026-06-05", payment: nil)
+        let result = JPKV7Generator.generate(invoices: [rr], options: makeOptions())
+
+        #expect(result.purchaseCount == 0)
+        #expect(result.inputVAT == 0)
+        #expect(result.warnings.contains {
+            $0.contains("VAT RR pominięty") && $0.contains("brak daty pełnej zapłaty")
+        })
+    }
+
+    @Test("VAT RR bez zapłaty spoza okresu nie zaśmieca ostrzeżeń eksportu")
+    func unpaidRROutsidePeriodDoesNotWarn() {
+        let rr = makeRRPurchase(issue: "2026-04-20", payment: nil)
+        let result = JPKV7Generator.generate(invoices: [rr], options: makeOptions())
+
+        #expect(result.purchaseCount == 0)
+        #expect(!result.warnings.contains { $0.contains("VAT RR pominięty") })
+    }
+
+    @Test("Historia płatności kwalifikuje VAT RR dopiero w dniu pełnego pokrycia")
+    func rrPaymentLedgerCompletionDate() {
+        let rr = makeRRPurchase(payment: nil)
+        rr.payments = [
+            PaymentRecord(
+                amount: 500,
+                date: FA2Format.dateFormatter.date(from: "2026-06-20")!
+            ),
+            PaymentRecord(
+                amount: 570,
+                date: FA2Format.dateFormatter.date(from: "2026-07-02")!
+            ),
+        ]
+
+        let june = JPKV7Generator.generate(invoices: [rr], options: makeOptions())
+        let july = JPKV7Generator.generate(
+            invoices: [rr], options: makeOptions(month: 7)
+        )
+        #expect(june.purchaseCount == 0)
+        #expect(july.purchaseCount == 1)
+        #expect(july.inputVAT == 70)
+    }
+
+    @Test("Import bankowy bez danych przelewu na fakturze wyznacza własną datę rozliczenia VAT RR")
+    func rrBankImportDeterminesSettlementDate() {
+        let rr = makeRRPurchase(payment: "2026-06-10")
+        rr.paymentForm = .cash
+        rr.paymentBankAccount = nil
+        rr.payments = [
+            PaymentRecord(
+                amount: 1_070,
+                date: FA2Format.dateFormatter.date(from: "2026-07-02")!,
+                source: .bankImport
+            ),
+        ]
+
+        let june = JPKV7Generator.generate(invoices: [rr], options: makeOptions())
+        let july = JPKV7Generator.generate(
+            invoices: [rr], options: makeOptions(month: 7)
+        )
+        #expect(june.purchaseCount == 0)
+        #expect(july.purchaseCount == 1)
+    }
+
+    @Test("VAT RR bez potwierdzonego kanału bankowego nie zwiększa podatku naliczonego")
+    func rrRequiresBankPayment() {
+        let rr = makeRRPurchase(issue: "2026-06-05")
+        rr.paymentForm = .cash
+        rr.paymentBankAccount = nil
+
+        let result = JPKV7Generator.generate(invoices: [rr], options: makeOptions())
+        #expect(result.purchaseCount == 0)
+        #expect(result.warnings.contains { $0.contains("rozliczenia bankowego") })
+    }
+
+    @Test("Zmniejszająca korekta VAT RR obniża K_42/K_43 w okresie zwrotu rolnika")
+    func rrCorrectionByRefundDate() {
+        let correction = makeRRPurchase(
+            number: "KOR/RR/6/2026", issue: "2026-06-05",
+            payment: "2026-06-18", net: -200, vat: -14, correction: true
+        )
+        let result = JPKV7Generator.generate(
+            invoices: [correction], options: makeOptions()
+        )
+
+        #expect(result.purchaseCount == 1)
+        #expect(result.inputVAT == -14)
+        #expect(result.xml.contains("<DokumentZakupu>VAT_RR</DokumentZakupu>"))
+        #expect(result.xml.contains("<K_42>-200.00</K_42>"))
+        #expect(result.xml.contains("<K_43>-14.00</K_43>"))
+        #expect(result.warnings.contains { $0.contains("art. 116 ust. 6a") })
     }
 
     @Test("Deklaracja: P_38 z należnego, P_51 do wpłaty (pełne złote, nieujemna)")
@@ -350,6 +494,26 @@ struct JPKV7KGeneratorTests {
         #expect(result.xml.contains("<P_43>690</P_43>"))
         #expect(result.xml.contains("<P_42>3000</P_42>"))
         #expect(result.amountDue == 460) // 1150 należny − 690 naliczony
+    }
+
+    @Test("VAT RR zapłacony wcześniej w kwartale zasila deklarację V7K, nie ewidencję ostatniego miesiąca")
+    func quarterlyRRUsesPaymentDate() {
+        let rr = makeRRPurchase(
+            issue: "2026-03-29", payment: "2026-04-02",
+            net: 1_000, vat: 70
+        )
+        let result = JPKV7Generator.generate(
+            invoices: [rr],
+            options: makeOptions(variant: .quarterly, month: 6)
+        )
+
+        #expect(result.purchaseCount == 0)
+        #expect(result.inputVAT == 0)
+        #expect(result.hasDeclaration)
+        #expect(result.declarationInputVAT == 70)
+        #expect(result.xml.contains("<P_42>1000</P_42>"))
+        #expect(result.xml.contains("<P_43>70</P_43>"))
+        #expect(!result.xml.contains("<DokumentZakupu>VAT_RR</DokumentZakupu>"))
     }
 
     @Test("Numer kwartału i wykrycie ostatniego miesiąca")

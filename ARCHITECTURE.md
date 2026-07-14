@@ -159,7 +159,9 @@ Sources/KsefiarzCore/
                VAT-7K; wydanie (3) z NrKSeF albo OFF/BFK/DI; V7K kwartalny —
                deklaracja tylko w pliku ostatniego miesiąca kwartału, za cały
                kwartał, z elementem Kwartal; OSS poza JPK, ostrzeżenia
-               o uproszczeniach),
+               o uproszczeniach), JPKV7VATRRPolicy (specyfikacja art. 116:
+               kwalifikacja zakupowego VAT RR po pełnej zapłacie/zwrocie,
+               dowód kanału bankowego i jawne przyczyny pominięcia),
                JPKFAGenerator (JPK_FA(4) — pełny JPK faktur sprzedaży
                NA ŻĄDANIE organu podatkowego; wyłącznie sprzedaż, kwoty
                w walucie faktury, pozycje FakturaWiersz, zaliczki w węźle
@@ -948,8 +950,41 @@ miesięcy 1. i 2. kwartału generator emituje sam blok `Ewidencja` (bez
 (miesiąc: `outputVAT`/`inputVAT`) od kwot deklaracji (kwartał dla V7K:
 `declarationOutputVAT`/`declarationInputVAT`, `amountDue`/`excessCarried`,
 flaga `hasDeclaration`). Warianty (2) i (3) zweryfikowane oficjalnymi XSD
-(xmllint, 12.07.2026). Uproszczenia jak w V7M (OSS poza JPK, zakupy jako
-pozostałe nabycia, okres po dacie sprzedaży/wystawienia).
+(xmllint, 12.07.2026). Uproszczenia jak w V7M (OSS poza JPK, zwykłe zakupy
+jako pozostałe nabycia, okres po dacie sprzedaży/wystawienia).
+
+### VAT RR po stronie nabywcy (art. 116)
+
+`JPKV7VATRRPolicy` jest osobną specyfikacją podatkową dla dokumentów
+`kind == .purchase && isRR`; nie korzysta z `salesBuckets`. Reguły:
+
+- faktura VAT RR zwiększa podatek naliczony nabywcy w okresie **pełnej
+  zapłaty** należności wraz ze zryczałtowanym zwrotem; datą jest
+  `paymentDate` albo dzień, w którym chronologiczna suma `PaymentRecord`
+  pokryła bezwzględną kwotę brutto;
+- automatyczna kwalifikacja wymaga przelewu i numeru rachunku rolnika;
+  alternatywnie pełne pokrycie może wynikać z płatności pochodzących z importu
+  wyciągu (`bankImport`). Zapłata częściowa, brak daty albo brak dowodu kanału
+  bankowego nie tworzy wiersza i daje ostrzeżenie;
+- ewidencja zakupu zawiera `DokumentZakupu=VAT_RR`, `K_42` (wartość nabycia)
+  oraz `K_43` (zryczałtowany zwrot jako podatek naliczony). `ZakupCtrl`,
+  `P_42/P_43`, rozliczenie VAT-7/VAT-7K i prognoza `TaxCalendarEngine`
+  korzystają z tych samych zakwalifikowanych kwot;
+- korekta zwiększająca jest ujmowana po dopłacie, a zmniejszająca po dacie
+  bankowego zwrotu przez rolnika (kwoty ujemne K_42/K_43). Korekta bez wpływu
+  na kwoty nie tworzy pustego wiersza;
+- model nie potwierdza celu wykorzystania nabycia ani treści dowodu zapłaty.
+  Dlatego nawet zakwalifikowany wiersz przypomina o ręcznej weryfikacji
+  związku ze sprzedażą opodatkowaną i numeru/daty faktury albo numeru KSeF na
+  dowodzie zapłaty. To warunki art. 116 ust. 6, nie zgadywane przez aplikację.
+
+Źródła prawdy (zweryfikowane 14.07.2026): [art. 116 ustawy o VAT — tekst
+ujednolicony ELI](https://eli.gov.pl/eli/DU/2025/775/ogl), [broszura MF
+JPK_VAT od 1.02.2026](https://www.podatki.gov.pl/media/wgbkrejs/broszura-jpk_vat-z-deklaracj%C4%85-od-1-lutego-2026-r.pdf)
+oraz oficjalne XSD [JPK_V7M(3)](https://crd.gov.pl/wzor/2025/12/19/14090/)
+i [JPK_V7K(3)](https://crd.gov.pl/wzor/2025/12/19/14089/). Próbki z wierszem
+VAT RR (`NrKSeF`, `DokumentZakupu`, K_42/K_43) przeszły obie oficjalne schemy
+przez `xmllint` 14.07.2026.
 Kody krajów: `TKodKrajuUE` (towary) i `TKodKrajuUEUslugi` (usługi, bez XI);
 Grecja = **EL**, Irlandia Płn. **XI tylko dla towarów**, PL wykluczone.
 Stary słownik XSD nadal technicznie zawiera GB, ale generator pomija Wielką

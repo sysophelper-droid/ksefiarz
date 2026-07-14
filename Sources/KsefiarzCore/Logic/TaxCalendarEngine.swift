@@ -145,19 +145,41 @@ public enum TaxCalendarEngine {
         var warnings: [String] = []
         var outputVAT = 0.0
         var inputVAT = 0.0
-        for invoice in visible where isActiveVATPayer
-            && vatPeriod.contains(JPKV7Generator.periodDate(invoice), calendar: calendar) {
+        for invoice in visible where isActiveVATPayer {
             if invoice.kind == .sales {
+                guard vatPeriod.contains(
+                    JPKV7Generator.periodDate(invoice), calendar: calendar
+                ) else { continue }
                 var invoiceWarnings: [String] = []
                 outputVAT += JPKV7Generator.salesBuckets(for: invoice, warnings: &invoiceWarnings).vat
                 warnings += invoiceWarnings
             } else {
                 if invoice.isRR {
-                    warnings.append(
-                        "Faktura \(invoice.invoiceNumber): VAT RR nie został ujęty w podatku naliczonym — wymaga osobnego rozliczenia."
-                    )
+                    switch JPKV7VATRRPolicy.decision(for: invoice) {
+                    case .recognize(let recognition):
+                        guard vatPeriod.contains(recognition.date, calendar: calendar) else {
+                            continue
+                        }
+                        inputVAT += JPKV7Generator.amountInPLN(
+                            invoice.vatAmount, invoice: invoice, warnings: &warnings
+                        )
+                        warnings.append("Faktura \(invoice.invoiceNumber): \(recognition.advisory)")
+                    case .omit(let reason):
+                        if vatPeriod.contains(
+                            JPKV7Generator.periodDate(invoice), calendar: calendar
+                        ) && !(invoice.isCorrection
+                            && abs(invoice.netAmount) < JPKV7VATRRPolicy.tolerance
+                            && abs(invoice.vatAmount) < JPKV7VATRRPolicy.tolerance) {
+                            warnings.append(
+                                "Faktura \(invoice.invoiceNumber): VAT RR pominięty w prognozie VAT — \(reason)."
+                            )
+                        }
+                    }
                     continue
                 }
+                guard vatPeriod.contains(
+                    JPKV7Generator.periodDate(invoice), calendar: calendar
+                ) else { continue }
                 inputVAT += JPKV7Generator.amountInPLN(
                     invoice.vatAmount, invoice: invoice, warnings: &warnings
                 )

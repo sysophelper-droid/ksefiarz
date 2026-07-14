@@ -170,6 +170,8 @@ public struct JPKV7Result: Sendable {
 /// Przyjęte uproszczenia (raportowane w `warnings`):
 /// - przypisanie do okresu po dacie sprzedaży (P_6) lub wystawienia,
 /// - zakupy w całości jako „pozostałe nabycia” (K_42/K_43),
+/// - VAT RR według osobnej polityki art. 116: okres pełnej zapłaty/zwrotu,
+///   oznaczenie VAT_RR i K_42/K_43 po stronie podatku naliczonego nabywcy,
 /// - pozycje OSS (P_12_XII) pominięte — rozliczane w procedurze unijnej OSS,
 /// - faktury bez pozycji traktowane jak sprzedaż ze stawką podstawową.
 public enum JPKV7Generator {
@@ -191,6 +193,16 @@ public enum JPKV7Generator {
         var net: Double { k10 + k13 + k15 + k17 + k19 }
         var vat: Double { k16 + k18 + k20 }
         var isEmpty: Bool { net == 0 && vat == 0 }
+    }
+
+    /// Zakup zakwalifikowany do ewidencji wraz z właściwą datą podatkową.
+    /// Dla VAT RR jest to data z polityki art. 116, dla pozostałych zakupów
+    /// dotychczasowa data sprzedaży/wystawienia.
+    struct PurchaseEntry {
+        var invoice: Invoice
+        var recognitionDate: Date
+        var net: Double
+        var vat: Double
     }
 
     /// Kolejność znaczników GTU i procedur zgodna z sekwencją XSD.
@@ -215,9 +227,20 @@ public enum JPKV7Generator {
         let sales = visible
             .filter { $0.kind == .sales && inPeriod($0, options: options) }
             .sorted { periodDate($0) < periodDate($1) }
-        let purchases = visible
-            .filter { $0.kind == .purchase && inPeriod($0, options: options) }
-            .sorted { periodDate($0) < periodDate($1) }
+        // Zakres potrzebny dalej: ewidencja miesiąca, a w ostatnim miesiącu
+        // V7K z deklaracją także pozostałe dwa miesiące kwartału.
+        let quarterEnd = isQuarterEnd(options.month)
+        let emitDeclaration = options.includeDeclaration
+            && (options.variant == .monthly || quarterEnd)
+        let purchaseScopeMonths = options.variant == .quarterly && emitDeclaration
+            ? quarterMonths(options.month) : [options.month]
+        let allPurchaseEntries = purchaseEntries(
+            from: visible, year: options.year, months: purchaseScopeMonths,
+            warnings: &warnings
+        )
+        let purchases = allPurchaseEntries
+            .filter { inPeriod($0.recognitionDate, options: options) }
+            .sorted { $0.recognitionDate < $1.recognitionDate }
 
         // Ewidencja sprzedaży.
         var salesRows = ""
@@ -242,13 +265,11 @@ public enum JPKV7Generator {
         var purchaseRows = ""
         var purchasesNetTotal = 0.0
         var purchasesVATTotal = 0.0
-        for (offset, invoice) in purchases.enumerated() {
-            let net = amountInPLN(invoice.netAmount, invoice: invoice, warnings: &warnings)
-            let vat = amountInPLN(invoice.vatAmount, invoice: invoice, warnings: &warnings)
-            purchasesNetTotal += net
-            purchasesVATTotal += vat
+        for (offset, entry) in purchases.enumerated() {
+            purchasesNetTotal += entry.net
+            purchasesVATTotal += entry.vat
             purchaseRows += purchaseRow(
-                invoice: invoice, net: net, vat: vat, index: offset + 1,
+                invoice: entry.invoice, net: entry.net, vat: entry.vat, index: offset + 1,
                 includeKSeFMarker: schema.requiresKSeFMarker, warnings: &warnings
             )
         }
@@ -256,9 +277,6 @@ public enum JPKV7Generator {
         // Część deklaracyjna (VAT-7 / VAT-7K) — kwoty w pełnych złotych.
         // V7M: deklaracja co miesiąc; V7K: tylko w ostatnim miesiącu kwartału,
         // a obejmuje sumy CAŁEGO kwartału (nie tylko miesiąca ewidencji).
-        let quarterEnd = isQuarterEnd(options.month)
-        let emitDeclaration = options.includeDeclaration
-            && (options.variant == .monthly || quarterEnd)
         if options.variant == .quarterly && options.includeDeclaration && !quarterEnd {
             warnings.append(
                 "JPK_V7K: część deklaracyjna VAT-7K składana jest wyłącznie z ewidencją ostatniego miesiąca kwartału (marzec, czerwiec, wrzesień, grudzień) — dla wskazanego miesiąca plik zawiera samą ewidencję."
@@ -276,18 +294,13 @@ public enum JPKV7Generator {
                 declSales = visible
                     .filter { $0.kind == .sales && inMonths($0, year: options.year, months: months) }
                     .sorted { periodDate($0) < periodDate($1) }
-                // Zakupy całego kwartału (dla P_42/P_43) — dublujące ostrzeżenia
-                // o kursie odkładamy na bok (surfaceują przy ewidencji miesiąca).
-                var net = 0.0
-                var vat = 0.0
-                var scratch: [String] = []
-                for invoice in visible where invoice.kind == .purchase
-                    && inMonths(invoice, year: options.year, months: months) {
-                    net += amountInPLN(invoice.netAmount, invoice: invoice, warnings: &scratch)
-                    vat += amountInPLN(invoice.vatAmount, invoice: invoice, warnings: &scratch)
+                // Zakupy całego kwartału (dla P_42/P_43) powstały już wyżej
+                // według tej samej polityki co miesięczna ewidencja.
+                let quarterPurchases = allPurchaseEntries.filter {
+                    inMonths($0.recognitionDate, year: options.year, months: months)
                 }
-                declPurchasesNet = net
-                declPurchasesVAT = vat
+                declPurchasesNet = quarterPurchases.reduce(0) { $0 + $1.net }
+                declPurchasesVAT = quarterPurchases.reduce(0) { $0 + $1.vat }
             } else {
                 declSales = sales
                 declPurchasesNet = purchasesNetTotal
@@ -372,7 +385,11 @@ public enum JPKV7Generator {
     static func isQuarterEnd(_ month: Int) -> Bool { month % 3 == 0 }
 
     static func inMonths(_ invoice: Invoice, year: Int, months: [Int]) -> Bool {
-        let components = Calendar.current.dateComponents([.year, .month], from: periodDate(invoice))
+        inMonths(periodDate(invoice), year: year, months: months)
+    }
+
+    static func inMonths(_ date: Date, year: Int, months: [Int]) -> Bool {
+        let components = Calendar.current.dateComponents([.year, .month], from: date)
         return components.year == year && months.contains(components.month ?? -1)
     }
 
@@ -386,8 +403,61 @@ public enum JPKV7Generator {
     }
 
     static func inPeriod(_ invoice: Invoice, options: JPKV7Options) -> Bool {
-        let components = Calendar.current.dateComponents([.year, .month], from: periodDate(invoice))
+        inPeriod(periodDate(invoice), options: options)
+    }
+
+    static func inPeriod(_ date: Date, options: JPKV7Options) -> Bool {
+        let components = Calendar.current.dateComponents([.year, .month], from: date)
         return components.year == options.year && components.month == options.month
+    }
+
+    // MARK: Zakupy
+
+    /// Buduje wspólną listę zakupów dla ewidencji miesiąca i deklaracji
+    /// kwartalnej. VAT RR kwalifikuje osobna polityka art. 116; brak warunków
+    /// odliczenia nie tworzy wiersza i zawsze pozostawia jawne ostrzeżenie.
+    static func purchaseEntries(
+        from invoices: [Invoice],
+        year: Int,
+        months: [Int],
+        warnings: inout [String]
+    ) -> [PurchaseEntry] {
+        invoices.compactMap { invoice in
+            guard invoice.kind == .purchase else { return nil }
+
+            let recognitionDate: Date
+            if invoice.isRR {
+                switch JPKV7VATRRPolicy.decision(for: invoice) {
+                case .recognize(let recognition):
+                    recognitionDate = recognition.date
+                    guard inMonths(recognitionDate, year: year, months: months) else {
+                        return nil
+                    }
+                    warnings.append("Faktura \(invoice.invoiceNumber): \(recognition.advisory)")
+                case .omit(let reason):
+                    // Korekta bez zmiany kwot nie wymaga wiersza ani alarmu.
+                    if inMonths(periodDate(invoice), year: year, months: months)
+                        && !(invoice.isCorrection
+                        && abs(invoice.netAmount) < JPKV7VATRRPolicy.tolerance
+                        && abs(invoice.vatAmount) < JPKV7VATRRPolicy.tolerance) {
+                        warnings.append("Faktura \(invoice.invoiceNumber): VAT RR pominięty w JPK_V7 — \(reason).")
+                    }
+                    return nil
+                }
+            } else {
+                recognitionDate = periodDate(invoice)
+                guard inMonths(recognitionDate, year: year, months: months) else {
+                    return nil
+                }
+            }
+
+            let net = amountInPLN(invoice.netAmount, invoice: invoice, warnings: &warnings)
+            let vat = amountInPLN(invoice.vatAmount, invoice: invoice, warnings: &warnings)
+            return PurchaseEntry(
+                invoice: invoice, recognitionDate: recognitionDate,
+                net: net, vat: vat
+            )
+        }
     }
 
     // MARK: Sprzedaż
@@ -501,8 +571,6 @@ public enum JPKV7Generator {
         return xml
     }
 
-    // MARK: Zakup
-
     static func purchaseRow(
         invoice: Invoice,
         net: Double,
@@ -519,6 +587,9 @@ public enum JPKV7Generator {
         xml += "      <DataZakupu>\(day(invoice.issueDate))</DataZakupu>\n"
         if includeKSeFMarker {
             xml += ksefMarker(for: invoice)
+        }
+        if invoice.isRR {
+            xml += "      <DokumentZakupu>VAT_RR</DokumentZakupu>\n"
         }
         xml += "      <K_42>\(amount(net))</K_42>\n"
         xml += "      <K_43>\(amount(vat))</K_43>\n"

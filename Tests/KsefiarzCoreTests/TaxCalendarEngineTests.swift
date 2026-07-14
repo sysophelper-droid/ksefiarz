@@ -154,17 +154,49 @@ struct TaxCalendarEngineTests {
         #expect(result.forecast.vatBalance == 0)
     }
 
-    @Test("VAT RR nie jest automatycznie odliczany w prognozie VAT")
-    func vatRRIsNotDeducted() {
+    @Test("Prognoza VAT ujmuje VAT RR według daty zapłaty")
+    func vatRRUsesPaymentDate() {
         let purchase = invoice(
-            number: "RR/1", kind: .purchase, date: date(2026, 7, 3),
+            number: "RR/1", kind: .purchase, date: date(2026, 6, 3),
             net: 1_000, vat: 70
         )
         purchase.documentTypeRaw = "VAT_RR"
+        purchase.paymentForm = .transfer
+        purchase.paymentBankAccount = "61109010140000071219812874"
+        purchase.paymentDate = date(2026, 7, 10)
+
+        let forecast = snapshot(invoices: [purchase], now: date(2026, 7, 13)).forecast
+        #expect(forecast.inputVAT == 70)
+        #expect(forecast.warnings.contains { $0.contains("art. 116 ust. 6") })
+    }
+
+    @Test("Prognoza VAT pomija VAT RR bez zapłaty i podaje przyczynę")
+    func unpaidVATRRIsNotDeducted() {
+        let purchase = invoice(
+            number: "RR/2", kind: .purchase, date: date(2026, 7, 3),
+            net: 1_000, vat: 70
+        )
+        purchase.documentTypeRaw = "VAT_RR"
+        purchase.paymentForm = .transfer
+        purchase.paymentBankAccount = "61109010140000071219812874"
 
         let forecast = snapshot(invoices: [purchase], now: date(2026, 7, 13)).forecast
         #expect(forecast.inputVAT == 0)
-        #expect(forecast.warnings.contains { $0.contains("VAT RR") })
+        #expect(forecast.warnings.contains { $0.contains("brak daty pełnej zapłaty") })
+    }
+
+    @Test("Prognoza VAT nie ostrzega o niezapłaconym VAT RR spoza bieżącego okresu")
+    func unpaidVATRROutsidePeriodDoesNotWarn() {
+        let purchase = invoice(
+            number: "RR/3", kind: .purchase, date: date(2026, 6, 3),
+            net: 1_000, vat: 70
+        )
+        purchase.documentTypeRaw = "VAT_RR"
+        purchase.paymentForm = .transfer
+        purchase.paymentBankAccount = "61109010140000071219812874"
+
+        let forecast = snapshot(invoices: [purchase], now: date(2026, 7, 13)).forecast
+        #expect(!forecast.warnings.contains { $0.contains("VAT RR pominięty") })
     }
 
     @Test("Skala PIT liczy przyrost podatku narastająco po przekroczeniu progu")

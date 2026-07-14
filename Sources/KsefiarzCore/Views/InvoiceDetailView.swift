@@ -776,6 +776,42 @@ public struct InvoiceDetailView: View {
     /// oraz formularz księgowania kolejnej wpłaty.
     private var paymentsSection: some View {
         Section {
+            if invoice.isRR {
+                Toggle(
+                    invoice.isCorrection && invoice.grossAmount < 0
+                        ? "Potwierdź bankowy zwrot rolnika dla JPK_V7"
+                        : "Potwierdź pełną zapłatę bankową dla JPK_V7",
+                    isOn: Binding(
+                        get: { invoice.paymentDate != nil },
+                        set: { enabled in
+                            if enabled {
+                                invoice.paymentDate = .now
+                                // Art. 116 wymaga zapłaty; automatycznie można
+                                // tylko ustawić status, nigdy go nie cofamy.
+                                if invoice.grossAmount > 0 { invoice.isPaid = true }
+                            } else {
+                                invoice.paymentDate = nil
+                            }
+                            try? modelContext.save()
+                        }
+                    )
+                )
+                if invoice.paymentDate != nil {
+                    DatePicker(
+                        invoice.isCorrection && invoice.grossAmount < 0
+                            ? "Data zwrotu przez rolnika"
+                            : "Data pełnej zapłaty",
+                        selection: Binding(
+                            get: { invoice.paymentDate ?? .now },
+                            set: { date in
+                                invoice.paymentDate = date
+                                try? modelContext.save()
+                            }
+                        ),
+                        displayedComponents: .date
+                    )
+                }
+            }
             LabeledContent("Wpłacono") {
                 Text(invoice.paidAmount, format: .currency(code: invoice.currency))
                     .monospacedDigit()
@@ -845,7 +881,9 @@ public struct InvoiceDetailView: View {
                 }
             }
         } footer: {
-            Text("Wpłaty częściowe zmniejszają saldo; pełne pokrycie kwoty brutto oznacza fakturę jako opłaconą automatycznie. Wpłaty można też księgować hurtowo importem wyciągu bankowego (MT940) z listy faktur.")
+            Text(invoice.isRR
+                ? "Dla JPK_V7 zryczałtowany zwrot VAT RR jest ujmowany po pełnym pokryciu kwoty brutto przelewem na rachunek rolnika. Potwierdź rzeczywistą datę zapłaty (albo zwrotu przy korekcie); dowód bankowy musi wskazywać fakturę zgodnie z art. 116."
+                : "Wpłaty częściowe zmniejszają saldo; pełne pokrycie kwoty brutto oznacza fakturę jako opłaconą automatycznie. Wpłaty można też księgować hurtowo importem wyciągu bankowego (MT940) z listy faktur.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }

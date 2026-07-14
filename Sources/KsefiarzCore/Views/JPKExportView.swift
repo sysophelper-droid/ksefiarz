@@ -175,7 +175,7 @@ public struct JPKExportView: View {
 
             Divider()
             HStack {
-                Text("Plik zweryfikuj przed wysyłką (np. w e-mikrofirmie) — okres przypisywany po dacie sprzedaży/wystawienia, zakupy jako pozostałe nabycia.")
+                Text("Plik zweryfikuj przed wysyłką (np. w e-mikrofirmie) — zwykłe dokumenty są przypisywane po dacie sprzedaży/wystawienia, a VAT RR po pełnej zapłacie lub zwrocie zgodnie z art. 116.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 Spacer()

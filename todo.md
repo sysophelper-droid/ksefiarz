@@ -17,16 +17,6 @@ Zaproponowane do decyzji; ⭐ = rekomendowane (największy zwrot / rozsądny
 koszt, bez łamania „tylko odczyt na żywo"). Numeracja pomocnicza —
 kolejność dowolna. ⚠️ operacje modyfikujące KSeF testować wyłącznie na `test`.
 
-#### B. Podatki dochodowe / ewidencje
-
-- [ ] B5. Ewidencja JPK_V7 dla VAT RR — ujęcie zryczałtowanego zwrotu po
-  stronie podatku naliczonego nabywcy (art. 116). Faktury VAT RR są zapisywane
-  jako `kind == .purchase`, a w `salesBuckets` jest dziś jedynie defensywne
-  ostrzeżenie dla stawek RR (ścieżka praktycznie nieosiągalna dla dokumentów
-  RR). Wymaga własnej specyfikacji podatkowej i testów — świadomie poza
-  zakresem A2 (który obejmował strukturę FA_RR(1), formularz, generator/parser
-  i wysyłkę).
-
 #### F. Skala / wielofirmowość / UX
 
 - [ ] F1. Wielofirmowość (przełączanie kontekstu NIP) — kilka firm/NIP
@@ -42,6 +32,21 @@ kolejność dowolna. ⚠️ operacje modyfikujące KSeF testować wyłącznie na
   (dziś zaszyte PL/EN).
 
 ## Zrealizowane
+
+### JPK_V7 — podatek naliczony z VAT RR (14.07.2026)
+
+- [x] B5. Zakupowe faktury VAT RR są ujmowane w JPK_V7M/V7K po stronie
+  nabywcy według osobnej specyfikacji art. 116 (`JPKV7VATRRPolicy`): okres
+  pełnej zapłaty wraz ze zwrotem (data z faktury albo dzień pełnego pokrycia
+  w historii wpłat), potwierdzony przelew na rachunek rolnika lub import
+  wyciągu, `DokumentZakupu=VAT_RR`, wartość w K_42 i zryczałtowany zwrot
+  w K_43. Reguła zasila też P_42/P_43, deklarację kwartalną i prognozę VAT.
+  Brak daty/pełnej zapłaty/kanału bankowego daje jawne pominięcie; korekta
+  zwiększająca czeka na dopłatę, zmniejszająca na zwrot rolnika, a użytkownik
+  dostaje przypomnienie o warunku związku ze sprzedażą opodatkowaną i danych
+  faktury na dowodzie płatności. Testy obejmują okres zapłaty różny od
+  wystawienia, raty, braki dowodowe, korektę i JPK_V7K; próbki V7M(3)/V7K(3)
+  z VAT RR zweryfikowano oficjalnymi XSD (`xmllint`).
 
 ### Płatności i windykacja — eskalacja i przypomnienia (14.07.2026)
 
