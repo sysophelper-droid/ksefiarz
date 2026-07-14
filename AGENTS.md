@@ -121,3 +121,7 @@ przez `AppSettingsKeys` (@AppStorage). Pełna mapa modułów → `ARCHITECTURE.m
 4. Aktualizuj `README.md` (funkcje, lokalizacje danych) przy zmianach
    funkcjonalnych, a `todo.md` przy domykaniu/dodawaniu zadań. Nową wiedzę
    o module/API dopisuj do `ARCHITECTURE.md`, a nie do tego pliku.
+5. **Transparentność autorstwa**: pod każdym review na PR (także
+   automatycznym) podpisuj się jako **Codex**; w każdym commicie ze swoimi
+   zmianami dodaj stopkę współautorstwa
+   `Co-Authored-By: Codex <noreply@openai.com>`.
