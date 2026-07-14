@@ -86,7 +86,8 @@ public enum PaymentReminderEngine {
         invoices: [Invoice],
         contractors: [Contractor],
         settings: PaymentReminderSettings,
-        asOf: Date = .now
+        asOf: Date = .now,
+        templates: EmailTemplates = EmailTemplates()
     ) -> (candidates: [PaymentReminderCandidate], omissions: [PaymentReminderOmission]) {
         let calendar = Calendar.current
         let today = calendar.startOfDay(for: asOf)
@@ -158,8 +159,8 @@ public enum PaymentReminderEngine {
                 phase: phase,
                 recipient: recipient,
                 language: language,
-                subject: subject(for: invoice, phase: phase, language: language),
-                body: body(for: invoice, phase: phase, language: language, asOf: asOf)
+                subject: subject(for: invoice, phase: phase, language: language, asOf: asOf, templates: templates),
+                body: body(for: invoice, phase: phase, language: language, asOf: asOf, templates: templates)
             ))
         }
 
@@ -188,89 +189,39 @@ public enum PaymentReminderEngine {
 
     // MARK: Treść wiadomości
 
-    /// Temat przypomnienia w wybranym języku.
+    /// Rodzaj szablonu dla fazy przypomnienia.
+    static func templateKind(for phase: PaymentReminderCandidate.Phase) -> EmailTemplateKind {
+        phase == .beforeDue ? .reminderBefore : .reminderOverdue
+    }
+
+    /// Temat przypomnienia w wybranym języku — własny szablon z Ustawień
+    /// albo wbudowany domyślny (`EmailTemplate`). `asOf` zasila symbol
+    /// {dni_po_terminie}, gdyby użytkownik użył go we wzorze tematu.
     public static func subject(
         for invoice: Invoice,
         phase: PaymentReminderCandidate.Phase,
-        language: InvoiceEmailComposer.Language
+        language: InvoiceEmailComposer.Language,
+        asOf: Date = .now,
+        templates: EmailTemplates = EmailTemplates()
     ) -> String {
-        switch (language, phase) {
-        case (.polish, .beforeDue):
-            return "Przypomnienie: zbliża się termin płatności faktury \(invoice.invoiceNumber)"
-        case (.polish, .overdue):
-            return "Przypomnienie o płatności — faktura \(invoice.invoiceNumber) po terminie"
-        case (.english, .beforeDue):
-            return "Reminder: invoice \(invoice.invoiceNumber) payment due soon"
-        case (.english, .overdue):
-            return "Payment reminder — invoice \(invoice.invoiceNumber) overdue"
-        }
+        templates.subject(kind: templateKind(for: phase), for: invoice, language: language, asOf: asOf)
     }
 
     /// Treść przypomnienia w wybranym języku — miękki ton, saldo (nie
     /// brutto), rachunek do wpłaty i prośba o zignorowanie po zapłacie.
+    /// Własny szablon z Ustawień albo wbudowany domyślny (`EmailTemplate`).
     public static func body(
         for invoice: Invoice,
         phase: PaymentReminderCandidate.Phase,
         language: InvoiceEmailComposer.Language,
-        asOf: Date = .now
+        asOf: Date = .now,
+        templates: EmailTemplates = EmailTemplates()
     ) -> String {
-        let dateFormatter = DateFormatter()
-        dateFormatter.dateStyle = .long
-        dateFormatter.locale = Locale(identifier: language == .polish ? "pl_PL" : "en_GB")
-        let due = invoice.paymentDueDate ?? asOf
-        let amount = "\(FA2Format.amount(invoice.outstandingAmount)) \(invoice.currency)"
-        let overdueDays = PaymentDemandEngine.daysOverdue(dueDate: due, asOf: asOf)
-
-        var body: String
-        switch (language, phase) {
-        case (.polish, .beforeDue):
-            body = """
-            Dzień dobry,
-
-            uprzejmie przypominamy, że \(dateFormatter.string(from: due)) upływa termin \
-            płatności faktury \(invoice.invoiceNumber). Do zapłaty pozostaje \(amount).
-            """
-        case (.polish, .overdue):
-            body = """
-            Dzień dobry,
-
-            uprzejmie przypominamy, że termin płatności faktury \(invoice.invoiceNumber) \
-            upłynął \(dateFormatter.string(from: due)) (\(overdueDays) dni temu). \
-            Do zapłaty pozostaje \(amount).
-
-            Prosimy o uregulowanie należności albo kontakt w sprawie płatności.
-            """
-        case (.english, .beforeDue):
-            body = """
-            Dear Sirs,
-
-            this is a friendly reminder that invoice \(invoice.invoiceNumber) is due \
-            for payment on \(dateFormatter.string(from: due)). \
-            The outstanding amount is \(amount).
-            """
-        case (.english, .overdue):
-            body = """
-            Dear Sirs,
-
-            this is a friendly reminder that invoice \(invoice.invoiceNumber) was due \
-            for payment on \(dateFormatter.string(from: due)) (\(overdueDays) days ago). \
-            The outstanding amount is \(amount).
-
-            Please arrange the payment or contact us regarding the invoice.
-            """
-        }
-
-        if let account = invoice.paymentBankAccount, !account.isEmpty {
-            body += language == .polish
-                ? "\nNumer rachunku do wpłaty: \(account)."
-                : "\nBank account for payment: \(account)."
-        }
-        body += language == .polish
-            ? "\n\nJeżeli płatność została już zrealizowana, prosimy zignorować tę wiadomość."
-            : "\n\nIf the payment has already been made, please disregard this message."
-        body += language == .polish
-            ? "\n\nPozdrawiamy\n\(invoice.sellerName)"
-            : "\n\nKind regards\n\(invoice.sellerName)"
-        return body
+        templates.body(
+            kind: templateKind(for: phase),
+            for: invoice,
+            language: language,
+            asOf: asOf
+        )
     }
 }

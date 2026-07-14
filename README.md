@@ -271,6 +271,15 @@ Tests/KsefiarzCoreTests/          # Swift Testing — model, parser, usługa, kr
   „Pobierz z KSeF” (domknięcie wysyłek + import sprzedaży i zakupów);
   działa też przy zamkniętym oknie głównym („Otwórz Ksefiarza” wraca
   do aplikacji). Przełącznik w Ustawieniach → Synchronizacja.
+- **Globalna wyszukiwarka ⌘K** — paleta „Szukaj wszędzie…” (menu Edycja
+  albo skrót ⌘K, działa też po zamknięciu okna głównego): jedno pole
+  przeszukuje faktury sprzedaży i zakupu (numer, kontrahent, NIP, numer
+  KSeF), proformy, kontrahentów ze słownika, ustawienia oraz sekcje
+  aplikacji — bez polskich znaków też trafia („zolw” znajdzie „Żółw”).
+  Enter otwiera najlepszy wynik: dokument w szczegółach, kontrahenta na
+  karcie historii, ustawienie we właściwej zakładce z podświetlonym
+  wierszem, sekcję w pasku bocznym. Faktury ukryte nie pojawiają się
+  w wynikach (ta sama ochrona co w statystykach).
 - **Centrum synchronizacji** (sekcja „Synchronizacja” w pasku bocznym) —
   osobne stany zakupów, sprzedaży i wysyłek (kolejka offline24, statusy
   przesyłek, UPO), historia przebiegów (ostatnie 200) z liczbą pobranych
@@ -358,6 +367,15 @@ Tests/KsefiarzCoreTests/          # Swift Testing — model, parser, usługa, kr
   fakturze zapisywana jest data i adres przekazania do wysyłki. Szablon
   treści po polsku albo po angielsku (przełącznik języka w arkuszu;
   angielski podpowiadany dla kontrahentów z dokumentami dwujęzycznymi).
+- **Konfigurowalne szablony e-mail** — Ustawienia → E-mail: edytowalne
+  wzory tematu i treści (osobno PL i EN) dla wysyłki faktury, proformy
+  oraz automatycznych przypomnień przed i po terminie. Symbole
+  `{numer}`, `{data}`, `{kwota}`, `{saldo}`, `{termin}`, `{rachunek}`,
+  `{ksef}`, `{sprzedawca}`, `{nabywca}`, `{dni_po_terminie}` są
+  podstawiane danymi dokumentu; wiersz, którego wszystkie symbole są
+  puste (np. „Termin płatności: {termin}.” bez terminu), znika
+  z wiadomości. Puste (także wielowierszowe)/przywrócone pole wraca do
+  wbudowanego wzoru; własne szablony wchodzą do kopii zapasowej.
 - **Faktury zaliczkowe i rozliczeniowe** — rodzaj dokumentu (VAT/ZAL/ROZ)
   do wyboru przy wystawianiu; ZAL z datą otrzymania zaliczki (P_6),
   ROZ ze wskazaniem numerów KSeF rozliczanych zaliczek.
@@ -535,6 +553,16 @@ Tests/KsefiarzCoreTests/          # Swift Testing — model, parser, usługa, kr
   wstrzymuje miękkie przypomnienia danej faktury; faktury bez adresu
   e-mail są raportowane w dziennym powiadomieniu z numerami dokumentów,
   nie po cichu pomijane.
+- **Miesięczny raport e-mail** — Ustawienia → E-mail (funkcja domyślnie
+  wyłączona): na początku każdego miesiąca aplikacja przygotowuje
+  podsumowanie zamkniętego miesiąca — liczba i kwoty sprzedaży
+  (netto/VAT/brutto), zakupy, saldo VAT oraz stan należności na dzień
+  raportu (w tym po terminie). Kwoty w PLN po kursie z faktury; pozycje
+  walutowe bez kursu są jawnie policzone w ostrzeżeniu. Adresat własny
+  albo (puste pole) e-mail podatnika z ustawień JPK; dostarczanie przez
+  aplikację Mail jako szkic do przejrzenia albo automatyczna wysyłka.
+  Jeden raport na miesiąc (pamięć zaraportowanych okresów); raport jest
+  poglądowy i nie zastępuje ewidencji księgowej.
 - **Paczka dla księgowości** — eksport wybranego okresu (miesiąc albo
   własny zakres dat) do jednego pliku ZIP: zestawienia CSV osobno dla
   sprzedaży i zakupu, oryginalne dokumenty XML, wydruki PDF oraz

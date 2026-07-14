@@ -19,6 +19,14 @@ public enum InvoiceEmailComposer {
             case .english: return "Angielski"
             }
         }
+
+        /// Sufiks kluczy ustawień szablonów e-mail (`EmailTemplate`).
+        public var keySuffix: String {
+            switch self {
+            case .polish: return "pl"
+            case .english: return "en"
+            }
+        }
     }
 
     /// Język podpowiadany dla faktury: angielski, gdy kontrahent
@@ -49,72 +57,34 @@ public enum InvoiceEmailComposer {
         return matching.first(where: { !$0.email.trimmed.isEmpty })?.email.trimmed ?? ""
     }
 
-    /// Domyślny temat wiadomości w wybranym języku.
+    /// Domyślny temat wiadomości w wybranym języku (wbudowany szablon).
     public static func defaultSubject(for invoice: Invoice, language: Language = .polish) -> String {
-        switch language {
-        case .polish:
-            return "Faktura \(invoice.invoiceNumber) — \(invoice.sellerName)"
-        case .english:
-            return "Invoice \(invoice.invoiceNumber) — \(invoice.sellerName)"
-        }
+        subject(for: invoice, language: language, templates: EmailTemplates())
     }
 
-    /// Domyślna treść wiadomości w wybranym języku (edytowalna przed wysyłką).
+    /// Domyślna treść wiadomości w wybranym języku (wbudowany szablon;
+    /// edytowalna przed wysyłką).
     public static func defaultBody(for invoice: Invoice, language: Language = .polish) -> String {
-        switch language {
-        case .polish: return polishBody(for: invoice)
-        case .english: return englishBody(for: invoice)
-        }
+        body(for: invoice, language: language, templates: EmailTemplates())
     }
 
-    private static func polishBody(for invoice: Invoice) -> String {
-        let dateFormatter = DateFormatter()
-        dateFormatter.dateStyle = .long
-        dateFormatter.locale = Locale(identifier: "pl_PL")
-
-        var body = """
-        Dzień dobry,
-
-        w załączeniu przesyłamy fakturę \(invoice.invoiceNumber) \
-        z dnia \(dateFormatter.string(from: invoice.issueDate)) \
-        na kwotę \(FA2Format.amount(invoice.grossAmount)) \(invoice.currency) brutto.
-        """
-        if let due = invoice.paymentDueDate {
-            body += "\nTermin płatności: \(dateFormatter.string(from: due))."
-        }
-        if let account = invoice.paymentBankAccount, !account.isEmpty {
-            body += "\nNumer rachunku do wpłaty: \(account)."
-        }
-        if let ksefId = invoice.ksefId {
-            body += "\nFaktura znajduje się w KSeF pod numerem: \(ksefId)."
-        }
-        body += "\n\nPozdrawiamy\n\(invoice.sellerName)"
-        return body
+    /// Temat wiadomości według obowiązujących szablonów (własne wzory
+    /// z Ustawień z fail-backiem do wbudowanych — patrz `EmailTemplates`).
+    public static func subject(
+        for invoice: Invoice,
+        language: Language,
+        templates: EmailTemplates
+    ) -> String {
+        templates.subject(kind: .invoice, for: invoice, language: language)
     }
 
-    private static func englishBody(for invoice: Invoice) -> String {
-        let dateFormatter = DateFormatter()
-        dateFormatter.dateStyle = .long
-        dateFormatter.locale = Locale(identifier: "en_GB")
-
-        var body = """
-        Dear Sirs,
-
-        please find attached invoice \(invoice.invoiceNumber) \
-        dated \(dateFormatter.string(from: invoice.issueDate)) \
-        for the total (gross) amount of \(FA2Format.amount(invoice.grossAmount)) \(invoice.currency).
-        """
-        if let due = invoice.paymentDueDate {
-            body += "\nPayment due date: \(dateFormatter.string(from: due))."
-        }
-        if let account = invoice.paymentBankAccount, !account.isEmpty {
-            body += "\nBank account for payment: \(account)."
-        }
-        if let ksefId = invoice.ksefId {
-            body += "\nThe invoice is registered in KSeF (Polish National e-Invoicing System) under number: \(ksefId)."
-        }
-        body += "\n\nKind regards\n\(invoice.sellerName)"
-        return body
+    /// Treść wiadomości według obowiązujących szablonów.
+    public static func body(
+        for invoice: Invoice,
+        language: Language,
+        templates: EmailTemplates
+    ) -> String {
+        templates.body(kind: .invoice, for: invoice, language: language)
     }
 
     /// Nazwa pliku załącznika — numer faktury bez znaków niedozwolonych
