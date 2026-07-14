@@ -27,13 +27,6 @@ kolejność dowolna. ⚠️ operacje modyfikujące KSeF testować wyłącznie na
   zakresem A2 (który obejmował strukturę FA_RR(1), formularz, generator/parser
   i wysyłkę).
 
-#### C. Płatności i windykacja
-
-- [ ] C3. Ścieżka windykacji — eskalacja: przypomnienie → wezwanie → nota →
-  dane do EPU (e-sąd); status windykacji na fakturze (bazuje na wezwaniach).
-- [ ] C4. Automatyczne przypomnienia e-mail przed/po terminie — cykliczne
-  miękkie ponaglenia do kontrahentów (dziś powiadomienia tylko systemowe).
-
 #### F. Skala / wielofirmowość / UX
 
 - [ ] F1. Wielofirmowość (przełączanie kontekstu NIP) — kilka firm/NIP
@@ -49,6 +42,44 @@ kolejność dowolna. ⚠️ operacje modyfikujące KSeF testować wyłącznie na
   (dziś zaszyte PL/EN).
 
 ## Zrealizowane
+
+### Płatności i windykacja — eskalacja i przypomnienia (14.07.2026)
+
+- [x] C3. Ścieżka windykacji — pełna eskalacja w jednym widoku (Kokpit →
+  „Windykacja…”, menu listy sprzedaży): przypomnienie o płatności (miękki
+  PDF bez odsetek i groźby sądu) → wezwanie do zapłaty → nota odsetkowa →
+  dane do pozwu EPU (e-sąd). Utworzenie dokumentu stempluje zaznaczone
+  faktury (nowe pola `collection*`, kopia zapasowa v14), z dat wynika
+  status windykacji (`DebtCollectionStage`, znacznik na liście sprzedaży
+  i sekcja „Windykacja” w szczegółach), a `DebtCollectionEngine` podpowiada
+  następny krok eskalacji (progi dni w `DebtCollectionPolicy`). Dane EPU
+  to tekst do formularza e-sad.gov.pl (zapis TXT / schowek): strony, WPS
+  bez odsetek zaokrąglony w górę, opłata od pozwu (1/4 opłaty z art. 13
+  uksc po nowelizacji 23.09.2025 — widełki do 20 000 zł, wyżej 5% max
+  100 000 zł — min. 30 zł, art. 19 ust. 2 pkt 2; fakty zweryfikowane
+  u źródła 14.07.2026), roszczenia z odsetkami „od dnia następnego po
+  terminie do dnia zapłaty”, dowody i propozycja uzasadnienia; pozycje
+  walutowe i wymagalne ponad 3 lata temu (art. 505(29a) KPC) jawnie poza
+  pozwem; ostrzeżenia o braku wezwania (art. 187 § 1 pkt 3 KPC), adresu
+  i NIP pozwanego.
+- [x] C4. Automatyczne przypomnienia e-mail przed/po terminie —
+  `PaymentReminderEngine` (czysta logika): uprzedzenie w oknie N dni przed
+  terminem (jedno na okno, obejmuje dzień terminu) i cykliczne ponaglenia
+  po terminie co M dni; treść PL/EN (kontrahent dwujęzyczny) z saldem,
+  terminem i rachunkiem; adresat ze słownika, braki adresu jawnie
+  raportowane. Pamięć doręczeń wspólna z C3 (`collectionReminderAt`);
+  formalne wezwanie wstrzymuje miękkie przypomnienia. Dostarczanie przez
+  aplikację Mail (`MailAutomationService`, NSAppleScript — czysty builder
+  skryptu z escapingiem, testowany na wstrzyknięcia): tryb „szkice
+  w Wersjach roboczych” albo automatyczna wysyłka; zgoda TCC na
+  automatyzację (NSAppleEventsUsageDescription w bundlu), wynik przebiegu
+  w powiadomieniu, błąd automatyzacji deduplikowany do jednego dziennie.
+  Cykl w MainContentView (start + co 6 h), funkcja domyślnie WYŁĄCZONA
+  (Ustawienia → Faktury). Przy okazji: typowane przywracanie ustawień
+  logicznych/liczbowych z kopii (`BackupService.applySetting` — naprawia
+  też starsze przełączniki przywracane jako tekst). 32 nowe testy
+  (etapy/eskalacja/EPU/opłaty, okna przypomnień, escaping AppleScript,
+  roundtrip kopii v14).
 
 ### Dokumenty / wygląd — eksport księgowy i wydruk zbiorczy (14.07.2026)
 

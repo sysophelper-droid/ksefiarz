@@ -91,6 +91,10 @@ public struct MainContentView: View {
     @AppStorage(AppSettingsKeys.notifyDeadlines) private var notifyDeadlines = true
     @AppStorage(AppSettingsKeys.autoRenewCertificates) private var autoRenewCertificates = true
     @AppStorage(AppSettingsKeys.taxForm) private var taxFormRaw = TaxForm.kpir.rawValue
+    @AppStorage(AppSettingsKeys.reminderEmailsEnabled) private var reminderEmailsEnabled = false
+    @AppStorage(AppSettingsKeys.reminderDaysBefore) private var reminderDaysBefore = 3
+    @AppStorage(AppSettingsKeys.reminderRepeatDays) private var reminderRepeatDays = 7
+    @AppStorage(AppSettingsKeys.reminderDeliveryMode) private var reminderDeliveryModeRaw = MailAutomationService.DeliveryMode.draft.rawValue
 
     public init() {}
 
@@ -190,6 +194,7 @@ public struct MainContentView: View {
             if syncOnLaunch { await syncBothKinds(trigger: .launch) }
             await postDeadlineNotifications()
             await renewCertificatesIfNeeded()
+            await processPaymentReminders()
         }
         // Latarnia MF nie wymaga uwierzytelnienia. Status i komunikaty są
         // odświeżane co minutę; komunikat kończący uzupełnia termin tylko
@@ -231,6 +236,17 @@ public struct MainContentView: View {
                 try? await Task.sleep(for: .seconds(60))
                 guard !Task.isCancelled else { return }
                 await reconcileOutstandingSubmissions(trigger: .automatic)
+            }
+        }
+        // Automatyczne przypomnienia e-mail o płatnościach — sprawdzane
+        // co 6 godzin (przypomnienia mają ziarnistość dnia; deduplikacja
+        // po dacie ostatniego przypomnienia na fakturze).
+        .task(id: "payment-reminders-\(reminderEmailsEnabled)") {
+            guard reminderEmailsEnabled else { return }
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(6 * 3600))
+                guard !Task.isCancelled else { return }
+                await processPaymentReminders()
             }
         }
         // Odnowienie certyfikatów sprawdzane cyklicznie (okno ~30 dni przed
@@ -397,6 +413,98 @@ public struct MainContentView: View {
             Array(DeadlineNotificationEngine.prune(delivered: updatedDelivered)),
             forKey: AppSettingsKeys.deadlineNotifiedKeys
         )
+    }
+
+    /// Automatyczne przypomnienia e-mail o płatnościach (C4): silnik wybiera
+    /// faktury w oknie przed terminem i cykliczne ponaglenia po terminie,
+    /// a wiadomości trafiają do aplikacji Mail jako szkice albo są wysyłane
+    /// automatycznie (wg Ustawień). Każde przekazane przypomnienie jest
+    /// odnotowywane na fakturze (`collectionReminderAt`) — to jedyna pamięć
+    /// doręczeń, wspólna ze ścieżką windykacji. Błąd automatyzacji (np. brak
+    /// zgody) przerywa przebieg i jest zgłaszany powiadomieniem raz dziennie.
+    @MainActor
+    private func processPaymentReminders() async {
+        guard reminderEmailsEnabled else { return }
+        let invoices = (try? modelContext.fetch(FetchDescriptor<Invoice>())) ?? []
+        let contractors = (try? modelContext.fetch(FetchDescriptor<Contractor>())) ?? []
+        let result = PaymentReminderEngine.candidates(
+            invoices: invoices,
+            contractors: contractors,
+            settings: PaymentReminderSettings(
+                daysBeforeDue: reminderDaysBefore,
+                repeatAfterDays: reminderRepeatDays
+            )
+        )
+        guard !result.candidates.isEmpty else { return }
+        let mode = MailAutomationService.DeliveryMode(rawValue: reminderDeliveryModeRaw) ?? .draft
+
+        var deliveredNumbers: [String] = []
+        var failure: Error?
+        for candidate in result.candidates {
+            do {
+                try MailAutomationService.deliver(
+                    recipient: candidate.recipient,
+                    subject: candidate.subject,
+                    body: candidate.body,
+                    mode: mode
+                )
+                DebtCollectionEngine.record(.reminder, on: [candidate.invoice])
+                deliveredNumbers.append(candidate.invoice.invoiceNumber)
+            } catch {
+                // Zwykle brak zgody na automatyzację — kolejne wywołania
+                // skończyłyby się tak samo, więc przerywamy przebieg.
+                failure = error
+                break
+            }
+        }
+        if !deliveredNumbers.isEmpty {
+            try? modelContext.save()
+        }
+
+        let center = UNUserNotificationCenter.current()
+        let granted = (try? await center.requestAuthorization(options: [.alert, .sound, .badge])) ?? false
+        guard granted else { return }
+
+        if !deliveredNumbers.isEmpty {
+            let content = UNMutableNotificationContent()
+            content.title = mode == .send
+                ? "Wysłano przypomnienia o płatnościach"
+                : "Przygotowano szkice przypomnień w Mail"
+            let listed = deliveredNumbers.prefix(5).joined(separator: ", ")
+            let suffix = deliveredNumbers.count > 5 ? "…" : ""
+            content.body = mode == .send
+                ? "Liczba wiadomości: \(deliveredNumbers.count) (\(listed)\(suffix))."
+                : "Liczba szkiców: \(deliveredNumbers.count) (\(listed)\(suffix)) — przejrzyj Wersje robocze w Mail i wyślij."
+            content.sound = .default
+            try? await center.add(UNNotificationRequest(
+                identifier: "ksefiarz.reminders.\(UUID().uuidString)",
+                content: content,
+                trigger: nil
+            ))
+        }
+        if let failure {
+            // Jedno powiadomienie o problemie dziennie — cykl co 6 godzin
+            // nie powinien czterokrotnie powtarzać tej samej diagnozy.
+            let dayKey = ISO8601DateFormatter.string(
+                from: .now, timeZone: .current,
+                formatOptions: [.withFullDate]
+            )
+            let lastNotified = UserDefaults.standard.string(
+                forKey: AppSettingsKeys.reminderErrorNotifiedDay
+            )
+            if lastNotified != dayKey {
+                UserDefaults.standard.set(dayKey, forKey: AppSettingsKeys.reminderErrorNotifiedDay)
+                let content = UNMutableNotificationContent()
+                content.title = "Przypomnienia o płatnościach wstrzymane"
+                content.body = failure.localizedDescription
+                content.sound = .default
+                try? await center.add(UNNotificationRequest(
+                    identifier: "ksefiarz.reminders.error.\(dayKey)",
+                    content: content,
+                    trigger: nil
+                ))
+            }
+        }
     }
 
     /// Automatyczne odnowienie certyfikatów KSeF: gdy któryś zbliża się do

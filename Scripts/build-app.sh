@@ -60,6 +60,8 @@ cat > "$CONTENTS/Info.plist" << 'PLIST'
     <string>1</string>
     <key>LSMinimumSystemVersion</key>
     <string>14.0</string>
+    <key>NSAppleEventsUsageDescription</key>
+    <string>Ksefiarz steruje aplikacją Mail, aby przygotowywać lub wysyłać automatyczne przypomnienia e-mail o płatnościach.</string>
     <key>NSHighResolutionCapable</key>
     <true/>
     <key>NSHumanReadableCopyright</key>

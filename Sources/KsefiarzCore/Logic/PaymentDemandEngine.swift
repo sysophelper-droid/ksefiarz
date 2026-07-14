@@ -1,18 +1,47 @@
 import Foundation
 
-/// Rodzaj dokumentu windykacyjnego.
+/// Rodzaj dokumentu windykacyjnego. Kolejność przypadków odpowiada
+/// ścieżce eskalacji: przypomnienie → wezwanie → nota → dane do EPU.
 public enum PaymentDemandKind: String, CaseIterable, Identifiable, Sendable {
+    /// Miękkie przypomnienie o płatności: same salda, bez odsetek
+    /// i bez zapowiedzi drogi sądowej.
+    case reminder = "przypomnienie"
     /// Wezwanie do zapłaty: kwoty główne (salda) + odsetki do dnia wezwania.
     case demand = "wezwanie"
     /// Nota odsetkowa: same odsetki naliczone od zaległych faktur.
     case interestNote = "nota"
+    /// Dane do pozwu EPU (e-sąd) — nie jest pismem do dłużnika, lecz
+    /// kompletem danych do formularza na e-sad.gov.pl (bez PDF).
+    case epu = "epu"
 
     public var id: String { rawValue }
 
     public var displayName: String {
         switch self {
+        case .reminder: return "Przypomnienie o płatności"
         case .demand: return "Wezwanie do zapłaty"
         case .interestNote: return "Nota odsetkowa"
+        case .epu: return "Dane do pozwu EPU (e-sąd)"
+        }
+    }
+
+    /// Czy dokument nalicza odsetki (przypomnienie ich nie zawiera; dane
+    /// EPU wskazują odsetki opisowo — „do dnia zapłaty” — bez kwoty).
+    public var includesInterest: Bool {
+        switch self {
+        case .demand, .interestNote: return true
+        case .reminder, .epu: return false
+        }
+    }
+
+    /// Działanie windykacyjne odnotowywane na fakturach po utworzeniu
+    /// dokumentu tego rodzaju.
+    public var collectionAction: DebtCollectionAction {
+        switch self {
+        case .reminder: return .reminder
+        case .demand: return .demand
+        case .interestNote: return .interestNote
+        case .epu: return .epu
         }
     }
 }

@@ -21,7 +21,9 @@ Sources/KsefiarzCore/
                = zakup bez ksefId, edytowalny/usuwalny;
                Invoice.costCategory — kategoria kosztu do raportów;
                lokalne pola kpir* + isExcludedFromKPiR — klasyfikacja
-               podatkowa bez modyfikowania treści dokumentu KSeF),
+               podatkowa bez modyfikowania treści dokumentu KSeF;
+               pola collection* — daty działań windykacyjnych, z których
+               wynika Invoice.collectionStage),
                słowniki: Contractor (+ prefersBilingualDocuments — PDF
                PL/EN i angielski e-mail), Product,
                BankAccount (@Model, dane tylko PODSTAWIANE do faktur —
@@ -88,6 +90,11 @@ Sources/KsefiarzCore/
                KSeFQRCode (linki weryfikacyjne KOD I/II + render QR),
                InvoiceEmailService (okno wiadomości Mail przez
                NSSharingService; załączniki PDF/XML z katalogu tymczasowego),
+               MailAutomationService (cicha wysyłka / szkic w Mail przez
+               NSAppleScript — automatyczne przypomnienia o płatnościach;
+               czysty MailAutomationScript z escapingiem testowanym
+               jednostkowo; wymaga NSAppleEventsUsageDescription i zgody
+               na automatyzację),
                InvoiceOCRService (rozpoznawanie tekstu skanu/PDF faktury
                kosztowej: PDF z warstwą tekstową wprost przez PDFKit,
                skan przez Vision VNRecognizeTextRequest — szczegóły
@@ -163,8 +170,17 @@ Sources/KsefiarzCore/
                UE po prefiksie kraju w numerze VAT, towar/usługa z CN/PKWiU,
                kwoty w pełnych złotych per kontrahent; import usług i OSS
                poza VAT-UE),
-               PaymentDemandEngine (odsetki od salda, pozycje wezwań;
+               PaymentDemandEngine (odsetki od salda, pozycje dokumentów
+               windykacyjnych — przypomnienie/wezwanie/nota/EPU;
                PDF w Services/PaymentDemandPDFGenerator),
+               DebtCollectionEngine (ścieżka windykacji C3: etapy
+               DebtCollectionStage z dat działań na fakturze, sugestia
+               następnego kroku eskalacji, dane do pozwu EPU — WPS,
+               opłata sądowa, roszczenia, dowody; sekcja „Windykacja"),
+               PaymentReminderEngine (automatyczne przypomnienia e-mail
+               C4: okna przed/po terminie, dedup po collectionReminderAt,
+               szablony PL/EN, jawne pominięcia; dostarczanie przez
+               Services/MailAutomationService),
                KPiREngine (ewidencja KPiR według wzoru od 2026 r.:
                kolumny 1–19, klasyfikacja faktur do kol. 9/10/12–15,
                przeliczenie PLN, podsumowania okresu i KPiRCSVExporter;
@@ -494,6 +510,66 @@ Scripts/build-app.sh                   # składanie bundla .app
   przelewów w pliku (mBank; banki korporacyjne mogą mieć inne limity).
   Eksport nie dotyka `Invoice.isPaid` ani historii wpłat — autoryzacja odbywa
   się dopiero po imporcie i weryfikacji w banku.
+
+## Windykacja i przypomnienia o płatnościach (C3/C4)
+
+- **Ścieżka eskalacji** (C3): przypomnienie → wezwanie do zapłaty → nota
+  odsetkowa → dane do pozwu EPU. Działania są odnotowywane na fakturze
+  (`collectionReminderAt`+licznik, `collectionDemandAt`,
+  `collectionInterestNoteAt`, `collectionEPUAt` — wartości domyślne, lekka
+  migracja; kopia zapasowa v14), a `DebtCollectionEngine.stage(for:)`
+  wyprowadza z nich etap `DebtCollectionStage` (Comparable). Sugestię
+  następnego kroku liczy `suggestion(for:asOf:policy:)` z progami dni
+  w `DebtCollectionPolicy` (domyślnie: wezwanie ≥14 dni zaległości
+  i ≥7 dni po przypomnieniu; nota 14 dni po wezwaniu; EPU 14 dni po nocie).
+  Wspólny widok `PaymentDemandView` (Kokpit → „Windykacja…”, menu listy
+  sprzedaży) po zapisie/wysyłce dokumentu stempluje zaznaczone faktury.
+- **`PaymentDemandKind`** ma cztery przypadki w kolejności eskalacji;
+  `includesInterest` (przypomnienie i EPU nie naliczają kwoty odsetek —
+  PDF przypomnienia nie ma kolumny „Odsetki” ani zapowiedzi drogi sądowej),
+  `collectionAction` mapuje dokument na stemplowane działanie. Dane EPU
+  nie mają PDF (`PaymentDemandPDFGenerator` zwraca nil) — wynik to tekst
+  do przepisania do formularza e-sad.gov.pl (zapis TXT / schowek).
+- **EPU (e-sąd) — fakty prawne** (zweryfikowane 14.07.2026): opłata od
+  pozwu to czwarta część opłaty z art. 13 uksc, nie mniej niż 30 zł
+  (art. 19 ust. 2 pkt 2 uksc). Art. 13 po nowelizacji od 23.09.2025:
+  widełki stałe do 20 000 zł (30/100/200/400/500/750/1000 zł), powyżej
+  5% WPS, maks. **100 000 zł** (obniżone z 200 000). Końcówki opłat
+  w górę do pełnego złotego (art. 21 uksc). WPS = suma należności głównych
+  bez odsetek (art. 20 KPC), zaokrąglona w górę (art. 126(1) § 3 KPC).
+  W EPU tylko roszczenia wymagalne w ostatnich 3 latach (art. 505(29a)
+  KPC) i kwoty w złotych — pozycje walutowe/przedawnione silnik jawnie
+  wyłącza z listą pominięć. EPU nie przyjmuje załączników — dowody
+  wyłącznie wskazuje się w pozwie; właściwy jest zawsze Sąd Rejonowy
+  Lublin-Zachód w Lublinie (VI Wydział Cywilny).
+- **Przypomnienia e-mail** (C4): `PaymentReminderEngine.candidates` wybiera
+  widoczne, nieopłacone faktury sprzedaży z terminem — okno przed terminem
+  (`daysBeforeDue`, obejmuje dzień terminu, jedno uprzedzenie na okno)
+  i cykliczne ponaglenia po terminie (`repeatAfterDays`). Pamięcią doręczeń
+  jest `collectionReminderAt` (wspólna z C3 — pismo PDF i e-mail liczą się
+  tak samo); etap ≥ wezwanie WSTRZYMUJE miękkie przypomnienia (sprzeczny
+  ton podważałby wezwanie). Brak adresu e-mail → jawne pominięcie.
+  Cykl w `MainContentView` (start + co 6 h, przełącznik
+  `reminder.emails.enabled`, domyślnie wyłączony).
+- **Automatyzacja Mail**: `MailAutomationService` wykonuje AppleScript
+  (NSAppleScript, main thread) — `save theMessage` tworzy szkic w Wersjach
+  roboczych, `send theMessage` wysyła; wiadomość z `visible:false` nie
+  otwiera okna. Budowa skryptu jest czystą funkcją `MailAutomationScript`
+  z escapingiem literałów (`\\`, `\"`, `\n`, `\r`, `\t` — AppleScript 2.0
+  zna te sekwencje), więc treść wiadomości nie wstrzyknie poleceń.
+  Wymaga `NSAppleEventsUsageDescription` w Info.plist (build-app.sh)
+  i jednorazowej zgody TCC (Prywatność → Automatyzacja → Ksefiarz → Mail);
+  odmowa = błąd `scriptFailed` — przebieg jest przerywany, a powiadomienie
+  o problemie deduplikowane do jednego dziennie. Uruchomienie bez bundla
+  (`swift run`) nie ma Info.plist — automat może być cicho odrzucany przez
+  TCC; funkcja jest projektowana pod bundle `dist/Ksefiarz.app`.
+- **Przywracanie ustawień z kopii**: JSON kopii trzyma ustawienia jako
+  tekst; `BackupService.applySetting` przywraca znane klucze logiczne
+  (`isActiveVATPayer`, `pdfBrandingEnabled`, `pdfPaymentQR`,
+  `reminder.emails.enabled`) i liczbowe (`demand.paymentDays`,
+  `reminder.emails.daysBefore/repeatDays`, `demand.interestRate`) pod
+  natywnym typem — inaczej `@AppStorage` czytałby wartości domyślne.
+  Pozostałe klucze zostają tekstem (NIP wygląda jak liczba, ale nim nie jest).
 
 ## API KSeF 2.0 — fakty krytyczne
 

@@ -464,7 +464,7 @@ public struct InvoiceListView: View {
                     emailedInvoice = invoice
                 }
                 if invoice.isOverdue {
-                    Button("Wezwanie do zapłaty…") {
+                    Button("Windykacja (przypomnienie / wezwanie / EPU)…") {
                         demandBuyerNIP = invoice.buyerNIP
                     }
                 }
@@ -760,6 +760,9 @@ struct InvoiceRowView: View {
                     Text(invoice.issueDate, style: .date)
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                    if invoice.kind == .sales, invoice.collectionStage != .none, !invoice.isPaid {
+                        CollectionStageBadge(stage: invoice.collectionStage)
+                    }
                     PaymentBadge(invoice: invoice)
                 }
             }
@@ -822,6 +825,42 @@ struct KSeFSubmissionBadge: View {
             .background(color.opacity(0.18), in: Capsule())
             .foregroundStyle(color)
             .help(invoice.ksefSubmissionStatus.displayName)
+    }
+}
+
+/// Znacznik etapu windykacji (tylko nieopłacona sprzedaż z odnotowanym
+/// działaniem): przypomnienie → wezwanie → nota → EPU.
+struct CollectionStageBadge: View {
+    let stage: DebtCollectionStage
+
+    private var label: String {
+        switch stage {
+        case .none: return ""
+        case .reminded: return "Przypomnienie"
+        case .demanded: return "Wezwanie"
+        case .interestNoted: return "Nota"
+        case .epuPrepared: return "EPU"
+        }
+    }
+
+    private var color: Color {
+        switch stage {
+        case .none: return .gray
+        case .reminded: return .yellow
+        case .demanded: return .orange
+        case .interestNoted: return .orange
+        case .epuPrepared: return .red
+        }
+    }
+
+    var body: some View {
+        Text(label)
+            .font(.caption2.weight(.bold))
+            .padding(.horizontal, 5)
+            .padding(.vertical, 1)
+            .background(color.opacity(0.18), in: Capsule())
+            .foregroundStyle(color)
+            .help("Windykacja: \(stage.displayName)")
     }
 }
 

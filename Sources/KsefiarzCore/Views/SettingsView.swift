@@ -64,6 +64,10 @@ public struct SettingsView: View {
     @AppStorage(AppSettingsKeys.numberPatternPRO) private var numberPatternPRO = ""
     @AppStorage(AppSettingsKeys.prepaidForms) private var prepaidFormsRaw = PaymentFormPolicy.encode(PaymentFormPolicy.defaultPrepaidForms)
     @AppStorage(AppSettingsKeys.dueSoonDays) private var dueSoonDays = 7
+    @AppStorage(AppSettingsKeys.reminderEmailsEnabled) private var reminderEmailsEnabled = false
+    @AppStorage(AppSettingsKeys.reminderDaysBefore) private var reminderDaysBefore = 3
+    @AppStorage(AppSettingsKeys.reminderRepeatDays) private var reminderRepeatDays = 7
+    @AppStorage(AppSettingsKeys.reminderDeliveryMode) private var reminderDeliveryModeRaw = MailAutomationService.DeliveryMode.draft.rawValue
 
     public init() {}
 
@@ -126,6 +130,10 @@ public struct SettingsView: View {
         ("Ikona w pasku menu", .sync),
         ("Numeracja faktur (wzorzec numeru)", .invoices),
         ("Formy płatności opłacone z góry", .invoices),
+        ("Automatyczne przypomnienia e-mail o płatnościach", .invoices),
+        ("Przypomnienia: dni przed terminem", .invoices),
+        ("Przypomnienia: ponawianie po terminie", .invoices),
+        ("Przypomnienia: szkice / automatyczna wysyłka (Mail)", .invoices),
         ("Płatności w najbliższych dniach (widget)", .dashboard),
         ("Eksport danych (kopia ręczna)", .backup), ("Import danych", .backup),
         ("Automatyczna kopia przy starcie", .backup),
@@ -501,6 +509,46 @@ public struct SettingsView: View {
                     .foregroundStyle(.secondary)
             }
             paymentFormsSection
+            paymentReminderSection
+    }
+
+    @ViewBuilder
+    private var paymentReminderSection: some View {
+            Section {
+                Toggle("Automatyczne przypomnienia e-mail (przed/po terminie)", isOn: $reminderEmailsEnabled)
+                .listRowBackground(highlight("Automatyczne przypomnienia e-mail o płatnościach"))
+                Stepper(value: $reminderDaysBefore, in: 0...30) {
+                    LabeledContent(
+                        "Uprzedzenie przed terminem",
+                        value: reminderDaysBefore == 0
+                            ? "w dniu terminu"
+                            : (reminderDaysBefore == 1 ? "1 dzień" : "\(reminderDaysBefore) dni")
+                    )
+                }
+                .disabled(!reminderEmailsEnabled)
+                .listRowBackground(highlight("Przypomnienia: dni przed terminem"))
+                Stepper(value: $reminderRepeatDays, in: 1...60) {
+                    LabeledContent(
+                        "Ponawiaj po terminie co",
+                        value: reminderRepeatDays == 1 ? "1 dzień" : "\(reminderRepeatDays) dni"
+                    )
+                }
+                .disabled(!reminderEmailsEnabled)
+                .listRowBackground(highlight("Przypomnienia: ponawianie po terminie"))
+                Picker("Tryb dostarczania", selection: $reminderDeliveryModeRaw) {
+                    ForEach(MailAutomationService.DeliveryMode.allCases) { mode in
+                        Text(mode.displayName).tag(mode.rawValue)
+                    }
+                }
+                .disabled(!reminderEmailsEnabled)
+                .listRowBackground(highlight("Przypomnienia: szkice / automatyczna wysyłka (Mail)"))
+            } header: {
+                Text("Przypomnienia o płatnościach (e-mail)")
+            } footer: {
+                Text("Miękkie przypomnienia do kontrahentów o zbliżającym się terminie i cykliczne ponaglenia po terminie — dla nieopłaconych faktur sprzedaży z adresem e-mail w słowniku kontrahentów. Wiadomości powstają w aplikacji Mail: jako szkice (Wersje robocze) do przejrzenia albo wysyłane automatycznie — pierwsze użycie poprosi o zgodę na sterowanie Mail. Formalne wezwanie do zapłaty wstrzymuje miękkie przypomnienia danej faktury.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
     }
 
     @ViewBuilder
@@ -794,7 +842,9 @@ public struct SettingsView: View {
             for (key, value) in backup.settings where BackupService.backedUpSettingsKeys.contains(key) {
                 let current = defaults.string(forKey: key) ?? ""
                 if current.isEmpty {
-                    defaults.set(value, forKey: key)
+                    // Ustawienia liczbowe/logiczne wracają pod natywnym typem —
+                    // inaczej @AppStorage widziałby wartość domyślną.
+                    BackupService.applySetting(key: key, value: value, defaults: defaults)
                 }
             }
 
