@@ -103,8 +103,9 @@ public struct InvoiceEmailView: View {
         .onAppear { prefillIfNeeded() }
         // Zmiana języka podstawia szablon od nowa (pola dalej edytowalne).
         .onChange(of: language) { _, newLanguage in
-            subject = InvoiceEmailComposer.defaultSubject(for: invoice, language: newLanguage)
-            body_ = InvoiceEmailComposer.defaultBody(for: invoice, language: newLanguage)
+            let templates = EmailTemplates.fromDefaults()
+            subject = InvoiceEmailComposer.subject(for: invoice, language: newLanguage, templates: templates)
+            body_ = InvoiceEmailComposer.body(for: invoice, language: newLanguage, templates: templates)
         }
         .alert(
             "Nie udało się przygotować wiadomości",
@@ -128,8 +129,9 @@ public struct InvoiceEmailView: View {
         recipient = InvoiceEmailComposer.recipient(for: invoice, contractors: contractors)
         language = InvoiceEmailComposer.preferredLanguage(for: invoice, contractors: contractors)
         bilingualPDF = language == .english
-        subject = InvoiceEmailComposer.defaultSubject(for: invoice, language: language)
-        body_ = InvoiceEmailComposer.defaultBody(for: invoice, language: language)
+        let templates = EmailTemplates.fromDefaults()
+        subject = InvoiceEmailComposer.subject(for: invoice, language: language, templates: templates)
+        body_ = InvoiceEmailComposer.body(for: invoice, language: language, templates: templates)
         includeXML = !(invoice.rawXmlContent ?? "").isEmpty
     }
 

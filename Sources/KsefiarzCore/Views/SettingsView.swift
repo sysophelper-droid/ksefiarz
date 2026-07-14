@@ -68,6 +68,12 @@ public struct SettingsView: View {
     @AppStorage(AppSettingsKeys.reminderDaysBefore) private var reminderDaysBefore = 3
     @AppStorage(AppSettingsKeys.reminderRepeatDays) private var reminderRepeatDays = 7
     @AppStorage(AppSettingsKeys.reminderDeliveryMode) private var reminderDeliveryModeRaw = MailAutomationService.DeliveryMode.draft.rawValue
+    @AppStorage(AppSettingsKeys.monthlyReportEnabled) private var monthlyReportEnabled = false
+    @AppStorage(AppSettingsKeys.monthlyReportRecipient) private var monthlyReportRecipient = ""
+    @AppStorage(AppSettingsKeys.monthlyReportDeliveryMode) private var monthlyReportDeliveryModeRaw = MailAutomationService.DeliveryMode.draft.rawValue
+    @AppStorage(AppSettingsKeys.jpkEmail) private var jpkEmail = ""
+    /// Skoki z globalnej wyszukiwarki ⌘K do konkretnego ustawienia.
+    @ObservedObject private var settingsNavigator = SettingsNavigator.shared
 
     public init() {}
 
@@ -75,7 +81,7 @@ public struct SettingsView: View {
 
     /// Zakładki okna Ustawień (kwadratowe przyciski z ikonami).
     enum SettingsTab: String, CaseIterable, Identifiable {
-        case company, ksef, sync, invoices, dashboard, backup
+        case company, ksef, sync, invoices, email, dashboard, backup
 
         var id: String { rawValue }
         var title: String {
@@ -84,6 +90,7 @@ public struct SettingsView: View {
             case .ksef: return "KSeF"
             case .sync: return "Synchronizacja"
             case .invoices: return "Faktury"
+            case .email: return "E-mail"
             case .dashboard: return "Kokpit"
             case .backup: return "Kopia zapasowa"
             }
@@ -94,6 +101,7 @@ public struct SettingsView: View {
             case .ksef: return "key"
             case .sync: return "arrow.triangle.2.circlepath"
             case .invoices: return "doc.text"
+            case .email: return "envelope"
             case .dashboard: return "gauge.with.dots.needle.50percent"
             case .backup: return "externaldrive"
             }
@@ -107,7 +115,8 @@ public struct SettingsView: View {
     @State private var highlightedSetting: String?
 
     /// Rejestr ustawień dla wyszukiwarki: etykieta → zakładka.
-    private static let searchIndex: [(label: String, tab: SettingsTab)] = [
+    /// Używany też przez globalną wyszukiwarkę ⌘K (`GlobalSearchView`).
+    static let searchIndex: [(label: String, tab: SettingsTab)] = [
         ("Nazwa firmy", .company), ("NIP", .company), ("Adres firmy", .company),
         ("Rachunek bankowy (domyślny)", .company),
         ("Forma opodatkowania (KPiR / ryczałt)", .company),
@@ -134,6 +143,10 @@ public struct SettingsView: View {
         ("Przypomnienia: dni przed terminem", .invoices),
         ("Przypomnienia: ponawianie po terminie", .invoices),
         ("Przypomnienia: szkice / automatyczna wysyłka (Mail)", .invoices),
+        (EmailTemplateSettingsSection.searchLabel, .email),
+        ("Miesięczny raport e-mail (podsumowanie)", .email),
+        ("Raport miesięczny: adresat", .email),
+        ("Raport miesięczny: szkic / automatyczna wysyłka", .email),
         ("Płatności w najbliższych dniach (widget)", .dashboard),
         ("Eksport danych (kopia ręczna)", .backup), ("Import danych", .backup),
         ("Automatyczna kopia przy starcie", .backup),
@@ -222,6 +235,7 @@ public struct SettingsView: View {
                     case .ksef: ksefSections
                     case .sync: syncSections
                     case .invoices: invoiceSections
+                    case .email: emailSections
                     case .dashboard: dashboardSections
                     case .backup: backupSections
                     }
@@ -261,6 +275,11 @@ public struct SettingsView: View {
             }
         }
         .navigationTitle("Ustawienia")
+        // Skok z globalnej wyszukiwarki ⌘K: przełącz zakładkę i podświetl
+        // wskazany wiersz (onAppear obsługuje świeżo otwarte Ustawienia,
+        // onChange — Ustawienia już widoczne).
+        .onAppear(perform: consumeSettingsJump)
+        .onChange(of: settingsNavigator.pendingJump) { consumeSettingsJump() }
         .fileImporter(
             isPresented: $isChoosingBrandingLogo,
             allowedContentTypes: [.image],
@@ -600,6 +619,49 @@ public struct SettingsView: View {
     }
 
     @ViewBuilder
+    private var emailSections: some View {
+            EmailTemplateSettingsSection(highlightedLabel: highlightedSetting)
+            Section {
+                Toggle("Wysyłaj miesięczne podsumowanie e-mailem", isOn: $monthlyReportEnabled)
+                .listRowBackground(highlight("Miesięczny raport e-mail (podsumowanie)"))
+                TextField(
+                    "Adresat raportu",
+                    text: $monthlyReportRecipient,
+                    prompt: Text(
+                        jpkEmail.trimmingCharacters(in: .whitespaces).isEmpty
+                            ? "np. ja@mojafirma.pl"
+                            : "puste = \(jpkEmail) (e-mail podatnika z ustawień JPK)"
+                    )
+                )
+                .disabled(!monthlyReportEnabled)
+                .listRowBackground(highlight("Raport miesięczny: adresat"))
+                if monthlyReportEnabled,
+                   monthlyReportRecipient.trimmingCharacters(in: .whitespaces).isEmpty,
+                   jpkEmail.trimmingCharacters(in: .whitespaces).isEmpty {
+                    Label(
+                        "Podaj adresata raportu — bez adresu raport nie zostanie przygotowany.",
+                        systemImage: "exclamationmark.triangle.fill"
+                    )
+                    .font(.callout)
+                    .foregroundStyle(.orange)
+                }
+                Picker("Tryb dostarczania", selection: $monthlyReportDeliveryModeRaw) {
+                    ForEach(MailAutomationService.DeliveryMode.allCases) { mode in
+                        Text(mode.displayName).tag(mode.rawValue)
+                    }
+                }
+                .disabled(!monthlyReportEnabled)
+                .listRowBackground(highlight("Raport miesięczny: szkic / automatyczna wysyłka"))
+            } header: {
+                Text("Miesięczny raport e-mail")
+            } footer: {
+                Text("Na początku każdego miesiąca aplikacja przygotowuje podsumowanie zamkniętego miesiąca: sprzedaż, VAT należny i naliczony oraz stan należności (w tym po terminie). Wiadomość powstaje w aplikacji Mail — jako szkic do przejrzenia albo wysyłana automatycznie; pierwsze użycie poprosi o zgodę na sterowanie Mail. Jeden raport na miesiąc. Raport jest poglądowy i nie zastępuje ewidencji księgowej.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+    }
+
+    @ViewBuilder
     private var dashboardSections: some View {
             Section {
                 Stepper(value: $dueSoonDays, in: 1...90) {
@@ -709,6 +771,24 @@ public struct SettingsView: View {
                     .monospaced()
                     .foregroundStyle(.secondary)
                     .font(.callout)
+            }
+        }
+    }
+
+    /// Konsumuje oczekujący skok z globalnej wyszukiwarki ⌘K: przełącza
+    /// zakładkę i chwilowo podświetla wskazany wiersz (jak wyniki
+    /// lokalnej wyszukiwarki ustawień).
+    private func consumeSettingsJump() {
+        guard let jump = settingsNavigator.pendingJump else { return }
+        settingsNavigator.pendingJump = nil
+        if let target = SettingsTab(rawValue: jump.tabRaw) { tab = target }
+        searchText = ""
+        guard let label = jump.highlight else { return }
+        highlightedSetting = label
+        Task {
+            try? await Task.sleep(for: .seconds(3))
+            if highlightedSetting == label {
+                highlightedSetting = nil
             }
         }
     }

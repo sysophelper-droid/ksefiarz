@@ -183,6 +183,20 @@ Sources/KsefiarzCore/
                C4: okna przed/po terminie, dedup po collectionReminderAt,
                szablony PL/EN, jawne pominięcia; dostarczanie przez
                Services/MailAutomationService),
+               EmailTemplate (F5 — konfigurowalne szablony e-mail: render
+               symboli {numer}/{kwota}/{termin}…, reguła pomijania wierszy
+               z samymi pustymi symbolami, wbudowane wzory domyślne per
+               rodzaj wiadomości i język; EmailTemplates = własne wzory
+               z UserDefaults z fail-backiem do domyślnych — sekcja
+               „Wyszukiwarka ⌘K, raport miesięczny i szablony e-mail"),
+               MonthlyReportEngine (F4 — cykliczny raport e-mail: okres =
+               poprzedni miesiąc, dedup po kluczu „RRRR-MM", agregaty
+               sprzedaż/VAT/należności w PLN i treść wiadomości;
+               dostarczanie przez MailAutomationService, cykl
+               w MainContentView),
+               GlobalSearchEngine (F3 — globalna wyszukiwarka ⌘K: czysta
+               normalizacja bez diakrytyków — ł składane ręcznie — ranking
+               tokenów i mapowanie modeli na lekkie pozycje wyników),
                KPiREngine (ewidencja KPiR według wzoru od 2026 r.:
                kolumny 1–19, klasyfikacja faktur do kol. 9/10/12–15,
                przeliczenie PLN, podsumowania okresu i KPiRCSVExporter;
@@ -268,7 +282,12 @@ Sources/KsefiarzCore/
                zapis kontrahentów, produktów albo faktur),
                ProformaListView + ProformaDetailView + NewProformaView
                (formularz z lekkim ProformaLineEditor) + ProformaEmailView
-               (sekcja „Faktury proforma"; SidebarSection.proformas)
+               (sekcja „Faktury proforma"; SidebarSection.proformas),
+               GlobalSearchView (paleta ⌘K: arkusz z polem i wynikami
+               grupowanymi po rodzaju; GlobalSearchPresenter — most
+               z menu aplikacji, SettingsNavigator — skok do ustawienia),
+               EmailTemplateSettingsSection (Ustawienia → E-mail: edycja
+               własnych wzorów tematu/treści per rodzaj i język)
 Tests/KsefiarzCoreTests/               # Swift Testing (#expect/#require), nazwy PO POLSKU
 Scripts/build-app.sh                   # składanie bundla .app
 ```
@@ -576,6 +595,54 @@ Scripts/build-app.sh                   # składanie bundla .app
   `reminder.emails.daysBefore/repeatDays`, `demand.interestRate`) pod
   natywnym typem — inaczej `@AppStorage` czytałby wartości domyślne.
   Pozostałe klucze zostają tekstem (NIP wygląda jak liczba, ale nim nie jest).
+
+## Wyszukiwarka ⌘K, raport miesięczny i szablony e-mail (F3/F4/F5)
+
+- **Globalna wyszukiwarka ⌘K (F3)**: skrót jest komendą menu Edycja
+  („Szukaj wszędzie…”, `InvoiceApp.commands`) — komenda działa w całej
+  aplikacji, a `GlobalSearchPresenter.present()` najpierw przywraca okno
+  główne (`MainWindowOpener`), więc ⌘K działa też po zamknięciu okna.
+  Paleta to arkusz w `MainContentView`; wybrany cel jest wykonywany
+  dopiero w `onDismiss` arkusza (arkusz w trakcie zamykania nie może
+  prezentować kolejnego). Faktura/proforma otwiera się w arkuszu
+  szczegółów (detail w `NavigationStack`, bo używa `.toolbar`),
+  kontrahent — na karcie historii, ustawienie — przez
+  `SettingsNavigator.pendingJump` (SettingsView konsumuje skok
+  w `onAppear` i `onChange`, przełącza zakładkę i podświetla wiersz jak
+  lokalna wyszukiwarka ustawień). `SettingsView.searchIndex` jest
+  współdzielony z paletą — nowe ustawienie dopisane do indeksu od razu
+  jest wyszukiwalne w ⌘K. Czysty `GlobalSearchEngine`: normalizacja
+  bez diakrytyków (uwaga: `ł` NIE jest składane przez
+  `.diacriticInsensitive` — litera z kreską, nie znak łączący — więc
+  jest zamieniane ręcznie), każdy token zapytania musi trafić, ranking
+  prefiks tytułu > słowo tytułu > fragment tytułu > słowa kluczowe.
+  Faktury ukryte są poza wynikami (ochrona jak w statystykach).
+- **Miesięczny raport e-mail (F4)**: cykl `task(id:)` w `MainContentView`
+  (start + co 12 h; restart po zmianie ustawień przez
+  `MonthlyReportAutomationConfiguration`). `MonthlyReportEngine.duePeriod`
+  zwraca poprzedni miesiąc, o ile jego klucz „RRRR-MM” nie figuruje
+  w `report.monthly.sentPeriods`; stempel dopiero PO udanym przekazaniu
+  do Mail (błąd automatyzacji nie gubi raportu — wróci w kolejnym cyklu,
+  powiadomienie o błędzie deduplikowane do jednego dziennie). Adresat:
+  własny (`report.monthly.recipient`) z fail-backiem do `jpk.email`;
+  bez adresu cykl w ogóle nie startuje (ostrzeżenie w Ustawieniach).
+  Agregaty: sprzedaż/zakupy po dacie wystawienia miesiąca, należności
+  ze WSZYSTKICH widocznych nieopłaconych faktur sprzedaży na dzień
+  raportu; PLN po kursie z faktury, brak kursu jawnie policzony.
+  Saldo VAT to szacunek poglądowy (bez reguł JPK — treść raportu
+  zawiera zastrzeżenie).
+- **Szablony e-mail (F5)**: `EmailTemplate` renderuje symbole
+  `{nazwa}`; wiersz, którego WSZYSTKIE znane symbole są puste, znika
+  (tak zachowywały się dotychczasowe teksty warunkowe), a nieznany
+  symbol zostaje dosłownie (jawna literówka). Wbudowane wzory domyślne
+  odtwarzają 1:1 dotychczasowe treści (test porównuje bajt w bajt).
+  Własne wzory żyją w UserDefaults (`email.template.{rodzaj}.{pole}.{pl|en}`,
+  16 kluczy w kopii zapasowej); `EmailTemplates.fromDefaults()` czyta je
+  przy każdym użyciu (arkusze e-mail, cykl przypomnień) — zmiana działa
+  od następnego renderu bez restartu cyklu. Edytor w Ustawieniach → E-mail
+  pokazuje zawsze OBOWIĄZUJĄCY wzór; zapis tekstu identycznego
+  z wbudowanym czyści klucz, więc przyszłe zmiany wbudowanych wzorów nie
+  są zamrażane u użytkowników, którzy nic nie zmienili.
 
 ## API KSeF 2.0 — fakty krytyczne
 

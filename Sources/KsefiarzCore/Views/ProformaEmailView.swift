@@ -82,8 +82,9 @@ public struct ProformaEmailView: View {
         .navigationTitle("Wyślij proformę e-mailem")
         .onAppear { prefillIfNeeded() }
         .onChange(of: language) { _, newLanguage in
-            subject = Self.defaultSubject(for: proforma, language: newLanguage)
-            body_ = Self.defaultBody(for: proforma, language: newLanguage)
+            let templates = EmailTemplates.fromDefaults()
+            subject = Self.defaultSubject(for: proforma, language: newLanguage, templates: templates)
+            body_ = Self.defaultBody(for: proforma, language: newLanguage, templates: templates)
         }
         .alert(
             "Nie udało się przygotować wiadomości",
@@ -105,8 +106,9 @@ public struct ProformaEmailView: View {
         recipient = InvoiceEmailComposer.recipient(for: transient, contractors: contractors)
         language = InvoiceEmailComposer.preferredLanguage(for: transient, contractors: contractors)
         bilingualPDF = language == .english
-        subject = Self.defaultSubject(for: proforma, language: language)
-        body_ = Self.defaultBody(for: proforma, language: language)
+        let templates = EmailTemplates.fromDefaults()
+        subject = Self.defaultSubject(for: proforma, language: language, templates: templates)
+        body_ = Self.defaultBody(for: proforma, language: language, templates: templates)
     }
 
     /// Generuje PDF proformy (z przejściowej faktury) i otwiera okno Mail.
@@ -139,63 +141,23 @@ public struct ProformaEmailView: View {
 
     // MARK: Szablony treści (proforma, nie faktura)
 
-    static func defaultSubject(for proforma: Proforma, language: InvoiceEmailComposer.Language) -> String {
-        switch language {
-        case .polish: return "Proforma \(proforma.proformaNumber) — \(proforma.sellerName)"
-        case .english: return "Proforma invoice \(proforma.proformaNumber) — \(proforma.sellerName)"
-        }
+    /// Temat wiadomości proformy — własny szablon z Ustawień albo
+    /// wbudowany domyślny (wartości symboli z przejściowej faktury).
+    static func defaultSubject(
+        for proforma: Proforma,
+        language: InvoiceEmailComposer.Language,
+        templates: EmailTemplates = EmailTemplates()
+    ) -> String {
+        templates.subject(kind: .proforma, for: proforma.transientInvoice(), language: language)
     }
 
-    static func defaultBody(for proforma: Proforma, language: InvoiceEmailComposer.Language) -> String {
-        switch language {
-        case .polish: return polishBody(for: proforma)
-        case .english: return englishBody(for: proforma)
-        }
-    }
-
-    private static func polishBody(for proforma: Proforma) -> String {
-        let formatter = DateFormatter()
-        formatter.dateStyle = .long
-        formatter.locale = Locale(identifier: "pl_PL")
-        var body = """
-        Dzień dobry,
-
-        w załączeniu przesyłamy fakturę proforma \(proforma.proformaNumber) \
-        z dnia \(formatter.string(from: proforma.issueDate)) \
-        na kwotę \(FA2Format.amount(proforma.grossAmount)) \(proforma.currency) brutto.
-        """
-        if let due = proforma.paymentDueDate {
-            body += "\nTermin płatności: \(formatter.string(from: due))."
-        }
-        if let account = proforma.paymentBankAccount, !account.isEmpty {
-            body += "\nNumer rachunku do wpłaty: \(account)."
-        }
-        body += "\n\nProforma jest dokumentem handlowym — nie stanowi faktury VAT. "
-        body += "Fakturę VAT wystawimy po zaksięgowaniu wpłaty."
-        body += "\n\nPozdrawiamy\n\(proforma.sellerName)"
-        return body
-    }
-
-    private static func englishBody(for proforma: Proforma) -> String {
-        let formatter = DateFormatter()
-        formatter.dateStyle = .long
-        formatter.locale = Locale(identifier: "en_GB")
-        var body = """
-        Dear Sirs,
-
-        please find attached proforma invoice \(proforma.proformaNumber) \
-        dated \(formatter.string(from: proforma.issueDate)) \
-        for the total (gross) amount of \(FA2Format.amount(proforma.grossAmount)) \(proforma.currency).
-        """
-        if let due = proforma.paymentDueDate {
-            body += "\nPayment due date: \(formatter.string(from: due))."
-        }
-        if let account = proforma.paymentBankAccount, !account.isEmpty {
-            body += "\nBank account for payment: \(account)."
-        }
-        body += "\n\nA proforma is a commercial document — it is not a VAT invoice. "
-        body += "The VAT invoice will be issued once the payment is received."
-        body += "\n\nKind regards\n\(proforma.sellerName)"
-        return body
+    /// Treść wiadomości proformy — własny szablon z Ustawień albo
+    /// wbudowany domyślny.
+    static func defaultBody(
+        for proforma: Proforma,
+        language: InvoiceEmailComposer.Language,
+        templates: EmailTemplates = EmailTemplates()
+    ) -> String {
+        templates.body(kind: .proforma, for: proforma.transientInvoice(), language: language)
     }
 }

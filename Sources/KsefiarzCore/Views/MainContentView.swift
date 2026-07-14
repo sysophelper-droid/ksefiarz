@@ -95,6 +95,17 @@ public struct MainContentView: View {
     @AppStorage(AppSettingsKeys.reminderDaysBefore) private var reminderDaysBefore = 3
     @AppStorage(AppSettingsKeys.reminderRepeatDays) private var reminderRepeatDays = 7
     @AppStorage(AppSettingsKeys.reminderDeliveryMode) private var reminderDeliveryModeRaw = MailAutomationService.DeliveryMode.draft.rawValue
+    @AppStorage(AppSettingsKeys.monthlyReportEnabled) private var monthlyReportEnabled = false
+    @AppStorage(AppSettingsKeys.monthlyReportRecipient) private var monthlyReportRecipient = ""
+    @AppStorage(AppSettingsKeys.monthlyReportDeliveryMode) private var monthlyReportDeliveryModeRaw = MailAutomationService.DeliveryMode.draft.rawValue
+    @AppStorage(AppSettingsKeys.jpkEmail) private var jpkEmail = ""
+
+    /// Globalna wyszukiwarka ⌘K (arkusz palety + nawigacja po wyborze).
+    @ObservedObject private var searchPresenter = GlobalSearchPresenter.shared
+    @State private var pendingSearchAction: GlobalSearchAction?
+    @State private var searchOpenedInvoice: Invoice?
+    @State private var searchOpenedProforma: Proforma?
+    @State private var searchOpenedContractor: Contractor?
 
     private var paymentReminderAutomationConfiguration: PaymentReminderAutomationConfiguration {
         PaymentReminderAutomationConfiguration(
@@ -102,6 +113,15 @@ public struct MainContentView: View {
             daysBeforeDue: reminderDaysBefore,
             repeatAfterDays: reminderRepeatDays,
             deliveryModeRaw: reminderDeliveryModeRaw
+        )
+    }
+
+    private var monthlyReportAutomationConfiguration: MonthlyReportAutomationConfiguration {
+        MonthlyReportAutomationConfiguration(
+            isEnabled: monthlyReportEnabled,
+            recipient: monthlyReportRecipient,
+            fallbackRecipient: jpkEmail,
+            deliveryModeRaw: monthlyReportDeliveryModeRaw
         )
     }
 
@@ -268,6 +288,54 @@ public struct MainContentView: View {
                 guard !Task.isCancelled else { return }
                 await renewCertificatesIfNeeded()
             }
+        }
+        // Miesięczny raport e-mail (F4): na początku nowego miesiąca
+        // podsumowanie zamkniętego okresu. Sprawdzane od razu i co 12 h;
+        // deduplikacja po kluczu okresu gwarantuje jeden raport na miesiąc.
+        .task(id: monthlyReportAutomationConfiguration) {
+            let configuration = monthlyReportAutomationConfiguration
+            guard configuration.isEnabled, !configuration.recipient.isEmpty else { return }
+            while !Task.isCancelled {
+                await processMonthlyReport(configuration: configuration)
+                try? await Task.sleep(for: .seconds(12 * 3600))
+                guard !Task.isCancelled else { return }
+            }
+        }
+        // Globalna wyszukiwarka ⌘K (F3): arkusz palety; wybrany cel jest
+        // wykonywany PO zamknięciu arkusza (sheet w trakcie zamykania nie
+        // może prezentować kolejnego arkusza).
+        .sheet(isPresented: $searchPresenter.isPresented, onDismiss: performPendingSearchAction) {
+            GlobalSearchView { pendingSearchAction = $0 }
+        }
+        .sheet(item: $searchOpenedInvoice) { invoice in
+            NavigationStack { InvoiceDetailView(invoice: invoice) }
+        }
+        .sheet(item: $searchOpenedProforma) { proforma in
+            NavigationStack { ProformaDetailView(proforma: proforma) }
+        }
+        .sheet(item: $searchOpenedContractor) { contractor in
+            ContractorHistoryView(contractor: contractor)
+        }
+    }
+
+    /// Nawigacja po wyborze w globalnej wyszukiwarce: sekcja paska
+    /// bocznego, szczegóły dokumentu/kontrahenta w arkuszu albo skok
+    /// do konkretnego ustawienia.
+    private func performPendingSearchAction() {
+        guard let action = pendingSearchAction else { return }
+        pendingSearchAction = nil
+        switch action {
+        case .section(let section):
+            selection = section
+        case .invoice(let invoice):
+            searchOpenedInvoice = invoice
+        case .proforma(let proforma):
+            searchOpenedProforma = proforma
+        case .contractor(let contractor):
+            searchOpenedContractor = contractor
+        case .setting(let jump):
+            selection = .settings
+            SettingsNavigator.shared.pendingJump = jump
         }
     }
 
@@ -441,7 +509,8 @@ public struct MainContentView: View {
         let result = PaymentReminderEngine.candidates(
             invoices: invoices,
             contractors: contractors,
-            settings: configuration.settings
+            settings: configuration.settings,
+            templates: EmailTemplates.fromDefaults()
         )
         let missingRecipientBody = PaymentReminderEngine
             .missingRecipientNotificationBody(omissions: result.omissions)
@@ -543,6 +612,88 @@ public struct MainContentView: View {
                     trigger: nil
                 ))
             }
+        }
+    }
+
+    /// Miesięczny raport e-mail (F4): jeżeli poprzedni miesiąc nie został
+    /// jeszcze zaraportowany, buduje podsumowanie (sprzedaż/VAT/należności)
+    /// i przekazuje je do aplikacji Mail zgodnie z trybem z Ustawień.
+    /// Pamięcią doręczeń jest lista kluczy okresów w UserDefaults; błąd
+    /// automatyzacji NIE stempluje okresu (raport wróci w kolejnym cyklu),
+    /// a powiadomienie o problemie jest deduplikowane do jednego dziennie.
+    @MainActor
+    private func processMonthlyReport(
+        configuration: MonthlyReportAutomationConfiguration
+    ) async {
+        guard configuration.isEnabled, !configuration.recipient.isEmpty else { return }
+        let defaults = UserDefaults.standard
+        let sent = Set(
+            defaults.stringArray(forKey: AppSettingsKeys.monthlyReportSentPeriods) ?? []
+        )
+        guard let period = MonthlyReportEngine.duePeriod(asOf: .now, alreadySent: sent) else {
+            return
+        }
+        let invoices = (try? modelContext.fetch(FetchDescriptor<Invoice>())) ?? []
+        let summary = MonthlyReportEngine.summary(invoices: invoices, periodStart: period)
+        let mode = MailAutomationService.DeliveryMode(
+            rawValue: configuration.deliveryModeRaw
+        ) ?? .draft
+
+        let center = UNUserNotificationCenter.current()
+        do {
+            try MailAutomationService.deliver(
+                recipient: configuration.recipient,
+                subject: MonthlyReportEngine.subject(for: summary),
+                body: MonthlyReportEngine.body(for: summary),
+                mode: mode
+            )
+            var updated = sent
+            updated.insert(MonthlyReportEngine.periodKey(for: period))
+            defaults.set(
+                Array(MonthlyReportEngine.prune(sent: updated)).sorted(),
+                forKey: AppSettingsKeys.monthlyReportSentPeriods
+            )
+
+            let granted = (try? await center.requestAuthorization(options: [.alert, .sound, .badge])) ?? false
+            guard granted else { return }
+            let content = UNMutableNotificationContent()
+            content.title = mode == .send
+                ? "Wysłano miesięczny raport e-mail"
+                : "Przygotowano szkic miesięcznego raportu w Mail"
+            content.body = "Podsumowanie miesiąca: "
+                + MonthlyReportEngine.monthDisplayName(for: summary.periodStart)
+                + (mode == .send
+                    ? " (adresat: \(configuration.recipient))."
+                    : " — przejrzyj Wersje robocze w Mail i wyślij.")
+            content.sound = .default
+            try? await center.add(UNNotificationRequest(
+                identifier: "ksefiarz.monthlyReport.\(MonthlyReportEngine.periodKey(for: period))",
+                content: content,
+                trigger: nil
+            ))
+        } catch {
+            // Zwykle brak zgody na automatyzację Mail — jedno powiadomienie
+            // o problemie dziennie; okres bez stempla wróci w kolejnym cyklu.
+            let dayKey = ISO8601DateFormatter.string(
+                from: .now, timeZone: .current,
+                formatOptions: [.withFullDate]
+            )
+            let lastNotified = defaults.string(
+                forKey: AppSettingsKeys.monthlyReportErrorNotifiedDay
+            )
+            guard lastNotified != dayKey else { return }
+            let granted = (try? await center.requestAuthorization(options: [.alert, .sound, .badge])) ?? false
+            guard granted else { return }
+            defaults.set(dayKey, forKey: AppSettingsKeys.monthlyReportErrorNotifiedDay)
+            let content = UNMutableNotificationContent()
+            content.title = "Miesięczny raport e-mail wstrzymany"
+            content.body = error.localizedDescription
+            content.sound = .default
+            try? await center.add(UNNotificationRequest(
+                identifier: "ksefiarz.monthlyReport.error.\(dayKey)",
+                content: content,
+                trigger: nil
+            ))
         }
     }
 

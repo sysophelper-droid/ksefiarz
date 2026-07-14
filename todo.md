@@ -24,14 +24,44 @@ kolejność dowolna. ⚠️ operacje modyfikujące KSeF testować wyłącznie na
   Duży koszt (dotyka modelu danych) — osobna, świadoma decyzja.
 - [ ] F2. Blokada aplikacji Touch ID / hasłem — ochrona danych finansowych
   przy odejściu od biurka.
-- [ ] F3. Globalna wyszukiwarka ⌘K — szybki skok do faktury/kontrahenta/
-  ustawienia.
-- [ ] F4. Cykliczny raport e-mail (podsumowanie miesiąca) — automatyczne
-  zestawienie sprzedaż/VAT/należności na koniec okresu.
-- [ ] F5. Konfigurowalne szablony e-mail — edytowalne wzory tematu/treści
-  (dziś zaszyte PL/EN).
 
 ## Zrealizowane
+
+### Wyszukiwarka ⌘K, raport miesięczny i szablony e-mail (14.07.2026)
+
+- [x] F3. Globalna wyszukiwarka ⌘K — komenda „Szukaj wszędzie…” (menu
+  Edycja, skrót ⌘K, działa też po zamknięciu okna głównego): jedno pole
+  przeszukuje faktury (numer, strony, NIP-y, numer KSeF), proformy,
+  kontrahentów, ustawienia (wspólny indeks z wyszukiwarką ustawień)
+  i sekcje aplikacji. Czysty `GlobalSearchEngine` — normalizacja bez
+  diakrytyków (ł składane ręcznie, bo `.diacriticInsensitive` go nie
+  rozkłada), wszystkie tokeny muszą trafić, ranking prefiks tytułu >
+  słowo > fragment > słowa kluczowe. Wybór otwiera szczegóły dokumentu /
+  kartę kontrahenta w arkuszu, sekcję w pasku bocznym albo skacze do
+  ustawienia z podświetleniem wiersza (`SettingsNavigator`); faktury
+  ukryte poza wynikami. 9 testów silnika.
+- [x] F4. Cykliczny raport e-mail (podsumowanie miesiąca) —
+  `MonthlyReportEngine` (czysta logika): raport za zamknięty poprzedni
+  miesiąc (sprzedaż netto/VAT/brutto, zakupy, saldo VAT poglądowo,
+  należności ogółem i po terminie na dzień raportu; PLN po kursie
+  z faktury, braki kursu jawnie policzone; ukryte pomijane). Cykl
+  w MainContentView (start + co 12 h), dostarczanie przez aplikację Mail
+  (szkic albo automatyczna wysyłka), dedup po kluczu okresu „RRRR-MM”
+  stemplowany dopiero po udanym przekazaniu; adresat własny albo e-mail
+  podatnika z ustawień JPK; funkcja domyślnie wyłączona (Ustawienia →
+  E-mail). 9 testów silnika i konfiguracji.
+- [x] F5. Konfigurowalne szablony e-mail — `EmailTemplate` (czysty render
+  symboli `{numer}/{data}/{kwota}/{saldo}/{termin}/{rachunek}/{ksef}/
+  {sprzedawca}/{nabywca}/{dni_po_terminie}`; wiersz z samymi pustymi
+  symbolami znika — jak dotychczasowe teksty warunkowe; nieznany symbol
+  zostaje dosłownie) + `EmailTemplates` (własne wzory z UserDefaults
+  z fail-backiem do wbudowanych). Obejmuje wysyłkę faktury, proformy
+  i przypomnienia przed/po terminie, osobno PL i EN (16 kluczy w kopii
+  zapasowej). Wbudowane wzory odtwarzają dotychczasowe treści 1:1 (test
+  bajt w bajt). Edytor w Ustawieniach → E-mail pokazuje obowiązujący
+  wzór; zapis tekstu równego wbudowanemu czyści klucz (przyszłe zmiany
+  wbudowanych wzorów nie są zamrażane). 16 testów renderu i integracji
+  z composerem/przypomnieniami.
 
 ### JPK_V7 — podatek naliczony z VAT RR (14.07.2026)
 

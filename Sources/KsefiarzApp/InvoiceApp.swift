@@ -113,6 +113,18 @@ struct InvoiceApp: App {
             MainContentView()
         }
         .modelContainer(sharedModelContainer)
+        // Globalna wyszukiwarka ⌘K — pozycja w menu Edycja daje skrót
+        // działający w całej aplikacji; prezenter przywraca okno główne,
+        // gdy użytkownik zdążył je zamknąć.
+        .commands {
+            CommandGroup(after: .textEditing) {
+                Divider()
+                Button("Szukaj wszędzie…") {
+                    GlobalSearchPresenter.shared.present()
+                }
+                .keyboardShortcut("k", modifiers: .command)
+            }
+        }
 
         // Standardowe okno Ustawień macOS (⌘,) — te same ustawienia co w pasku bocznym.
         Settings {

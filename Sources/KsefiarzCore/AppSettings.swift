@@ -131,6 +131,26 @@ public enum AppSettingsKeys {
     /// Dzień ostatniego powiadomienia o fakturach pominiętych z powodu
     /// braku adresu e-mail (dedup — jedno podsumowanie dziennie).
     public static let reminderOmissionsNotifiedDay = "reminder.emails.omissionsNotifiedDay"
+    /// Cykliczny raport e-mail — podsumowanie zamkniętego miesiąca
+    /// (sprzedaż/VAT/należności) wysyłane na początku kolejnego miesiąca.
+    public static let monthlyReportEnabled = "report.monthly.enabled"
+    /// Adresat raportu miesięcznego; pusty = adres e-mail podatnika
+    /// z ustawień JPK (`jpk.email`).
+    public static let monthlyReportRecipient = "report.monthly.recipient"
+    /// Tryb dostarczania raportu (rawValue `MailAutomationService
+    /// .DeliveryMode`): szkic w Mail albo automatyczna wysyłka.
+    public static let monthlyReportDeliveryMode = "report.monthly.deliveryMode"
+    /// Pamięć zaraportowanych okresów („RRRR-MM”) — dedup, jeden raport
+    /// na miesiąc.
+    public static let monthlyReportSentPeriods = "report.monthly.sentPeriods"
+    /// Dzień ostatniego powiadomienia o błędzie wysyłki raportu (dedup).
+    public static let monthlyReportErrorNotifiedDay = "report.monthly.errorNotifiedDay"
+    // Konfigurowalne szablony e-mail (temat/treść, PL/EN): klucze
+    // `email.template.*` per rodzaj wiadomości buduje
+    // `EmailTemplate.storageKey`; pusta wartość = wbudowany szablon
+    // domyślny. Celowo bez stałych — pełna lista w
+    // `EmailTemplate.allStorageKeys`.
+
     /// Ikona Ksefiarza w pasku menu (status synchronizacji i dosłań).
     public static let menuBarExtra = "ksef.menuBarExtra"
     /// Automatyczne odnawianie certyfikatów KSeF przed wygaśnięciem

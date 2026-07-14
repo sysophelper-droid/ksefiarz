@@ -319,7 +319,10 @@ public enum BackupService {
         AppSettingsKeys.reminderDaysBefore,
         AppSettingsKeys.reminderRepeatDays,
         AppSettingsKeys.reminderDeliveryMode,
-    ]
+        AppSettingsKeys.monthlyReportEnabled,
+        AppSettingsKeys.monthlyReportRecipient,
+        AppSettingsKeys.monthlyReportDeliveryMode,
+    ] + EmailTemplate.allStorageKeys
 
     /// Klucze ustawień o typach natywnych innych niż String. Kopia zapasowa
     /// przechowuje wartości jako tekst („1”, „7”, „13.5”), a `@AppStorage`
@@ -330,6 +333,7 @@ public enum BackupService {
         AppSettingsKeys.pdfBrandingEnabled,
         AppSettingsKeys.pdfPaymentQR,
         AppSettingsKeys.reminderEmailsEnabled,
+        AppSettingsKeys.monthlyReportEnabled,
     ]
     static let integerSettingsKeys: Set<String> = [
         AppSettingsKeys.demandPaymentDays,
