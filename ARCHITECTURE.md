@@ -39,6 +39,9 @@ Sources/KsefiarzCore/
                części paczki pod adresy magazynu, zamknięcie, status sesji
                i wyniki per faktura ze stronicowaniem — szczegóły w sekcji
                „Sesja wsadowa"), KSeFCrypto, FA2XML (generator+parser), InvoiceValidator,
+               KSeFAnonymousAccessService (publiczna bramka WWW MF: pobranie
+               pojedynczego XML po numerze KSeF i danych identyfikujących,
+               bez tokenu/certyfikatu — sekcja „Anonimowy dostęp"),
                BackupService (format v8 obejmuje metadane KPiR),
                FileExportService (NSSave/OpenPanel), InvoicePDFGenerator (+ kody QR,
                opcjonalny branding własnych dokumentów: logo, dwa kolory,
@@ -112,6 +115,8 @@ Sources/KsefiarzCore/
                osadzenie InvoicePDFGenerator; szczegóły niżej),
                InvoiceSyncEngine (wspólny sync: ręczny,
                przy starcie i cykliczny — automatyka w MainContentView),
+               AnonymousInvoiceImportEngine (parser pobranego XML + wspólne
+               scalanie zakupu przez InvoiceSyncEngine),
                KSeFBatchPackage (czysta paczka ZIP sesji wsadowej: budowa
                archiwum, podział binarny na części ≤100 MB, limity),
                BatchSendEngine (wysyłka wsadowa: kwalifikacja lokalnych
@@ -201,6 +206,8 @@ Sources/KsefiarzCore/
                wFirma i układów własnych, typowanie kwot/dat/flag, walidacja,
                grupowanie pozycji faktur, deduplikacja i plan importu),
   Views/       MainContentView (NavigationSplitView), InvoiceListView, InvoiceDetailView,
+               AnonymousInvoiceImportView (arkusz publicznego pobrania
+               pojedynczego zakupu po danych identyfikujących),
                BatchSendView (arkusz wysyłki wsadowej — wejście z paska
                narzędzi listy sprzedaży i menu kontekstowego zaznaczenia),
                NewInvoiceView (nowa/edycja/korekta), NewPurchaseView (zakup
@@ -573,6 +580,44 @@ Scripts/build-app.sh                   # składanie bundla .app
 Fakty o API/schemie weryfikuj u źródła (OpenAPI
 `https://api-test.ksef.mf.gov.pl/docs/v2/openapi.json`, XSD z CIRFMF/ksef-api,
 docs CIRFMF/ksef-docs) — nie zgaduj pól.
+
+## Anonimowy dostęp do pojedynczej faktury (A5)
+
+Funkcja „Pobierz po numerze KSeF…” na liście zakupów służy do awaryjnego
+wciągnięcia dokumentu, który nie pojawił się w zwykłej synchronizacji.
+Nie wymaga poświadczeń i nie wykonuje operacji modyfikującej KSeF.
+
+- **Podstawa i wymagane dane**: § 8 rozporządzenia Ministra Finansów
+  i Gospodarki z 12.12.2025 r. w sprawie korzystania z KSeF (Dz.U. poz. 1815)
+  oraz oficjalny podręcznik KSeF 2.0 wymagają numeru KSeF, numeru faktury
+  sprzedawcy (`P_2`), identyfikatora podatkowego nabywcy lub informacji o jego
+  braku, nazwy/imienia i nazwiska nabywcy lub informacji o braku oraz kwoty
+  należności ogółem (`P_15`). Bramka obsługuje identyfikatory `Nip`, `VatUe`,
+  `Other`, `None`; formularz domyślnie podpowiada NIP i nazwę firmy z ustawień.
+- **To nie jest endpoint OpenAPI 2.0**: integratorskie `open-api.json` nie ma
+  anonimowego pobrania. Aplikacja Podatnika przed logowaniem przekierowuje do
+  osobnej, publicznej bramki: produkcja `qr.ksef.mf.gov.pl`, TEST `qr-test…`,
+  Demo `qr-demo…`. Kontrakt ustalono z publicznego formularza MF i potwierdzono
+  e2e na TEST 14.07.2026 (`LiveAnonymousAccessTests`, oryginalny XML FA(3)).
+- **Przepływ WWW**: `GET /invoice/search` → token anty-CSRF + ciasteczko;
+  `POST /invoice/search` z numerem KSeF → przekierowanie do
+  `/client-app/invoice/search/{nr}/verify-download`; `POST` tego adresu
+  z `handler=Format` i pozostałymi danymi → przekierowanie do wyniku.
+  Przy sukcesie wynik zawiera XML jako Base64 w `data-xml-text`; HTML koduje
+  znak `+` jako `&#x2B;`, dlatego dekodowanie encji MUSI poprzedzać Base64.
+  Brak dopasowania jest rozpoznawany po jednoznacznym komunikacie
+  „Nie znaleziono faktury”. Zmiana kontraktu/znaczników przez MF kończy się
+  jawnym błędem odpowiedzi bramki, nie zapisem częściowych danych.
+- **Transport**: `KSeFAnonymousAccessService` tworzy osobną efemeryczną
+  `URLSession` z ciasteczkami tylko na czas operacji, ustawia Origin/Referer
+  i nigdy nie dołącza tokenu KSeF. W testach wstrzykiwany jest wspólny
+  `HTTPTransport`; pokryte są trzy żądania, formularze, środowiska, wariant
+  bez identyfikatora/nazwy, encje HTML, odpowiedzi błędne i brak faktury.
+- **Zapis lokalny**: `AnonymousInvoiceImportEngine` parsuje XML przez
+  `FA2XMLParser`, dopisuje numer KSeF (nie jest elementem XML) i deleguje do
+  `InvoiceSyncEngine.merge(kind: .purchase)`. Dzięki temu pozycje przypisywane
+  są po `context.insert`, deduplikacja obejmuje WSZYSTKIE faktury (również
+  ukryte), a `applyDetails`/`PaymentFormPolicy` nie cofają ręcznego `isPaid`.
 
 ## Sesja wsadowa (A4) — wysyłka batch/ZIP
 

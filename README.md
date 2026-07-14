@@ -32,6 +32,7 @@ Sources/
     │   └── InvoiceAutomation.swift # szablony i harmonogramy SwiftData
     ├── Services/
     │   ├── KSeFService.swift     # API KSeF 2.0: uwierzytelnienie, pobieranie i wysyłka faktur
+    │   ├── KSeFAnonymousAccessService.swift # publiczne pobranie po numerze KSeF + danych
     │   ├── KSeFPermissionsService.swift # API permissions: nadawanie/odbieranie/przegląd uprawnień
     │   ├── KSeFCrypto.swift      # RSA-OAEP (SHA-256), AES-256-CBC, SHA-256
     │   ├── FA2XML.swift          # generator FA(3) i parser FA(2)/FA(3)/FA_RR(1)
@@ -40,6 +41,7 @@ Sources/
     │   ├── TabularFileReader.swift # odczyt CSV/TSV/XLSX do wspólnej tabeli
     │   └── BulkImportService.swift # zapis planu importu do SwiftData
     ├── Logic/
+    │   ├── AnonymousInvoiceImportEngine.swift # parser + deduplikacja anonimowego zakupu
     │   ├── InvoiceFilter.swift   # filtrowanie list (status płatności, wyszukiwarka)
     │   ├── DashboardMetrics.swift# agregaty Kokpitu (ukryte faktury pomijane)
     │   ├── PermissionsEngine.swift # walidacja i normalizacja uprawnień KSeF
@@ -53,6 +55,7 @@ Sources/
         ├── MainContentView.swift # NavigationSplitView + pasek boczny
         ├── DashboardView.swift   # Kokpit: podsumowania, płatności na 7 dni
         ├── InvoiceListView.swift # listy zakupów/sprzedaży, swipe/menu, badge
+        ├── AnonymousInvoiceImportView.swift # arkusz pobrania zakupu bez logowania
         ├── InvoiceDetailView.swift # szczegóły + podgląd surowego XML
         ├── NewInvoiceView.swift  # formularz wystawiania faktury z walidacją
         ├── PermissionsView.swift # sekcja „Uprawnienia” + arkusz nadawania
@@ -73,6 +76,17 @@ Tests/KsefiarzCoreTests/          # Swift Testing — model, parser, usługa, kr
   (`api-test`/`api-demo`/`api.ksef.mf.gov.pl`): uwierzytelnienie certyfikatem
   lub tokenem, pobieranie faktur zakupowych (metadane + oryginalny XML),
   wystawianie faktur w sesji interaktywnej z obowiązkowym szyfrowaniem AES-256-CBC.
+- **Anonimowe pobranie pojedynczej faktury** — na liście zakupów pod „+”
+  znajduje się akcja „Pobierz po numerze KSeF…”. Pozwala wciągnąć fakturę,
+  która nie pojawiła się w zwykłej synchronizacji, po podaniu numeru KSeF,
+  numeru faktury sprzedawcy, identyfikatora i nazwy nabywcy oraz kwoty brutto.
+  Aplikacja korzysta z publicznej bramki MF właściwej dla wybranego środowiska
+  (`qr-test` / `qr-demo` / `qr.ksef.mf.gov.pl`), więc operacja nie wymaga
+  tokenu, certyfikatu ani logowania i niczego nie zapisuje w KSeF. Pobrany
+  oryginalny XML przechodzi przez ten sam parser i scalanie co synchronizacja:
+  dokument trafia do zakupów, duplikat po numerze KSeF nie powstaje (także gdy
+  wcześniejsza faktura jest ukryta), a ręczny znacznik „Opłacona” nie jest
+  cofany.
 - **Wysyłka wsadowa (sesja batch/ZIP)** — przycisk „Wyślij wsadowo do KSeF”
   na liście sprzedaży (oraz akcja zbiorcza w menu kontekstowym zaznaczenia)
   wysyła wiele lokalnych dokumentów jedną paczką ZIP zamiast pojedynczych
