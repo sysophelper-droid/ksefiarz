@@ -17,10 +17,6 @@ Zaproponowane do decyzji; ⭐ = rekomendowane (największy zwrot / rozsądny
 koszt, bez łamania „tylko odczyt na żywo"). Numeracja pomocnicza —
 kolejność dowolna. ⚠️ operacje modyfikujące KSeF testować wyłącznie na `test`.
 
-#### A. Zgodność / KSeF
-
-- [ ] A5. Anonimowy dostęp / pobranie faktury po numerze KSeF — wciągnięcie
-  faktury zakupowej po numerze KSeF + danych, gdy nie przyszła synchronizacją.
 #### B. Podatki dochodowe / ewidencje
 
 - [ ] B4. JPK_FA na żądanie — pełny JPK faktur (nie ewidencja), format dla
@@ -62,6 +58,20 @@ kolejność dowolna. ⚠️ operacje modyfikujące KSeF testować wyłącznie na
   (dziś zaszyte PL/EN).
 
 ## Zrealizowane
+
+### Anonimowy dostęp / pobranie faktury po numerze KSeF (14.07.2026)
+
+- [x] A5. Akcja „Pobierz po numerze KSeF…” pod „+” na liście zakupów
+  wciąga pojedynczą fakturę, której zabrakło w synchronizacji, po numerze KSeF,
+  numerze faktury sprzedawcy, identyfikatorze i nazwie nabywcy oraz kwocie
+  ogółem. Korzysta z publicznej bramki MF dla wybranego środowiska — bez
+  tokenu, certyfikatu i logowania; dwuetapowy formularz utrzymuje efemeryczne
+  ciasteczko i tokeny CSRF, a wynikowy oryginalny XML jest dekodowany z Base64.
+  Import używa istniejącego parsera FA(3)/FA_RR(1) i wspólnego scalania
+  `InvoiceSyncEngine`: zapis jako zakup z pozycjami, deduplikacja po numerze
+  KSeF obejmuje faktury ukryte, a ręczne „Opłacona” nie jest cofane. 8 nowych
+  testów jednostkowych klienta i importu; odczyt e2e potwierdzony na żywej
+  bramce `qr-test` (`LiveAnonymousAccessTests`, 14.07.2026).
 
 ### Wysyłka wsadowa do KSeF — sesja batch/ZIP (14.07.2026)
 

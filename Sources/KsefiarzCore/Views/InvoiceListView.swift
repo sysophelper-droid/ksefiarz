@@ -20,6 +20,8 @@ public struct InvoiceListView: View {
     @State private var editedPurchase: Invoice?
     /// Arkusz samofaktury — wystawienie w imieniu dostawcy z listy zakupów.
     @State private var showingNewSelfInvoice = false
+    /// Publiczny, anonimowy import pojedynczego zakupu po danych faktury.
+    @State private var showingAnonymousImport = false
     @State private var correctedInvoice: Invoice?
     @State private var duplicatedInvoice: Invoice?
     @State private var emailedInvoice: Invoice?
@@ -145,6 +147,9 @@ public struct InvoiceListView: View {
             }
             .sheet(isPresented: $showingNewSelfInvoice) {
                 NewInvoiceView(selfInvoicing: true)
+            }
+            .sheet(isPresented: $showingAnonymousImport) {
+                AnonymousInvoiceImportView()
             }
             .sheet(item: $editedPurchase) { invoice in
                 NewPurchaseView(editing: invoice)
@@ -346,10 +351,15 @@ public struct InvoiceListView: View {
                     } label: {
                         Label("Wystaw samofakturę (w imieniu dostawcy)", systemImage: "person.2.badge.gearshape")
                     }
+                    Button {
+                        showingAnonymousImport = true
+                    } label: {
+                        Label("Pobierz po numerze KSeF…", systemImage: "number.square")
+                    }
                 } label: {
                     Label("Dodaj", systemImage: "plus")
                 }
-                .help("Dodaj fakturę kosztową spoza KSeF albo wystaw samofakturę w imieniu dostawcy (samofakturowanie — wymaga uprawnienia SelfInvoicing od dostawcy)")
+                .help("Dodaj zakup spoza KSeF, pobierz pojedynczą fakturę anonimowo po numerze KSeF albo wystaw samofakturę")
             }
         }
     }
