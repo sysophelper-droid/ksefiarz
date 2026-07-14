@@ -24,7 +24,10 @@ private func formFields(of request: URLRequest) -> [String: String] {
     guard let body = request.httpBody,
           let string = String(data: body, encoding: .utf8) else { return [:] }
     var components = URLComponents()
-    components.percentEncodedQuery = string
+    // Dekodowanie w semantyce application/x-www-form-urlencoded: serwer
+    // traktuje dosłowny `+` jako spację, więc asercje na tych polach
+    // sprawdzają wartości widziane przez bramkę, nie surowe ciało żądania.
+    components.percentEncodedQuery = string.replacingOccurrences(of: "+", with: "%20")
     return Dictionary(
         (components.queryItems ?? []).compactMap { item in
             item.value.map { (item.name, $0) }
@@ -161,6 +164,59 @@ struct KSeFAnonymousAccessServiceTests {
     func htmlEntities() {
         #expect(KSeFAnonymousAccessService.decodeHTMLEntities("A&#x2B;B&#43;C&amp;D") == "A+B+C&D")
         #expect(KSeFAnonymousAccessService.amountString(Decimal(string: "-1.2")!) == "-1,20")
+    }
+
+    @Test("Znak + w polach i tokenie CSRF dociera do bramki bez zniekształcenia")
+    func plusSignSurvivesFormEncoding() async throws {
+        let transport = MockTransport()
+        var call = 0
+        transport.route("invoice/search") { _ in
+            call += 1
+            switch call {
+            case 1, 2:
+                return (200, Data(#"<input name="__RequestVerificationToken" type="hidden" value="TOK+EN/\#(call)==" />"#.utf8))
+            default:
+                return (200, Data(#"<div data-xml-text="\#(Data("<Faktura/>".utf8).base64EncodedString())"></div>"#.utf8))
+            }
+        }
+        let service = KSeFAnonymousAccessService(environment: .test, transport: transport)
+        var request = anonymousRequest(buyerName: "A+B Sp. j.")
+        request.invoiceNumber = "FV+7/2026"
+
+        _ = try await service.downloadInvoice(request)
+
+        // W surowym ciele `+` musi być procentowo zakodowany — dosłowny `+`
+        // serwer form-urlencoded zdekodowałby jako spację.
+        let rawBody = String(data: transport.requests[2].httpBody ?? Data(), encoding: .utf8) ?? ""
+        #expect(!rawBody.contains("+"))
+
+        let details = formFields(of: transport.requests[2])
+        #expect(details["InvoiceNumber"] == "FV+7/2026")
+        #expect(details["BuyerName"] == "A+B Sp. j.")
+        #expect(details["__RequestVerificationToken"] == "TOK+EN/2==")
+    }
+
+    @Test("Ścisłe parsowanie kwoty obsługuje grupowanie i odrzuca dwuznaczne wpisy")
+    func amountParsing() {
+        #expect(KSeFAnonymousAccessService.parseAmountInput("123") == Decimal(123))
+        #expect(KSeFAnonymousAccessService.parseAmountInput(" 123,45 ") == Decimal(string: "123.45"))
+        #expect(KSeFAnonymousAccessService.parseAmountInput("123.45") == Decimal(string: "123.45"))
+        #expect(KSeFAnonymousAccessService.parseAmountInput("0,5") == Decimal(string: "0.5"))
+        #expect(KSeFAnonymousAccessService.parseAmountInput("-1,20") == Decimal(string: "-1.2"))
+        // Grupowanie: zwykła spacja, twarda spacja (kopiuj-wklej), kropka, przecinek.
+        #expect(KSeFAnonymousAccessService.parseAmountInput("1 234,56") == Decimal(string: "1234.56"))
+        #expect(KSeFAnonymousAccessService.parseAmountInput("1\u{00A0}234,56") == Decimal(string: "1234.56"))
+        #expect(KSeFAnonymousAccessService.parseAmountInput("1.234,56") == Decimal(string: "1234.56"))
+        #expect(KSeFAnonymousAccessService.parseAmountInput("1,234.56") == Decimal(string: "1234.56"))
+        #expect(KSeFAnonymousAccessService.parseAmountInput("1.234.567,89") == Decimal(string: "1234567.89"))
+        #expect(KSeFAnonymousAccessService.parseAmountInput("1.234") == Decimal(1234))
+        // Dotąd Decimal(string:) obcinał takie wpisy do prefiksu — teraz odrzucane.
+        #expect(KSeFAnonymousAccessService.parseAmountInput("1.23.4") == nil)
+        #expect(KSeFAnonymousAccessService.parseAmountInput("123,456") == nil)
+        #expect(KSeFAnonymousAccessService.parseAmountInput("1,234") == nil)
+        #expect(KSeFAnonymousAccessService.parseAmountInput("123,") == nil)
+        #expect(KSeFAnonymousAccessService.parseAmountInput("12a34") == nil)
+        #expect(KSeFAnonymousAccessService.parseAmountInput("") == nil)
     }
 }
 

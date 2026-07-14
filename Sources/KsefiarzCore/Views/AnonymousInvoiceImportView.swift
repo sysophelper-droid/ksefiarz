@@ -31,11 +31,7 @@ public struct AnonymousInvoiceImportView: View {
     }
 
     private var parsedAmount: Decimal? {
-        let normalized = amount
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .replacingOccurrences(of: " ", with: "")
-            .replacingOccurrences(of: ",", with: ".")
-        return Decimal(string: normalized, locale: Locale(identifier: "en_US_POSIX"))
+        KSeFAnonymousAccessService.parseAmountInput(amount)
     }
 
     private var canImport: Bool {

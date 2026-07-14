@@ -196,7 +196,13 @@ public final class KSeFAnonymousAccessService {
         request.setValue(referer.absoluteString, forHTTPHeaderField: "Referer")
         var components = URLComponents()
         components.queryItems = fields.map { URLQueryItem(name: $0.0, value: $0.1) }
-        request.httpBody = Data((components.percentEncodedQuery ?? "").utf8)
+        // URLComponents koduje wg RFC 3986, gdzie `+` jest dozwolony dosłownie,
+        // ale w application/x-www-form-urlencoded serwer dekoduje `+` jako
+        // spację — bez dokodowania `%2B` numer faktury czy nazwa nabywcy
+        // zawierające `+` docierałyby zniekształcone.
+        let body = (components.percentEncodedQuery ?? "")
+            .replacingOccurrences(of: "+", with: "%2B")
+        request.httpBody = Data(body.utf8)
         return request
     }
 
@@ -278,6 +284,36 @@ public final class KSeFAnonymousAccessService {
             throw AnonymousInvoiceAccessError.invalidGatewayResponse
         }
         return html
+    }
+
+    /// Ścisłe parsowanie kwoty wpisanej przez użytkownika. `Decimal(string:)`
+    /// akceptuje prefiks („1.234,56” → 1.234), więc formaty z separatorem
+    /// grupującym byłyby po cichu obcinane; tu grupowanie spacją (także
+    /// twardą z kopiuj-wklej), kropką lub przecinkiem jest jawnie obsłużone,
+    /// a wszystko poza wzorcem kwoty odrzucane.
+    public static func parseAmountInput(_ text: String) -> Decimal? {
+        let compact = text.filter { !$0.isWhitespace }
+        guard !compact.isEmpty else { return nil }
+        let patterns: [(pattern: String, grouping: String?)] = [
+            // 123 / 123,45 / 123.45 — pojedynczy separator dziesiętny
+            (#"^-?[0-9]+([.,][0-9]{1,2})?$"#, nil),
+            // 1.234.567,89 / 1.234 — kropka grupująca, przecinek dziesiętny
+            (#"^-?[0-9]{1,3}(\.[0-9]{3})+(,[0-9]{1,2})?$"#, "."),
+            // 1,234,567.89 — przecinek grupujący TYLKO z kropką dziesiętną;
+            // sam „1,234” w polskim zapisie to raczej błędna część dziesiętna
+            // niż grupowanie, więc bez kropki jest odrzucany.
+            (#"^-?[0-9]{1,3}(,[0-9]{3})+\.[0-9]{1,2}$"#, ","),
+        ]
+        for (pattern, grouping) in patterns {
+            guard compact.range(of: pattern, options: .regularExpression) != nil else { continue }
+            var normalized = compact
+            if let grouping {
+                normalized = normalized.replacingOccurrences(of: grouping, with: "")
+            }
+            normalized = normalized.replacingOccurrences(of: ",", with: ".")
+            return Decimal(string: normalized, locale: Locale(identifier: "en_US_POSIX"))
+        }
+        return nil
     }
 
     static func amountString(_ amount: Decimal) -> String {

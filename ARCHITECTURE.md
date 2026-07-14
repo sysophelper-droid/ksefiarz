@@ -610,9 +610,18 @@ Nie wymaga poświadczeń i nie wykonuje operacji modyfikującej KSeF.
   jawnym błędem odpowiedzi bramki, nie zapisem częściowych danych.
 - **Transport**: `KSeFAnonymousAccessService` tworzy osobną efemeryczną
   `URLSession` z ciasteczkami tylko na czas operacji, ustawia Origin/Referer
-  i nigdy nie dołącza tokenu KSeF. W testach wstrzykiwany jest wspólny
+  i nigdy nie dołącza tokenu KSeF. Ciało formularza wymaga dokodowania `+`
+  jako `%2B` — `URLComponents` zostawia `+` dosłownie (RFC 3986), a serwer
+  form-urlencoded zdekodowałby go jako spację i numer faktury/nazwa nabywcy
+  z `+` dawałyby fałszywe „Nie znaleziono faktury”. Kwotę z pola tekstowego
+  parsuje wyłącznie `parseAmountInput` (ścisłe wzorce z grupowaniem spacją/
+  kropką/przecinkiem) — samo `Decimal(string:)` akceptuje prefiks i po cichu
+  obcinało np. „1.234,56” do 1.234. W testach wstrzykiwany jest wspólny
   `HTTPTransport`; pokryte są trzy żądania, formularze, środowiska, wariant
-  bez identyfikatora/nazwy, encje HTML, odpowiedzi błędne i brak faktury.
+  bez identyfikatora/nazwy, encje HTML, znak `+` w polach i tokenie CSRF,
+  parsowanie kwot, odpowiedzi błędne i brak faktury. Checkbox „brak nazwy”
+  na bramce nie ma atrybutu `name` (czysto kliencki) — wariant bez nazwy
+  wysyła pusty `BuyerName`, co potwierdzono na żywym formularzu 14.07.2026.
 - **Zapis lokalny**: `AnonymousInvoiceImportEngine` parsuje XML przez
   `FA2XMLParser`, dopisuje numer KSeF (nie jest elementem XML) i deleguje do
   `InvoiceSyncEngine.merge(kind: .purchase)`. Dzięki temu pozycje przypisywane
