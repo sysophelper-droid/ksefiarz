@@ -37,6 +37,7 @@ public struct InvoiceListView: View {
     @State private var showingStatementImport = false
     @State private var showingAccountingPackage = false
     @State private var showingJPKExport = false
+    @State private var showingJPKFAExport = false
     @State private var showingVATUEExport = false
     /// Zamrożony wybór zakupów przekazywany do arkusza przelewów bankowych.
     @State private var bankTransferInvoices: [Invoice] = []
@@ -165,6 +166,9 @@ public struct InvoiceListView: View {
             }
             .sheet(isPresented: $showingJPKExport) {
                 JPKExportView()
+            }
+            .sheet(isPresented: $showingJPKFAExport) {
+                JPKFAExportView()
             }
             .sheet(isPresented: $showingVATUEExport) {
                 VATUEExportView()
@@ -295,10 +299,15 @@ public struct InvoiceListView: View {
                 } label: {
                     Label("VAT-UE — informacja podsumowująca", systemImage: "globe.europe.africa")
                 }
+                Button {
+                    showingJPKFAExport = true
+                } label: {
+                    Label("JPK_FA — faktury na żądanie US", systemImage: "doc.text.magnifyingglass")
+                }
             } label: {
                 Label("Ewidencje", systemImage: "doc.badge.gearshape")
             }
-            .help("Eksport ewidencji VAT wybranego miesiąca: JPK_V7M/V7K (sprzedaż + zakup, GTU, procedury, deklaracja miesięczna lub kwartalna) lub VAT-UE (WDT, WNT, usługi UE)")
+            .help("Eksport ewidencji VAT wybranego miesiąca: JPK_V7M/V7K (sprzedaż + zakup, GTU, procedury, deklaracja miesięczna lub kwartalna), VAT-UE (WDT, WNT, usługi UE) lub JPK_FA (pełny JPK faktur sprzedaży na żądanie organu podatkowego)")
         }
         if kind == .sales {
             ToolbarItem {

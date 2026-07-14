@@ -149,6 +149,10 @@ Sources/KsefiarzCore/
                deklaracja tylko w pliku ostatniego miesiąca kwartału, za cały
                kwartał, z elementem Kwartal; OSS poza JPK, ostrzeżenia
                o uproszczeniach),
+               JPKFAGenerator (JPK_FA(4) — pełny JPK faktur sprzedaży
+               NA ŻĄDANIE organu podatkowego; wyłącznie sprzedaż, kwoty
+               w walucie faktury, pozycje FakturaWiersz, zaliczki w węźle
+               Zamowienie; zgodny z oficjalną XSD — sekcja „JPK_FA(4)"),
                VATUEGenerator (informacja podsumowująca VAT-UE(5) zgodna
                z XSD crd.gov.pl/wzor/2021/01/12/10293 — WDT/część C,
                WNT/część D, usługi UE/część E z danych faktur; kontrahent
@@ -230,8 +234,9 @@ Sources/KsefiarzCore/
                RyczaltView (ewidencja przychodów: tabela ze stawką, podział
                przychodu/ryczałtu per stawka, edycja wpisu i CSV — pokazywana
                zamiast KPiRView przy formie „ryczałt”),
-               JPKExportView i VATUEExportView (eksport ewidencji VAT
-               z menu „Ewidencje” na listach faktur),
+               JPKExportView, JPKFAExportView i VATUEExportView (eksport
+               ewidencji VAT i JPK_FA na żądanie z menu „Ewidencje” na
+               listach faktur),
                BankTransferExportView (wybór zakupów, rachunku źródłowego,
                daty, kodowania i kwoty VAT MPP; zapis .pli),
                DictionariesView (+ ContractorsView/ProductsView/BankAccountsView),
@@ -822,6 +827,76 @@ kwoty per kontrahent, zaokrąglenie do złotych. **Import usług** (zakup usług
 z UE) i **procedura OSS** świadomie POZA VAT-UE (tylko JPK_V7 / procedura
 unijna). Wygenerowany dokument (WDT+WNT+usługi, EL, XI) zweryfikowany
 oficjalną XSD (xmllint, 12.07.2026).
+
+## JPK_FA(4) — JPK faktur na żądanie (B4)
+
+Osobna od JPK_V7 struktura przekazywana WYŁĄCZNIE na wezwanie organu
+podatkowego (art. 193a Ordynacji podatkowej; kontrola, czynności
+sprawdzające, postępowanie). Fakty zweryfikowane u źródła: oficjalny XSD
+`Schemat_JPK_FA(4)_v1-0.xsd` (gov.pl/web/kas/struktury-jpk, namespace
+`http://jpk.mf.gov.pl/wzor/2022/02/17/02171/`, obowiązuje od 1.04.2022 —
+także dla faktur sprzed tej daty) oraz broszura informacyjna MF JPK_FA(4)
+z sekcją pytań i odpowiedzi. Wygenerowany dokument (VAT wielostawkowa,
+waluta obca, OSS, KOREKTA, ZAL z zamówieniem, ROZ, marża, samofakturowanie,
+nabywca UE) zweryfikowany oficjalną XSD (xmllint, 14.07.2026).
+
+- **Zakres podmiotowy**: wyłącznie faktury SPRZEDAŻY podatnika (broszura,
+  pyt. 2 i 8). Zakupy odpadają w całości; samofaktury wystawione przez nas
+  w imieniu dostawcy (`isSelfIssuedPurchase`) należą do JPK_FA dostawcy;
+  nasza sprzedaż z adnotacją P_17 (wystawiona przez klienta w naszym
+  imieniu) wchodzi normalnie. Faktury VAT RR mają osobną strukturę
+  JPK_FA_RR — dokumenty `isRR` są pomijane. Proformy są poza strukturalnie
+  (osobny model). Okres pliku = zakres dat WYSTAWIENIA (organ żąda wg
+  kryteriów kontroli); granice włączne, porównanie po dniach.
+- **Nagłówek**: `KodFormularza kodSystemowy="JPK_FA (4)" wersjaSchemy="1-0"`,
+  wariant 4, **CelZlozenia=1 na stałe** — JPK na żądanie NIE podlega
+  korekcie; DataOd/DataDo, KodUrzedu (wspólny klucz `jpk.kodUrzedu`).
+- **Podmiot1**: IdentyfikatorPodmiotu{NIP, PelnaNazwa} w namespace tns,
+  ale **elementy adresu (typ etd:TAdresPolski1) są kwalifikowane
+  prefiksem etd** — bez prefiksu plik nie waliduje się (ta sama pułapka co
+  Podmiot1 w VAT-UE). Adres jest strukturalny (województwo/powiat/gmina/
+  ulica?/nr domu/nr lokalu?/miejscowość/kod pocztowy) — nie da się go
+  wyprowadzić z jednolinijkowego adresu z Ustawień, stąd osobne klucze
+  `jpk.fa.*` wypełniane w arkuszu eksportu (poza kopią zapasową, jak
+  pozostałe klucze `jpk.*`).
+- **Kwoty w walucie faktury** (broszura, pyt. 7): sekcje Faktura
+  i FakturaWiersz w walucie dokumentu (KodWaluty, słownik ISO-4217
+  w XSD); jedynie podatek przeliczony na złote (art. 31a) idzie do
+  P_14_1W/P_14_2W/P_14_3W (kurs z faktury; brak kursu = ostrzeżenie i brak
+  pól W). Sumy kontrolne (WartoscFaktur = suma P_15, WartoscWierszyFaktur =
+  suma P_11) są sumami nominalnymi — przy wielu walutach ostrzeżenie.
+- **Mapowanie stawek** (pyt. 6 i 9): 23/22→P_13_1/P_14_1, 8/7→P_13_2/P_14_2,
+  5→P_13_3/P_14_3, 4/3 oraz odwrotne obciążenie (`oo`)→P_13_4/P_14_4,
+  transakcje poza terytorium kraju (`np`)→P_13_5, **eksport towarów
+  i WDT→P_13_6** (stawka 0), zw→P_13_7
+  (+P_19=true; aplikacja nie przechowuje podstawy zwolnienia — P_19A–C
+  puste z ostrzeżeniem), OSS→P_13_5+P_14_5 z **P_12_XII** w wierszu
+  (pyt. 16; pole przyjmuje dowolną stawkę państwa konsumpcji). `oo` i `np`
+  mogą pochodzić z zaimportowanych pozycji; `oo` ustawia także P_18=true.
+  P_12 w wierszu to enum (23|22|8|7|5|4|3|0|zw|oo|np) — stawka spoza
+  słownika (np. historyczna RR 6,5%) pomija pole z ostrzeżeniem.
+- **Rodzaje dokumentów**: RodzajFaktury ∈ {VAT, KOREKTA, ZAL}.
+  ROZ i UPR → "VAT" (pyt. 12; rozliczająca z `NrFaZaliczkowej` — numery
+  KSeF poprzednich zaliczkowych, limit 256 znaków z obcięciem
+  i ostrzeżeniem). Korekty (KOR/KOR_ZAL/KOR_ROZ) → "KOREKTA" z kwotami
+  RÓŻNICY (tak są już zapisane w aplikacji) + PrzyczynaKorekty?/
+  NrFaKorygowanej (korekta bez numeru korygowanej pomija sekwencję
+  z ostrzeżeniem).
+- **Faktury zaliczkowe** (pyt. 12 i 14): ZAL i KOR_ZAL nie mają wierszy
+  FakturaWiersz — pozycje idą do węzła **Zamowienie** (P_2AZ = numer
+  faktury, ZamowienieWiersz z P_7Z…P_12Z/P_12Z_XII) + ZamowienieCtrl.
+  Sekcja Faktura trzyma kwoty ZALICZKI (P_15 = kwota zapłaty). Aplikacja
+  nie przechowuje odrębnej wartości całego zamówienia, więc
+  WartoscZamowienia = kwoty dokumentu z ostrzeżeniem do weryfikacji.
+- **Ograniczenia XSD**: plik wymaga ≥1 Faktura i ≥1 FakturaWiersz
+  (TNaturalnyJPK jest minExclusive 0) — pusty okres albo plik z samymi
+  zaliczkami nie przejdzie walidacji; generator ostrzega, a UI blokuje
+  zapis pliku bez obowiązkowych wierszy. P_16 (metoda kasowa) nie jest
+  modelowane i pozostaje false. P_18 jest wyprowadzane z pozycji `oo`. Procedury
+  marży mapowane z `marginProcedureRaw`: "2"→P_106E_2,
+  "3_1/3_2/3_3"→P_106E_3 + wymagana adnotacja P_106E_3A.
+- **Przekazanie**: elektronicznie (Klient JPK WEB, e-mikrofirma) albo na
+  nośniku danych; NIE e-mailem ani przez ePUAP. Organ daje ≥3 dni.
 
 ## OCR faktur kosztowych — macOS Vision (D1)
 

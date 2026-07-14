@@ -474,6 +474,26 @@ Tests/KsefiarzCoreTests/          # Swift Testing — model, parser, usługa, kr
   złotych sumowane per kontrahent. Plik zgodny z oficjalną XSD VAT-UE(5)
   (zweryfikowany xmllint); arkusz pokazuje zestawienia i ostrzeżenia
   (import usług i procedura OSS pozostają poza VAT-UE).
+- **Eksport JPK_FA (na żądanie)** — pełny JPK faktur VAT w strukturze
+  JPK_FA(4), przekazywany wyłącznie na wezwanie organu podatkowego
+  (kontrola, czynności sprawdzające, postępowanie; art. 193a Ordynacji
+  podatkowej). Obejmuje **wyłącznie wystawione faktury sprzedaży** z pełnymi
+  pozycjami — bez zakupów, bez samofaktur wystawionych w imieniu dostawców
+  (trafiają do JPK_FA dostawcy) i bez faktur VAT RR (osobna struktura
+  JPK_FA_RR). Zakres pliku wyznaczają daty wystawienia dopasowane do
+  wezwania; kwoty pozostają w walucie faktury, a podatek przeliczony na
+  złote trafia do pól P_14_xW. Historyczne stawki oraz oznaczenia `oo`/`np`
+  z zaimportowanych pozycji są mapowane do właściwych pól JPK_FA. Faktury
+  zaliczkowe i ich korekty prezentują pozycje w węźle Zamowienie,
+  rozliczające (ROZ) wykazują numery faktur
+  zaliczkowych, korekty wchodzą kwotami różnicy. Arkusz (menu „Ewidencje”)
+  wymaga prawidłowego NIP i strukturalnego adresu podmiotu (wymóg XSD —
+  osobne pola województwo/powiat/gmina itd., zapamiętywane w ustawieniach) i pokazuje
+  sumy kontrolne oraz ostrzeżenia; nie pozwala zapisać dokumentu bez
+  obowiązkowych wierszy faktur. Plik zgodny z oficjalną XSD
+  Schemat_JPK_FA(4)_v1-0 (zweryfikowany xmllint). JPK na żądanie nie
+  podlega korekcie i nie przekazuje się go e-mailem (Klient JPK WEB albo
+  nośnik danych).
 - **Wezwania do zapłaty i noty odsetkowe** — dla dłużników z zaległymi
   fakturami (kandydaci ze struktury wiekowej Kokpitu): wybór faktur,
   odsetki naliczane od salda według konfigurowalnej stopy rocznej
