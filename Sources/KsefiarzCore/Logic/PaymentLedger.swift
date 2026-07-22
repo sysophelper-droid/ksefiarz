@@ -11,8 +11,9 @@ public enum PaymentLedger {
     /// Tolerancja groszowa porównań kwot.
     public static let tolerance = 0.005
 
-    /// Rejestruje wpłatę i zwraca utworzony wpis. Gdy suma wpłat pokryje
-    /// kwotę brutto, faktura zostaje oznaczona jako opłacona.
+    /// Rejestruje dodatnią, skończoną wpłatę i zwraca utworzony wpis.
+    /// Nieprawidłowa kwota daje `nil` bez mutowania faktury. Gdy suma wpłat
+    /// pokryje kwotę brutto, faktura zostaje oznaczona jako opłacona.
     @discardableResult
     public static func register(
         amount: Double,
@@ -20,7 +21,8 @@ public enum PaymentLedger {
         note: String = "",
         source: PaymentRecord.Source = .manual,
         on invoice: Invoice
-    ) -> PaymentRecord {
+    ) -> PaymentRecord? {
+        guard amount.isFinite, amount > 0 else { return nil }
         let payment = PaymentRecord(amount: amount, date: date, note: note, source: source)
         invoice.payments.append(payment)
         if invoice.paidAmount >= invoice.grossAmount - tolerance {

@@ -25,6 +25,10 @@ public enum ManualPurchaseValidationError: LocalizedError, Hashable {
 /// (faktury zagraniczne, paragony z NIP). Dokument istnieje wyłącznie
 /// lokalnie (bez XML i numeru KSeF); kwota brutto wynika z netto + VAT.
 public struct ManualPurchaseDraft: Equatable, Sendable {
+    private static func cleaned(_ value: String) -> String {
+        value.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     public var documentNumber: String
     public var issueDate: Date
     /// Data sprzedaży / wykonania usługi (opcjonalna).
@@ -101,16 +105,16 @@ public struct ManualPurchaseDraft: Equatable, Sendable {
     /// Waliduje szkic; pusta lista błędów oznacza dane gotowe do zapisu.
     public func validate() -> [ManualPurchaseValidationError] {
         var errors: [ManualPurchaseValidationError] = []
-        if documentNumber.trimmingCharacters(in: .whitespaces).isEmpty {
+        if Self.cleaned(documentNumber).isEmpty {
             errors.append(.emptyDocumentNumber)
         }
-        if sellerName.trimmingCharacters(in: .whitespaces).isEmpty {
+        if Self.cleaned(sellerName).isEmpty {
             errors.append(.emptySellerName)
         }
         if abs(grossAmount) < 0.005 {
             errors.append(.zeroAmount)
         }
-        if currency != "PLN", exchangeRate <= 0 {
+        if !CurrencyCode.isPLN(currency), exchangeRate <= 0 {
             errors.append(.missingExchangeRate)
         }
         return errors
@@ -119,28 +123,29 @@ public struct ManualPurchaseDraft: Equatable, Sendable {
     /// Buduje nową fakturę zakupową (dokument tylko lokalny, bez KSeF).
     public func makeInvoice() -> Invoice {
         let invoice = Invoice(
-            invoiceNumber: documentNumber.trimmingCharacters(in: .whitespaces),
+            invoiceNumber: Self.cleaned(documentNumber),
             issueDate: issueDate,
-            sellerName: sellerName.trimmingCharacters(in: .whitespaces),
-            sellerNIP: sellerTaxID.trimmingCharacters(in: .whitespaces),
-            sellerAddress: sellerAddress,
-            buyerName: buyerName,
-            buyerNIP: buyerNIP,
+            sellerName: Self.cleaned(sellerName),
+            sellerNIP: Self.cleaned(sellerTaxID),
+            sellerAddress: Self.cleaned(sellerAddress),
+            buyerName: Self.cleaned(buyerName),
+            buyerNIP: Self.cleaned(buyerNIP),
             netAmount: netAmount,
             vatAmount: vatAmount,
             grossAmount: grossAmount,
             isPaid: isPaid,
             paymentDueDate: paymentDueDate,
             paymentForm: paymentForm,
-            paymentBankAccount: paymentBankAccount.isEmpty ? nil : paymentBankAccount,
+            paymentBankAccount: Self.cleaned(paymentBankAccount).isEmpty
+                ? nil : Self.cleaned(paymentBankAccount),
             paymentDate: isPaid ? (paymentDate ?? issueDate) : nil,
             notes: notes,
-            currency: currency,
+            currency: CurrencyCode.normalizedOrPLN(currency),
             exchangeRate: exchangeRate,
             saleDate: saleDate,
             kind: .purchase
         )
-        invoice.costCategory = costCategory.trimmingCharacters(in: .whitespaces)
+        invoice.costCategory = Self.cleaned(costCategory)
         return invoice
     }
 
@@ -148,23 +153,24 @@ public struct ManualPurchaseDraft: Equatable, Sendable {
     /// Statusu „opłacona” nie cofa — ręczna decyzja użytkownika jest
     /// nadrzędna (niezmiennik `isPaid`); może go tylko ustawić.
     public func apply(to invoice: Invoice) {
-        invoice.invoiceNumber = documentNumber.trimmingCharacters(in: .whitespaces)
+        invoice.invoiceNumber = Self.cleaned(documentNumber)
         invoice.issueDate = issueDate
         invoice.saleDate = saleDate
-        invoice.sellerName = sellerName.trimmingCharacters(in: .whitespaces)
-        invoice.sellerNIP = sellerTaxID.trimmingCharacters(in: .whitespaces)
-        invoice.sellerAddress = sellerAddress
-        invoice.buyerName = buyerName
-        invoice.buyerNIP = buyerNIP
+        invoice.sellerName = Self.cleaned(sellerName)
+        invoice.sellerNIP = Self.cleaned(sellerTaxID)
+        invoice.sellerAddress = Self.cleaned(sellerAddress)
+        invoice.buyerName = Self.cleaned(buyerName)
+        invoice.buyerNIP = Self.cleaned(buyerNIP)
         invoice.netAmount = netAmount
         invoice.vatAmount = vatAmount
         invoice.grossAmount = grossAmount
-        invoice.currency = currency
+        invoice.currency = CurrencyCode.normalizedOrPLN(currency)
         invoice.exchangeRate = exchangeRate
         invoice.paymentDueDate = paymentDueDate
         invoice.paymentForm = paymentForm
-        invoice.paymentBankAccount = paymentBankAccount.isEmpty ? nil : paymentBankAccount
-        invoice.costCategory = costCategory.trimmingCharacters(in: .whitespaces)
+        invoice.paymentBankAccount = Self.cleaned(paymentBankAccount).isEmpty
+            ? nil : Self.cleaned(paymentBankAccount)
+        invoice.costCategory = Self.cleaned(costCategory)
         invoice.notes = notes
         if isPaid {
             invoice.isPaid = true

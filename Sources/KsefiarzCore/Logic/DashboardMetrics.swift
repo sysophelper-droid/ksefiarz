@@ -23,7 +23,7 @@ public struct DashboardMetrics {
     /// z faktury; bez kursu kwota wchodzi nominalnie (lepsze przybliżenie
     /// niż pominięcie — kursy walut UE są rzędu jedności).
     static func grossInPLN(_ invoice: Invoice) -> Double {
-        guard invoice.currency != "PLN", invoice.exchangeRate > 0 else {
+        guard !CurrencyCode.isPLN(invoice.currency), invoice.exchangeRate > 0 else {
             return invoice.grossAmount
         }
         return invoice.grossAmount * invoice.exchangeRate
@@ -45,12 +45,16 @@ public struct DashboardMetrics {
         self.overdueCount = unpaid.filter { $0.isOverdue(asOf: now) }.count
         self.unpaidCount = unpaid.count
 
-        self.dueSoonDays = dueSoonDays
-        let horizon = Calendar.current.date(byAdding: .day, value: max(1, dueSoonDays), to: now) ?? now
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: now)
+        let safeDueSoonDays = max(0, dueSoonDays)
+        self.dueSoonDays = safeDueSoonDays
+        let horizon = calendar.date(byAdding: .day, value: safeDueSoonDays, to: today) ?? today
         self.dueSoonInvoices = unpaid
             .filter { invoice in
                 guard let due = invoice.paymentDueDate else { return false }
-                return due >= now && due <= horizon
+                let dueDay = calendar.startOfDay(for: due)
+                return dueDay >= today && dueDay <= horizon
             }
             .sorted { ($0.paymentDueDate ?? .distantFuture) < ($1.paymentDueDate ?? .distantFuture) }
     }

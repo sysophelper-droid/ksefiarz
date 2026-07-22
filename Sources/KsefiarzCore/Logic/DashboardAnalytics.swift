@@ -3,7 +3,7 @@ import Foundation
 /// Rozszerzona analityka Kokpitu: przepływy pieniężne, VAT należny
 /// i naliczony, struktura wiekowa należności/zobowiązań oraz porównanie
 /// bieżącego i poprzedniego miesiąca. Czysta logika liczona z widocznych
-/// faktur (ukryte pomija wywołujący — jak w `DashboardMetrics`).
+/// faktur (ukryte są pomijane wewnątrz silnika).
 public struct DashboardAnalytics {
 
     /// Punkt przepływów pieniężnych jednego miesiąca (kwoty w PLN).
@@ -63,7 +63,7 @@ public struct DashboardAnalytics {
     /// Kwota w PLN — faktury walutowe po kursie z faktury (bez kursu
     /// nominalnie, spójnie z `DashboardMetrics.grossInPLN`).
     static func inPLN(_ amount: Double, invoice: Invoice) -> Double {
-        guard invoice.currency != "PLN", invoice.exchangeRate > 0 else { return amount }
+        guard !CurrencyCode.isPLN(invoice.currency), invoice.exchangeRate > 0 else { return amount }
         return amount * invoice.exchangeRate
     }
 
@@ -80,12 +80,14 @@ public struct DashboardAnalytics {
         months: Int = 6
     ) {
         let calendar = Calendar.current
+        let visible = invoices.filter { !$0.isArchivedOrHidden }
+        let visiblePeriod = periodInvoices.filter { !$0.isArchivedOrHidden }
 
         // VAT w analizowanym okresie.
-        self.vatDue = periodInvoices
+        self.vatDue = visiblePeriod
             .filter { $0.kind == .sales }
             .reduce(0) { $0 + Self.inPLN($1.vatAmount, invoice: $1) }
-        self.vatInput = periodInvoices
+        self.vatInput = visiblePeriod
             .filter { $0.kind == .purchase }
             .reduce(0) { $0 + Self.inPLN($1.vatAmount, invoice: $1) }
 
@@ -99,7 +101,7 @@ public struct DashboardAnalytics {
         var flows: [Date: (inflow: Double, outflow: Double)] = Dictionary(
             uniqueKeysWithValues: monthStarts.map { ($0, (0, 0)) }
         )
-        for invoice in invoices {
+        for invoice in visible {
             for payment in invoice.payments {
                 guard let monthStart = calendar.date(
                     from: calendar.dateComponents([.year, .month], from: payment.date)
@@ -118,7 +120,7 @@ public struct DashboardAnalytics {
 
         // Struktura wiekowa nieopłaconych faktur po saldzie (uwzględnia
         // płatności częściowe).
-        let unpaid = invoices.filter { !$0.isPaid }
+        let unpaid = visible.filter { !$0.isPaid }
         var buckets = [
             ("Przed terminem", 0.0, 0.0),
             ("1–30 dni", 0.0, 0.0),
@@ -130,7 +132,8 @@ public struct DashboardAnalytics {
             let outstanding = Self.inPLN(invoice.outstandingAmount, invoice: invoice)
             guard outstanding > 0 else { continue }
             let index: Int
-            if let due = invoice.paymentDueDate, due < now {
+            if let due = invoice.paymentDueDate,
+               calendar.compare(now, to: due, toGranularity: .day) == .orderedDescending {
                 let days = calendar.dateComponents([.day], from: due, to: now).day ?? 0
                 switch days {
                 case ...30: index = 1
@@ -154,7 +157,7 @@ public struct DashboardAnalytics {
             let monthStart = calendar.date(
                 from: calendar.dateComponents([.year, .month], from: reference)
             ) ?? reference
-            let inMonth = invoices.filter {
+            let inMonth = visible.filter {
                 calendar.isDate($0.issueDate, equalTo: monthStart, toGranularity: .month)
             }
             let sales = inMonth.filter { $0.kind == .sales }

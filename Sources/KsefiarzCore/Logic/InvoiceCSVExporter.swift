@@ -44,7 +44,7 @@ public enum InvoiceCSVExporter {
     /// Pole CSV — cudzysłowy wokół wartości zawierających separator,
     /// cudzysłów lub nową linię.
     private static func field(_ value: String) -> String {
-        if value.contains(";") || value.contains("\"") || value.contains("\n") {
+        if value.contains(";") || value.contains("\"") || value.contains("\n") || value.contains("\r") {
             return "\"" + value.replacingOccurrences(of: "\"", with: "\"\"") + "\""
         }
         return value

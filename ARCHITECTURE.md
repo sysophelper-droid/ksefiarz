@@ -114,7 +114,8 @@ Sources/KsefiarzCore/
                MenuBarStatus/SyncActivity/QuickSyncRunner; przełącznik
                ksef.menuBarExtra dodaje/usuwa ikonę na żywo — obserwacja
                UserDefaults.didChangeNotification)
-  Logic/       InvoiceFilter, KSeFSyncFilter, DashboardMetrics, DateRangeResolver,
+  Logic/       InvoiceFilter, KSeFSyncFilter, DashboardMetrics, CurrencyCode,
+               DateRangeResolver,
                DisplayDateFilter, InvoiceNumberGenerator, AmountInWords, InvoiceCSVExporter,
                PaymentFormPolicy, InvoicePDFBranding (czysta konfiguracja,
                normalizacja #RRGGBB i reguła zastosowania tylko do własnej
@@ -648,6 +649,37 @@ Scripts/build-app.sh                   # składanie bundla .app
   z wbudowanym lub złożonego wyłącznie z białych znaków (łącznie z nowymi
   liniami) czyści klucz, więc przyszłe zmiany wbudowanych wzorów nie są
   zamrażane u użytkowników, którzy nic nie zmienili.
+
+## Audyt jakości i normalizacja danych (22.07.2026)
+
+Rejestr 20 usterek i usprawnień wraz z mapowaniem na testy znajduje się
+w `AUDIT_20_USPRAWNIEN.md`; każdy numer ma osobny test `[NN]` w
+`QualityAuditTests`. Najważniejsze reguły architektoniczne utrwalone przez
+ten audyt:
+
+- `InvoiceFilter` tworzy indeks z numeru dokumentu, obu stron i obu NIP-ów.
+  Zapytanie ma semantykę AND między tokenami, jest niewrażliwe na polskie
+  znaki, a token identyfikatora podatkowego porównuje same cyfry. Reguła
+  dotyczy lokalnych list; `GlobalSearchEngine` zachowuje własny ranking.
+- Wykluczenie `isArchivedOrHidden` jest egzekwowane w samych silnikach
+  `ReportsEngine` i `DashboardAnalytics`, nie tylko w widoku. Dzięki temu
+  nowe wywołanie agregatu nie może przypadkiem ujawnić ukrytego dokumentu.
+  Klucze grupowania raportów składają wielkość liter, diakrytyki i dowolne
+  białe znaki, ale pierwsza oczyszczona etykieta pozostaje nazwą prezentowaną.
+- Termin płatności jest datą kalendarzową: `Invoice.isOverdue(asOf:)`
+  przechodzi do stanu zaległego dopiero następnego dnia. `DashboardMetrics`
+  porównuje również początki dni; horyzont 0 oznacza wyłącznie dzisiaj.
+- `CurrencyCode` jest wspólnym punktem normalizacji kodu (`trim` + wielkie
+  litery). Agregaty Kokpitu i raport miesięczny nie mogą uznać `pln` ani
+  ` PLN ` za walutę obcą; zapis ręcznego zakupu używa postaci kanonicznej.
+- Granice zapisu bronią modelu: `ManualPurchaseDraft` przycina pełny zestaw
+  białych znaków, pusty rachunek zapisuje jako `nil`, numer konwersji
+  proformy jest przycinany, a `PaymentLedger.register` odrzuca kwoty
+  niedodatnie i niefinitywne bez mutacji faktury. Eksport CSV cytuje zarówno
+  LF, jak i CR. Dekodowanie konfiguracji form płatności przycina elementy.
+- Publiczne parametry limitów są totalne: wartości ujemne w raportach,
+  wyszukiwarce globalnej i retencji raportu miesięcznego znaczą zero, zamiast
+  trafiać do wymagających nieujemnej wartości `prefix`/`suffix`.
 
 ## API KSeF 2.0 — fakty krytyczne
 

@@ -101,7 +101,7 @@ public enum MonthlyReportEngine {
     /// Przycina pamięć wysłanych raportów do najnowszych `keep` okresów
     /// (klucze „RRRR-MM” sortują się leksykograficznie chronologicznie).
     public static func prune(sent: Set<String>, keep: Int = 24) -> Set<String> {
-        Set(sent.sorted().suffix(keep))
+        Set(sent.sorted().suffix(max(0, keep)))
     }
 
     /// Agreguje podsumowanie miesiąca. Faktury ukryte są pomijane
@@ -150,7 +150,7 @@ public enum MonthlyReportEngine {
         }
 
         let missingRateIDs = Set((inPeriod + receivableInvoices)
-            .filter { $0.currency != "PLN" && $0.exchangeRate <= 0 }
+            .filter { !CurrencyCode.isPLN($0.currency) && $0.exchangeRate <= 0 }
             .map(\.id))
 
         return MonthlyReportSummary(

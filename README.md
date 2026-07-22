@@ -44,6 +44,7 @@ Sources/
     ├── Logic/
     │   ├── AnonymousInvoiceImportEngine.swift # parser + deduplikacja anonimowego zakupu
     │   ├── InvoiceFilter.swift   # filtrowanie list (status płatności, wyszukiwarka)
+    │   ├── CurrencyCode.swift    # kanoniczne kody walut z formularzy/importów
     │   ├── DashboardMetrics.swift# agregaty Kokpitu (ukryte faktury pomijane)
     │   ├── PermissionsEngine.swift # walidacja i normalizacja uprawnień KSeF
     │   ├── InvoiceAutomationEngine.swift # duplikaty i terminy cykli
@@ -625,6 +626,17 @@ Tests/KsefiarzCoreTests/          # Swift Testing — model, parser, usługa, kr
   (swipe w lewo, tylko faktury zakupowe): faktura znika z rozliczeń
   i statystyk, trafia do sekcji „Nieuprawnione / Ukryte”, skąd można ją
   przywrócić; ukryta faktura nie zostanie ponownie zaimportowana z KSeF.
+- **Odporność wyszukiwania, raportów i płatności** — wyszukiwarka list
+  ignoruje polskie znaki i separatory NIP oraz pozwala łączyć kilka słów
+  pasujących do różnych pól dokumentu. Raporty i analityka Kokpitu same
+  wykluczają ukryte faktury, a nazwy kontrahentów, produktów i kategorii
+  różniące się tylko wielkością liter, diakrytykami lub odstępami trafiają
+  do jednej grupy. Termin płatności obejmuje cały wskazany dzień (dzisiejszy
+  dokument pozostaje w widżecie najbliższych płatności, a zaległy jest od
+  jutra). Kody walut są normalizowane, ręczne zakupy nie zapisują białych
+  wartości, CSV chroni również znak CR, a historia wpłat przyjmuje wyłącznie
+  dodatnie i skończone kwoty. Pełny rejestr 20 poprawek i ich testów znajduje
+  się w `AUDIT_20_USPRAWNIEN.md`.
 
 - **Faktury lokalne (robocze)** — „Zapisz lokalnie” tworzy fakturę bez wysyłki
   do KSeF (etykieta „Lokalna” + filtr na liście sprzedaży). Taką fakturę można

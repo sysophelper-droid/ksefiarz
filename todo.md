@@ -27,6 +27,13 @@ kolejność dowolna. ⚠️ operacje modyfikujące KSeF testować wyłącznie na
 
 ## Zrealizowane
 
+### Audyt jakości — 20 usprawnień (22.07.2026)
+
+- [x] Udokumentowano i naprawiono 20 przypadków brzegowych wyszukiwania,
+  raportów, Kokpitu, terminów płatności, walut, ręcznych zakupów, proform,
+  CSV i historii wpłat. Każdy punkt ma osobny test `[01]`–`[20]` w
+  `QualityAuditTests`; pełny rejestr i dowody w `AUDIT_20_USPRAWNIEN.md`.
+
 ### Wyszukiwarka ⌘K, raport miesięczny i szablony e-mail (14.07.2026)
 
 - [x] F3. Globalna wyszukiwarka ⌘K — komenda „Szukaj wszędzie…” (menu

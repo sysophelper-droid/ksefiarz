@@ -102,6 +102,7 @@ public enum GlobalSearchEngine {
     /// Zwraca pozycje pasujące do zapytania, od najlepszych. Puste
     /// zapytanie daje pustą listę (widok pokazuje wtedy sekcje aplikacji).
     public static func search(_ query: String, in items: [Item], limit: Int = 40) -> [Item] {
+        let safeLimit = max(0, limit)
         let scored = items.compactMap { item -> (Item, Int)? in
             guard let score = score(query: query, item: item) else { return nil }
             return (item, score)
@@ -111,7 +112,7 @@ public enum GlobalSearchEngine {
                 if $0.1 != $1.1 { return $0.1 > $1.1 }
                 return $0.0.title.localizedStandardCompare($1.0.title) == .orderedAscending
             }
-            .prefix(limit)
+            .prefix(safeLimit)
             .map(\.0)
     }
 

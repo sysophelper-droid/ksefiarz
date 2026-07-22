@@ -510,7 +510,10 @@ public final class Invoice {
     /// Czy faktura jest zaległa (nieopłacona i po terminie płatności) na wskazany moment.
     public func isOverdue(asOf date: Date = .now) -> Bool {
         guard !isPaid, let due = paymentDueDate else { return false }
-        return due < date
+        // Termin płatności jest datą kalendarzową (DatePicker), więc obejmuje
+        // cały wskazany dzień — faktura staje się zaległa dopiero następnego.
+        return Calendar.current.compare(date, to: due, toGranularity: .day)
+            == .orderedDescending
     }
 
     /// Wygodny skrót — zaległość względem chwili bieżącej.

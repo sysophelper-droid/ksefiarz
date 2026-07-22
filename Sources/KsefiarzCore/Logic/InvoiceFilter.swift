@@ -58,6 +58,28 @@ public enum KSeFSyncFilter: String, CaseIterable, Identifiable, Sendable {
 /// Czysta logika filtrowania listy faktur — łatwa do przetestowania jednostkowo.
 public enum InvoiceFilter {
 
+    /// Tekst do wyszukiwania bez rozróżniania wielkości liter i polskich
+    /// znaków. `ł` wymaga jawnej zamiany, bo nie jest znakiem składanym.
+    static func normalizedSearchText(_ text: String) -> String {
+        text.replacingOccurrences(of: "ł", with: "l")
+            .replacingOccurrences(of: "Ł", with: "l")
+            .folding(
+                options: [.diacriticInsensitive, .caseInsensitive],
+                locale: Locale(identifier: "pl_PL")
+            )
+    }
+
+    /// Token składający się wyłącznie z cyfr i typowych separatorów NIP.
+    private static func identifierDigits(from token: String) -> String? {
+        let allowed = CharacterSet.decimalDigits.union(
+            CharacterSet(charactersIn: "-./")
+        )
+        guard !token.isEmpty,
+              token.unicodeScalars.allSatisfy(allowed.contains) else { return nil }
+        let digits = token.filter(\.isNumber)
+        return digits.isEmpty ? nil : digits
+    }
+
     /// Filtruje faktury po statusie płatności i frazie wyszukiwania
     /// (NIP, nazwa kontrahenta lub numer faktury).
     public static func apply(
@@ -76,15 +98,27 @@ public enum InvoiceFilter {
             result = result.filter { !$0.isPaid }
         }
 
-        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        guard !query.isEmpty else { return result }
+        let tokens = normalizedSearchText(searchText)
+            .split(whereSeparator: \.isWhitespace)
+            .map(String.init)
+        guard !tokens.isEmpty else { return result }
 
         return result.filter { invoice in
-            invoice.sellerName.lowercased().contains(query)
-                || invoice.buyerName.lowercased().contains(query)
-                || invoice.sellerNIP.contains(query)
-                || invoice.buyerNIP.contains(query)
-                || invoice.invoiceNumber.lowercased().contains(query)
+            let searchableText = normalizedSearchText([
+                invoice.sellerName,
+                invoice.buyerName,
+                invoice.sellerNIP,
+                invoice.buyerNIP,
+                invoice.invoiceNumber,
+            ].joined(separator: " "))
+            let taxIdentifiers = [invoice.sellerNIP, invoice.buyerNIP]
+                .map { $0.filter(\.isNumber) }
+
+            return tokens.allSatisfy { token in
+                if searchableText.contains(token) { return true }
+                guard let digits = identifierDigits(from: token) else { return false }
+                return taxIdentifiers.contains { $0.contains(digits) }
+            }
         }
     }
 }

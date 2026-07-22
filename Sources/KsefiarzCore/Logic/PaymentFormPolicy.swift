@@ -23,7 +23,10 @@ public enum PaymentFormPolicy {
 
     /// Deserializacja z wartości @AppStorage.
     public static func decode(_ raw: String) -> Set<String> {
-        Set(raw.split(separator: ",").map(String.init).filter { !$0.isEmpty })
+        Set(raw.split(separator: ",").compactMap {
+            let value = String($0).trimmingCharacters(in: .whitespacesAndNewlines)
+            return value.isEmpty ? nil : value
+        })
     }
 
     /// Czy dana forma płatności jest opłacona z góry według konfiguracji.

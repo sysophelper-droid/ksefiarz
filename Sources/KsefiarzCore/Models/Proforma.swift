@@ -160,7 +160,7 @@ public final class Proforma {
 
     /// Czy proforma została już rozliczona właściwą fakturą VAT.
     public var isConverted: Bool {
-        !convertedInvoiceNumber.trimmingCharacters(in: .whitespaces).isEmpty
+        !convertedInvoiceNumber.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     /// Saldo pozostałe „do zapłaty" — kwota brutto, gdy nieopłacona; 0 gdy
@@ -189,7 +189,7 @@ public final class Proforma {
 
     /// Oznacza proformę jako rozliczoną wskazaną fakturą VAT.
     public func markConverted(toInvoiceNumber number: String, at date: Date = .now) {
-        convertedInvoiceNumber = number
+        convertedInvoiceNumber = number.trimmingCharacters(in: .whitespacesAndNewlines)
         convertedAt = date
     }
 

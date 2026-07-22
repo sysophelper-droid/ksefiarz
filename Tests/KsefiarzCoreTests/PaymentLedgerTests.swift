@@ -72,10 +72,10 @@ struct PaymentLedgerTests {
     }
 
     @Test("Usunięcie wpłaty domykającej saldo cofa znacznik opłacenia")
-    func removalRevertsAutoPaid() {
+    func removalRevertsAutoPaid() throws {
         let invoice = makeInvoice(gross: 100)
         PaymentLedger.register(amount: 40, on: invoice)
-        let closing = PaymentLedger.register(amount: 60, on: invoice)
+        let closing = try #require(PaymentLedger.register(amount: 60, on: invoice))
         #expect(invoice.isPaid)
 
         PaymentLedger.remove(closing, from: invoice)
@@ -85,10 +85,10 @@ struct PaymentLedgerTests {
     }
 
     @Test("Usunięcie wpłaty częściowej NIE cofa ręcznego znacznika opłacenia")
-    func removalKeepsManualPaid() {
+    func removalKeepsManualPaid() throws {
         // Faktura „z góry” (np. gotówka) — opłacona bez kompletu wpłat.
         let invoice = makeInvoice(gross: 123, isPaid: true)
-        let partial = PaymentLedger.register(amount: 10, on: invoice)
+        let partial = try #require(PaymentLedger.register(amount: 10, on: invoice))
         #expect(invoice.isPaid)
 
         PaymentLedger.remove(partial, from: invoice)

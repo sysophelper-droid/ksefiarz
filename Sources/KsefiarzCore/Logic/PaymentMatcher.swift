@@ -115,13 +115,13 @@ public enum PaymentMatcher {
             let note = [proposal.transaction.title, proposal.transaction.counterparty]
                 .filter { !$0.isEmpty }
                 .joined(separator: " — ")
-            PaymentLedger.register(
+            guard PaymentLedger.register(
                 amount: abs(proposal.transaction.amount),
                 date: proposal.transaction.date,
                 note: note,
                 source: .bankImport,
                 on: invoice
-            )
+            ) != nil else { continue }
             applied += 1
         }
         return applied
