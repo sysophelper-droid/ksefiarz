@@ -182,6 +182,17 @@ struct ElixirPaymentExporterTests {
         #expect(result.rejections.map(\.reason).contains { $0.contains("poprawnego NIP") })
     }
 
+    @Test("Surowy kod PLN ze starszej bazy nie odrzuca przelewu")
+    func legacyRawPLNIsAccepted() {
+        let invoice = purchase(number: "LEGACY-PLN")
+        invoice.currency = " pln\n"
+
+        let result = ElixirPaymentExporter.prepare(invoices: [invoice])
+
+        #expect(result.transfers.map(\.invoiceNumber) == ["LEGACY-PLN"])
+        #expect(result.rejections.isEmpty)
+    }
+
     @Test("NRB jest normalizowany i sprawdzany sumą kontrolną modulo 97")
     func nrbValidation() {
         #expect(ElixirPaymentExporter.normalizedNRB("PL 49-1140-2004-0000-3302-0011-2177")

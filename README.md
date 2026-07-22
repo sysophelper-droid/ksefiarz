@@ -633,10 +633,11 @@ Tests/KsefiarzCoreTests/          # Swift Testing — model, parser, usługa, kr
   różniące się tylko wielkością liter, diakrytykami lub odstępami trafiają
   do jednej grupy. Termin płatności obejmuje cały wskazany dzień (dzisiejszy
   dokument pozostaje w widżecie najbliższych płatności, a zaległy jest od
-  jutra). Kody walut są normalizowane, ręczne zakupy nie zapisują białych
-  wartości, CSV chroni również znak CR, a historia wpłat przyjmuje wyłącznie
-  dodatnie i skończone kwoty. Pełny rejestr 20 poprawek i ich testów znajduje
-  się w `AUDIT_20_USPRAWNIEN.md`.
+  jutra). Kody walut z formularzy, importów, odtwarzanych kopii i starszych
+  rekordów bazy są normalizowane także przez walidatory oraz generatory,
+  ręczne zakupy nie zapisują białych wartości, CSV chroni również znak CR,
+  a historia wpłat przyjmuje wyłącznie dodatnie i skończone kwoty. Pełny
+  rejestr 20 poprawek i ich testów znajduje się w `AUDIT_20_USPRAWNIEN.md`.
 
 - **Faktury lokalne (robocze)** — „Zapisz lokalnie” tworzy fakturę bez wysyłki
   do KSeF (etykieta „Lokalna” + filtr na liście sprzedaży). Taką fakturę można

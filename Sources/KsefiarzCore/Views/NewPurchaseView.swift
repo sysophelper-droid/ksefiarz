@@ -108,7 +108,7 @@ public struct NewPurchaseView: View {
                             Text(code).tag(code)
                         }
                     }
-                    if currency != "PLN" {
+                    if !CurrencyCode.isPLN(currency) {
                         HStack {
                             TextField(
                                 "Kurs PLN (do przeliczeń i JPK)",
@@ -168,7 +168,7 @@ public struct NewPurchaseView: View {
                             .monospacedDigit()
                             .fontWeight(.semibold)
                     }
-                    if currency != "PLN", exchangeRate > 0 {
+                    if !CurrencyCode.isPLN(currency), exchangeRate > 0 {
                         LabeledContent("Brutto w PLN (kurs \(exchangeRate.formatted(.number.precision(.fractionLength(4)))))") {
                             Text(grossAmount * exchangeRate, format: .currency(code: "PLN"))
                                 .monospacedDigit()

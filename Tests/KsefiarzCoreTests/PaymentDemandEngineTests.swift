@@ -99,6 +99,18 @@ struct PaymentDemandEngineTests {
         #expect(totals.first { $0.currency == "EUR" }?.outstanding == 10)
     }
 
+    @Test("Pozycja wezwania normalizuje surowy kod PLN")
+    func itemNormalizesRawPLNCurrency() {
+        let invoice = makeInvoice(number: "FV/PLN", due: "2026-06-30")
+        invoice.currency = " pln\n"
+
+        let items = PaymentDemandEngine.items(
+            for: [invoice], annualRatePercent: 10, asOf: now
+        )
+
+        #expect(items.map(\.currency) == ["PLN"])
+    }
+
     @Test("PDF wezwania generuje się dla zaległych faktur")
     func pdfGenerates() {
         let items = PaymentDemandEngine.items(

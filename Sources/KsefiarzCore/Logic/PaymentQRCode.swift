@@ -68,7 +68,7 @@ public enum PaymentQRCode {
         countryCode: String = "PL"
     ) -> String? {
         // Standard 2D ZBP to krajowy przelew w złotych — kwota w groszach.
-        guard currency.trimmingCharacters(in: .whitespaces).uppercased() == "PLN" else { return nil }
+        guard CurrencyCode.isPLN(currency) else { return nil }
 
         let nip = normalizedNIP(recipientNIP)
         guard InvoiceValidator.isValidNIP(nip) else { return nil }

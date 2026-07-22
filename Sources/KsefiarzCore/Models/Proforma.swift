@@ -124,7 +124,7 @@ public final class Proforma {
         self.netAmount = netAmount
         self.vatAmount = vatAmount
         self.grossAmount = grossAmount
-        self.currency = currency
+        self.currency = CurrencyCode.normalizedOrPLN(currency)
         self.exchangeRate = exchangeRate
         self.isPaid = isPaid
         self.paymentDate = paymentDate

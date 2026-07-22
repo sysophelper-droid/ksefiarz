@@ -96,6 +96,13 @@ struct ProformaTests {
         #expect(!ProformaValidator.validate(withRate).contains(.missingExchangeRate))
     }
 
+    @Test("Kod PLN z odstępami nie wymaga kursu walutowego")
+    func znormalizowanyKodPLNNieWymagaKursu() {
+        let draft = sampleDraft(currency: " pln\n", exchangeRate: 0)
+
+        #expect(!ProformaValidator.validate(draft).contains(.missingExchangeRate))
+    }
+
     @Test("Data ważności przed datą wystawienia jest błędna")
     func validUntilBeforeIssueFails() {
         let issue = Date(timeIntervalSince1970: 1_770_000_000)

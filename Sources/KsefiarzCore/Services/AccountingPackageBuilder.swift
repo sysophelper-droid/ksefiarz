@@ -139,9 +139,11 @@ public enum AccountingPackageBuilder {
             guard !kindInvoices.isEmpty else { continue }
             lines.append("\(label): \(kindInvoices.count) faktur")
             // Sumy per waluta (faktury walutowe nie mieszają się z PLN).
-            let currencies = Set(kindInvoices.map(\.currency)).sorted()
-            for currency in currencies {
-                let subset = kindInvoices.filter { $0.currency == currency }
+            let byCurrency = Dictionary(grouping: kindInvoices) {
+                CurrencyCode.normalizedOrPLN($0.currency)
+            }
+            for currency in byCurrency.keys.sorted() {
+                let subset = byCurrency[currency] ?? []
                 let net = subset.reduce(0) { $0 + $1.netAmount }
                 let vat = subset.reduce(0) { $0 + $1.vatAmount }
                 let gross = subset.reduce(0) { $0 + $1.grossAmount }

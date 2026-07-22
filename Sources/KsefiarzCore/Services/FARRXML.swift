@@ -34,7 +34,7 @@ public enum FARRXMLGenerator {
     public static func generateXML(for draft: InvoiceDraft, generatedAt: Date = .now) -> String {
         let issueDate = FA2Format.dateFormatter.string(from: draft.issueDate)
         let createdAt = FA2Format.timestampFormatter.string(from: generatedAt)
-        let foreign = draft.currency == "PLN" || draft.exchangeRate <= 0
+        let foreign = CurrencyCode.isPLN(draft.currency) || draft.exchangeRate <= 0
             ? nil : draft.exchangeRate
 
         func converted(_ value: Double, element: String) -> String {
@@ -149,7 +149,7 @@ public enum FARRXMLGenerator {
     }
 
     private static func exchangeRateElement(_ draft: InvoiceDraft) -> String {
-        guard draft.currency != "PLN", draft.exchangeRate > 0 else { return "" }
+        guard !CurrencyCode.isPLN(draft.currency), draft.exchangeRate > 0 else { return "" }
         return "      <KursWaluty>\(FA2Format.decimal(draft.exchangeRate, fractionDigits: 6))</KursWaluty>\n"
     }
 

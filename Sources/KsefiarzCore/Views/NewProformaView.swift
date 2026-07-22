@@ -96,7 +96,7 @@ public struct NewProformaView: View {
                             Text(code).tag(code)
                         }
                     }
-                    if currency != "PLN" {
+                    if !CurrencyCode.isPLN(currency) {
                         HStack {
                             TextField(
                                 "Kurs PLN (informacyjnie)",
@@ -370,7 +370,7 @@ public struct NewProformaView: View {
         proforma.netAmount = draft.netAmount
         proforma.vatAmount = draft.vatAmount
         proforma.grossAmount = draft.grossAmount
-        proforma.currency = draft.currency
+        proforma.currency = CurrencyCode.normalizedOrPLN(draft.currency)
         proforma.exchangeRate = draft.exchangeRate
         proforma.isPaid = draft.isPaid
         proforma.paymentDueDate = draft.paymentDueDate

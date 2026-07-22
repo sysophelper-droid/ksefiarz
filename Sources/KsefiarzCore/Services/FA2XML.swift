@@ -489,7 +489,7 @@ public enum FA2XMLGenerator {
     /// (P_14_xW — obowiązek z art. 106e ust. 11 ustawy o VAT).
     /// Kolejność pól musi odpowiadać sekwencji w XSD.
     private static func vatSummaryBlock(_ draft: InvoiceDraft) -> String {
-        let foreignRate = draft.currency == "PLN" || draft.exchangeRate <= 0
+        let foreignRate = CurrencyCode.isPLN(draft.currency) || draft.exchangeRate <= 0
             ? nil : draft.exchangeRate
 
         func vatInPLN(_ vat: Double, field: String) -> String {

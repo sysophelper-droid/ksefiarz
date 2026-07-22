@@ -167,7 +167,7 @@ public enum ElixirPaymentExporter {
                 reason = "faktura jest ukryta"
             } else if invoice.isPaid || amount <= paymentTolerance {
                 reason = "faktura nie ma salda do zapłaty"
-            } else if invoice.currency.trimmingCharacters(in: .whitespacesAndNewlines).uppercased() != "PLN" {
+            } else if !CurrencyCode.isPLN(invoice.currency) {
                 reason = "Elixir-O obsługuje tu wyłącznie przelewy krajowe w PLN"
             } else if !isValidNRB(account) {
                 reason = "brak poprawnego rachunku NRB sprzedawcy"

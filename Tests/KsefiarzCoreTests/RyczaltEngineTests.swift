@@ -208,6 +208,20 @@ struct RyczaltEngineTests {
         #expect(fixed.first?.warning == nil)
     }
 
+    @Test("Surowy kod PLN nie wymaga kursu walutowego w ryczałcie")
+    func rawPLNCurrencyDoesNotWarn() throws {
+        let invoice = sale(number: "PLN/1", date: date(2026, 1, 2))
+        invoice.currency = " pln\n"
+        invoice.exchangeRate = 0
+
+        let row = try #require(RyczaltEngine.rows(
+            from: [invoice], period: .init(year: 2026), defaultRate: .r8_5
+        ).first)
+
+        #expect(row.amountPLN == 100)
+        #expect(row.warning == nil)
+    }
+
     // MARK: CSV
 
     @Test("CSV ma 17 kolumn, wstawia kwotę w kolumnie stawki i sumę na końcu")

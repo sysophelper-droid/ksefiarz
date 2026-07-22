@@ -57,7 +57,7 @@ public enum WaproXMLExporter {
             let contractorID = catalog.idsByKey[key] ?? index + 1
             documents.addChild(documentElement(invoice, contractorID: contractorID, documentID: index + 1))
 
-            if invoice.currency.uppercased() != "PLN", invoice.exchangeRate <= 0 {
+            if !CurrencyCode.isPLN(invoice.currency), invoice.exchangeRate <= 0 {
                 warnings.append("\(invoice.invoiceNumber): brak kursu PLN — wartości bazowe zapisano w walucie faktury.")
             }
             if invoice.sortedLines.isEmpty {
@@ -125,7 +125,7 @@ public enum WaproXMLExporter {
         let document = XMLElement(name: "DOKUMENT")
         let header = XMLElement(name: "NAGLOWEK_DOKUMENTU")
         let isSales = invoice.kind == .sales
-        let isForeign = invoice.currency.uppercased() != "PLN"
+        let isForeign = !CurrencyCode.isPLN(invoice.currency)
         let factor = isForeign && invoice.exchangeRate > 0 ? invoice.exchangeRate : 1
 
         add("RODZAJ_DOKUMENTU", "H", to: header)
@@ -143,7 +143,7 @@ public enum WaproXMLExporter {
         add("OBLICZANIE_WG_CEN", "Netto", to: header)
         add("TYP_DOKUMENTU", invoice.isCorrection ? "KF" : (isSales ? "FS" : "FZ"), to: header)
         add("OPIS", limited(invoice.notes, to: 50), to: header, unlessEmpty: true)
-        add("SYM_WAL", limited(invoice.currency.uppercased(), to: 3), to: header)
+        add("SYM_WAL", limited(CurrencyCode.normalizedOrPLN(invoice.currency), to: 3), to: header)
         add("NUMER_RACHUNKU", normalizedAccount(invoice.paymentBankAccount), to: header, unlessEmpty: true)
         add("TYP_PLATNIKA", "K", to: header)
         add("CZY_DOKUMENT_KOREKTY", invoice.isCorrection ? 1 : 0, to: header)
@@ -232,7 +232,7 @@ public enum WaproXMLExporter {
     ) -> XMLElement {
         let position = XMLElement(name: "POZYCJA_DOKUMENTU")
         let isSales = invoice.kind == .sales
-        let factor = invoice.currency.uppercased() != "PLN" && invoice.exchangeRate > 0
+        let factor = !CurrencyCode.isPLN(invoice.currency) && invoice.exchangeRate > 0
             ? invoice.exchangeRate : 1
         let gross = line.netAmount + line.vatAmount
 
@@ -241,8 +241,8 @@ public enum WaproXMLExporter {
         add("OPIS_POZYCJI", limited(line.name, to: 250), to: position)
         add("TYP_PLATNIKA", "K", to: position)
         add("ID_PLATNIKA", contractorID, to: position)
-        add("SYM_WAL", limited(invoice.currency.uppercased(), to: 3), to: position)
-        add("POZ_WAL_BAZOWE", invoice.currency.uppercased() == "PLN" ? 1 : 0, to: position)
+        add("SYM_WAL", limited(CurrencyCode.normalizedOrPLN(invoice.currency), to: 3), to: position)
+        add("POZ_WAL_BAZOWE", CurrencyCode.isPLN(invoice.currency) ? 1 : 0, to: position)
         add("KOD_CN", limited(line.cnPkwiu, to: 10), to: position, unlessEmpty: true)
         add("DATA_VAT", clarionDate(invoice.saleDate ?? invoice.issueDate), to: position)
 

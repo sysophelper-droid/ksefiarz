@@ -213,6 +213,15 @@ struct DebtCollectionEngineTests {
         #expect(result.omissions.contains { $0.invoiceNumber == "FV/3" && $0.reason.contains("3 lata") })
     }
 
+    @Test("EPU uznaje surowy kod PLN z białymi znakami za walutę krajową")
+    func epuAcceptsRawPLNCurrency() {
+        let item = makeItem(currency: " pln\n")
+        let result = DebtCollectionEngine.epuEligibleItems(from: [item], asOf: now)
+
+        #expect(result.eligible.map(\.invoiceNumber) == ["FV/1/2026"])
+        #expect(result.omissions.isEmpty)
+    }
+
     @Test("EPU: granica trzech lat jest liczona po dniach, bez wpływu godziny")
     func epuThreeYearBoundary() {
         let boundary = makeItem(number: "FV/granica", due: "2023-07-15")

@@ -121,7 +121,7 @@ public struct InvoiceDraft: Equatable, Sendable {
         self.paymentBankAccount = paymentBankAccount
         self.notes = notes
         self.invoiceType = invoiceType
-        self.currency = currency
+        self.currency = CurrencyCode.normalizedOrPLN(currency)
         self.exchangeRate = exchangeRate
         self.splitPayment = splitPayment
         self.isSelfInvoicing = isSelfInvoicing

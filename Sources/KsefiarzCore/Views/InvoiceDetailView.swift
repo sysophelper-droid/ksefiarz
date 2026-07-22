@@ -202,7 +202,7 @@ public struct InvoiceDetailView: View {
                         Text(saleDate, style: .date)
                     }
                 }
-                if invoice.currency != "PLN" {
+                if !CurrencyCode.isPLN(invoice.currency) {
                     LabeledContent("Waluta", value: invoice.currency)
                     if invoice.exchangeRate > 0 {
                         LabeledContent(

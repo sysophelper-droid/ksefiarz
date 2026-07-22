@@ -309,6 +309,19 @@ struct JPKFAGeneratorTests {
         #expect(result.xml.contains("<P_14_1W>97.75</P_14_1W>"))
     }
 
+    @Test("Kod PLN z odstępami nie uruchamia przeliczenia walutowego")
+    func znormalizowanyKodPLN() {
+        let sale = makeSale(
+            lines: [line("Usługa", net: 100, rate: "23", vat: 23)],
+            net: 100, vat: 23, currency: " pln\n", exchangeRate: 4.25
+        )
+
+        let result = JPKFAGenerator.generate(invoices: [sale], options: makeOptions())
+
+        #expect(result.xml.contains("<KodWaluty>PLN</KodWaluty>"))
+        #expect(!result.xml.contains("<P_14_1W>"))
+    }
+
     @Test("Waluta obca bez kursu pomija pola W z ostrzeżeniem")
     func walutaBezKursu() {
         let sale = makeSale(

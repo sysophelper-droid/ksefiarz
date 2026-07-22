@@ -115,7 +115,7 @@ public enum InvoiceValidator {
             errors.append(.emptyCorrectedInvoiceNumber)
         }
         // Waluta obca: VAT musi mieć przeliczenie na PLN (P_14_xW).
-        if draft.currency != "PLN", draft.vatAmount > 0, draft.exchangeRate <= 0 {
+        if !CurrencyCode.isPLN(draft.currency), draft.vatAmount > 0, draft.exchangeRate <= 0 {
             errors.append(.missingExchangeRate)
         }
         // Faktura rozliczeniowa musi wskazywać rozliczane zaliczki.

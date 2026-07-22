@@ -25,8 +25,9 @@ pełnego zestawu testów.
    **naprawiono**, test `[04]`.
 5. **Rozbite grupy kontrahentów bez NIP** — różnice wielkości liter,
    diakrytyków i wielokrotnych białych znaków tworzyły osobne grupy dla tej
-   samej nazwy. Rozwiązanie: kanoniczny klucz tekstowy. Status:
-   **naprawiono**, test `[05]`.
+   samej nazwy. Rozwiązanie: kanoniczny klucz tekstowy z osobną przestrzenią
+   `name:`/`nip:`, która zapobiega też kolizji liczbowej nazwy z NIP-em.
+   Status: **naprawiono**, test `[05]`.
 6. **Rozbite grupy produktów** — identyczny produkt z inną wielkością liter
    lub odstępami był raportowany wielokrotnie. Rozwiązanie: kanoniczny klucz
    nazwy pozycji. Status: **naprawiono**, test `[06]`.
@@ -60,8 +61,10 @@ pełnego zestawu testów.
     test `[13]`.
 14. **Niespójny kod PLN** — wartości `pln` lub ` PLN ` były uznawane za
     walutę obcą, co mogło pomnożyć kwoty przez kurs i zgłosić fałszywy brak
-    kursu. Rozwiązanie: `CurrencyCode` normalizuje kod w agregatach i zapisie
-    ręcznym. Status: **naprawiono**, test `[14]`.
+    kursu. Rozwiązanie: `CurrencyCode` normalizuje kod na granicy modelu,
+    w agregatach, walidatorach, generatorach i zapisie ręcznym. Obejmuje to
+    nowe importy, odtwarzane kopie oraz niekanoniczne rekordy istniejącej bazy.
+    Status: **naprawiono**, test `[14]`.
 15. **Pola ręcznego zakupu z samą nową linią** — walidacja usuwała tylko
     spacje, więc numer lub sprzedawca `"\n"` przechodził jako niepusty.
     Rozwiązanie: `whitespacesAndNewlines`. Status: **naprawiono**, test `[15]`.
@@ -89,9 +92,9 @@ pełnego zestawu testów.
 
 ## Weryfikacja końcowa
 
-- Przebieg pełny 1: **zaliczony** — `swift test`, 1098 testów / 157 zestawów,
+- Przebieg pełny 1: **zaliczony** — `swift test`, 1109 testów / 157 zestawów,
   0 błędów (22.07.2026).
-- Przebieg pełny 2: **zaliczony** — `swift test`, 1098 testów / 157 zestawów,
+- Przebieg pełny 2: **zaliczony** — `swift test`, 1109 testów / 157 zestawów,
   0 błędów (22.07.2026).
 - Bundle release i uruchomienie: **zaliczone** — `./Scripts/build-app.sh`,
   podpis ad-hoc, restart i pozytywny `pgrep -x Ksefiarz` (22.07.2026).

@@ -174,6 +174,18 @@ struct FA2XMLGeneratorTests {
         #expect(!FA2XMLGenerator.generateXML(for: makeDraftWithLines()).contains("P_14_1W"))
     }
 
+    @Test("Kod PLN z odstępami nie generuje kwot VAT przeliczonych na PLN")
+    func znormalizowanyKodPLNBezKwotW() {
+        var draft = makeDraftWithLines()
+        draft.currency = " pln\n"
+        draft.exchangeRate = 4.25
+
+        let xml = FA2XMLGenerator.generateXML(for: draft)
+
+        #expect(!xml.contains("<P_14_1W>"))
+        #expect(!xml.contains("<P_14_2W>"))
+    }
+
     @Test("Faktura zaliczkowa (ZAL): RodzajFaktury i data otrzymania zapłaty P_6")
     func fakturaZaliczkowa() {
         var draft = makeDraft()

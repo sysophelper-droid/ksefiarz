@@ -224,6 +224,25 @@ struct AccountingPackageTests {
         #expect(!listing.contains("PDF/"))
     }
 
+    @Test("Raport łączy surowy kod PLN ze starszej bazy z kanonicznym PLN")
+    func reportGroupsLegacyRawPLN() {
+        let canonical = makeInvoice(number: "FV/PLN/1", kind: .sales, gross: 100)
+        let legacy = makeInvoice(number: "FV/PLN/2", kind: .sales, gross: 50)
+        legacy.currency = " pln\n"
+
+        let report = AccountingPackageBuilder.makeReport(
+            invoices: [canonical, legacy],
+            issues: [],
+            periodLabel: "lipiec 2026",
+            now: .now
+        )
+        let currencyLines = report.split(separator: "\n").filter { $0.contains("netto") }
+
+        #expect(currencyLines.count == 1)
+        #expect(currencyLines.first?.contains("PLN:") == true)
+        #expect(currencyLines.first?.contains("brutto 150.00") == true)
+    }
+
     @Test("Pusta paczka zawiera sam raport z informacją o braku dokumentów")
     func emptyPackage() throws {
         let result = AccountingPackageBuilder.makePackage(invoices: [], periodLabel: "maj 2026")

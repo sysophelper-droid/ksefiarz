@@ -208,7 +208,7 @@ public enum RyczaltEngine {
     }
 
     private static func warning(for invoice: Invoice) -> String? {
-        if invoice.currency.uppercased() != "PLN", invoice.exchangeRate <= 0,
+        if !CurrencyCode.isPLN(invoice.currency), invoice.exchangeRate <= 0,
            invoice.ryczaltAmountOverride == nil {
             return "Brak kursu PLN — kwota nie została przeliczona. Uzupełnij kurs faktury albo kwotę przychodu."
         }

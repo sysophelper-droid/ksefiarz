@@ -381,7 +381,7 @@ public struct NewInvoiceView: View {
                             Text(code).tag(code)
                         }
                     }
-                    if currency != "PLN" {
+                    if !CurrencyCode.isPLN(currency) {
                         HStack {
                             TextField(
                                 "Kurs PLN (do przeliczenia VAT)",
@@ -534,7 +534,7 @@ public struct NewInvoiceView: View {
                             .monospacedDigit()
                             .fontWeight(.semibold)
                     }
-                    if currency != "PLN", exchangeRate > 0 {
+                    if !CurrencyCode.isPLN(currency), exchangeRate > 0 {
                         LabeledContent("VAT w PLN (kurs \(exchangeRate.formatted(.number.precision(.fractionLength(4)))))") {
                             Text(totalVat * exchangeRate, format: .currency(code: "PLN"))
                                 .monospacedDigit()
@@ -1216,7 +1216,7 @@ public struct NewInvoiceView: View {
         invoice.correctionReason = draft.correction?.reason
         invoice.notes = draft.notes
         invoice.documentTypeRaw = draft.documentType
-        invoice.currency = draft.currency
+        invoice.currency = CurrencyCode.normalizedOrPLN(draft.currency)
         invoice.exchangeRate = draft.exchangeRate
         invoice.splitPayment = draft.splitPayment
         invoice.saleDate = draft.saleDate

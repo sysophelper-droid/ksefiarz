@@ -111,7 +111,7 @@ public enum PaymentDemandEngine {
                     to: asOf,
                     annualRatePercent: annualRatePercent
                 ),
-                currency: invoice.currency
+                currency: CurrencyCode.normalizedOrPLN(invoice.currency)
             )
         }
         .sorted { $0.dueDate < $1.dueDate }

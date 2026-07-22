@@ -76,7 +76,7 @@ public enum ProformaValidator {
         if draft.vatAmount < 0 {
             errors.append(.negativeVatAmount)
         }
-        if draft.currency != "PLN", draft.vatAmount > 0, draft.exchangeRate <= 0 {
+        if !CurrencyCode.isPLN(draft.currency), draft.vatAmount > 0, draft.exchangeRate <= 0 {
             errors.append(.missingExchangeRate)
         }
         if let validUntil = draft.validUntil,

@@ -110,6 +110,20 @@ struct KPiREngineTests {
         #expect(row.warning?.contains("Brak kursu PLN") == true)
     }
 
+    @Test("Surowy kod PLN nie wymaga kursu walutowego w KPiR")
+    func rawPLNCurrencyDoesNotWarn() throws {
+        let sale = invoice(number: "PLN/1", kind: .sales, date: date(2026, 3, 2))
+        sale.currency = " pln\n"
+        sale.exchangeRate = 0
+
+        let row = try #require(KPiREngine.rows(
+            from: [sale], period: .init(year: 2026), calendar: calendar
+        ).first)
+
+        #expect(row.amountPLN == 100)
+        #expect(row.warning == nil)
+    }
+
     @Test("Podsumowanie liczy przychód, wszystkie grupy kosztów i dochód")
     func summary() {
         let sale = invoice(number: "S", kind: .sales, date: date(2026, 4, 1), net: 1000)

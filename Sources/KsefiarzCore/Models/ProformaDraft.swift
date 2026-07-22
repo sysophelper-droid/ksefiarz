@@ -58,7 +58,7 @@ public struct ProformaDraft: Equatable, Sendable {
         self.paymentForm = paymentForm
         self.paymentBankAccount = paymentBankAccount
         self.notes = notes
-        self.currency = currency
+        self.currency = CurrencyCode.normalizedOrPLN(currency)
         self.exchangeRate = exchangeRate
         self.isPaid = isPaid
         self.paymentDate = paymentDate
@@ -139,7 +139,7 @@ public extension ProformaDraft {
             notes: notes,
             invoiceType: "VAT",
             currency: currency,
-            exchangeRate: currency == "PLN" ? exchangeRate : 0
+            exchangeRate: CurrencyCode.isPLN(currency) ? exchangeRate : 0
         )
     }
 }

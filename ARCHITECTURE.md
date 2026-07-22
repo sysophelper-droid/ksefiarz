@@ -670,8 +670,13 @@ ten audyt:
   przechodzi do stanu zaległego dopiero następnego dnia. `DashboardMetrics`
   porównuje również początki dni; horyzont 0 oznacza wyłącznie dzisiaj.
 - `CurrencyCode` jest wspólnym punktem normalizacji kodu (`trim` + wielkie
-  litery). Agregaty Kokpitu i raport miesięczny nie mogą uznać `pln` ani
-  ` PLN ` za walutę obcą; zapis ręcznego zakupu używa postaci kanonicznej.
+  litery). Inicjalizatory `Invoice`, `InvoiceDraft`, `Proforma` i
+  `ProformaDraft` kanonizują dane z formularzy, importów i odtwarzanych kopii,
+  a zapis ręcznego zakupu robi to także podczas edycji. Agregaty Kokpitu
+  i raport miesięczny nie mogą uznać `pln` ani ` PLN ` za walutę obcą.
+  Walidatory, JPK, WAPRO, ewidencje, wezwania i eksporty używają
+  `CurrencyCode.isPLN`, dzięki czemu poprawnie obsługują również surowe
+  wartości z istniejących rekordów SwiftData.
 - Granice zapisu bronią modelu: `ManualPurchaseDraft` przycina pełny zestaw
   białych znaków, pusty rachunek zapisuje jako `nil`, numer konwersji
   proformy jest przycinany, a `PaymentLedger.register` odrzuca kwoty

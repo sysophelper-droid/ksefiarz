@@ -26,7 +26,8 @@ public enum ReportsEngine {
 
     /// Przychody od jednego kontrahenta (nabywcy faktur sprzedażowych).
     public struct ContractorRevenue: Equatable, Sendable, Identifiable {
-        /// NIP (znormalizowany), a dla braku NIP — nazwa.
+        /// Stabilny klucz z przestrzenią nazw (`nip:` albo `name:`), dzięki
+        /// czemu tekstowa nazwa złożona z cyfr nie koliduje z takim samym NIP.
         public let id: String
         public let name: String
         public let nip: String
@@ -75,7 +76,7 @@ public enum ReportsEngine {
             let key = nip.isEmpty ? "name:\(nameKey)" : "nip:\(nip)"
             guard !nameKey.isEmpty || !nip.isEmpty else { continue }
             var group = groups[key] ?? Accumulator()
-            if group.id.isEmpty { group.id = nip.isEmpty ? nameKey : nip }
+            if group.id.isEmpty { group.id = key }
             if group.name.isEmpty { group.name = name }
             if group.nip.isEmpty { group.nip = nip }
             group.count += 1

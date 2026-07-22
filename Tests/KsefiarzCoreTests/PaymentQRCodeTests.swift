@@ -128,6 +128,15 @@ struct PaymentQRCodeTests {
         ) != nil)
     }
 
+    @Test("Surowy kod PLN ze starszych danych nadal tworzy kod płatności")
+    func legacyRawPLNIsAccepted() {
+        #expect(PaymentQRCode.zbpTransferContent(
+            recipientName: "F", recipientNIP: "5260250274",
+            bankAccount: "12345678901234567890123456",
+            amount: 100, currency: " pln\n", title: "T"
+        ) != nil)
+    }
+
     @Test("Nazwa odbiorcy nie przekracza 20 znaków, tytuł 32")
     func truncation() throws {
         let content = try #require(PaymentQRCode.zbpTransferContent(

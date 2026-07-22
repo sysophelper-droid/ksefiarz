@@ -42,7 +42,7 @@ public struct BankTransferExportView: View {
     }
 
     private var plnAccounts: [BankAccount] {
-        accounts.filter { $0.currency.uppercased() == "PLN" }
+        accounts.filter { CurrencyCode.isPLN($0.currency) }
     }
 
     private var canExport: Bool {

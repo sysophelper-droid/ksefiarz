@@ -51,7 +51,7 @@ public struct ProformaDetailView: View {
                             .foregroundStyle(.secondary)
                     }
                 }
-                if proforma.currency != "PLN" {
+                if !CurrencyCode.isPLN(proforma.currency) {
                     LabeledContent("Waluta", value: proforma.currency)
                     if proforma.exchangeRate > 0 {
                         LabeledContent(

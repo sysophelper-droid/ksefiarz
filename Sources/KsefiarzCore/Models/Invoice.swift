@@ -492,7 +492,9 @@ public final class Invoice {
         self.ksefEnvironmentRaw = ksefEnvironmentRaw
         self.upoXmlContent = upoXmlContent
         self.notes = notes
-        self.currency = currency
+        // Granica modelu kanonizuje także dane z importów i starszych kopii,
+        // aby każdy dalszy generator otrzymywał spójny kod waluty.
+        self.currency = CurrencyCode.normalizedOrPLN(currency)
         self.exchangeRate = exchangeRate
         self.splitPayment = splitPayment
         self.saleDate = saleDate

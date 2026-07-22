@@ -72,6 +72,20 @@ struct FARRTests {
         #expect(!xml.contains("FA (3)"))
     }
 
+    @Test("Kod PLN z odstępami nie generuje przeliczeń ani kursu waluty")
+    func znormalizowanyKodPLNBezPrzeliczen() {
+        var draft = szkicRR()
+        draft.currency = " pln\n"
+        draft.exchangeRate = 4.25
+
+        let xml = FARRXMLGenerator.generateXML(for: draft)
+
+        #expect(!xml.contains("<P_11_1W>"))
+        #expect(!xml.contains("<P_11_2W>"))
+        #expect(!xml.contains("<P_12_1W>"))
+        #expect(!xml.contains("<KursWaluty>"))
+    }
+
     @Test("Parser odczytuje VAT RR wraz z pozycją, jakością i płatnością")
     func parserRoundTrip() throws {
         let parsed = try FA2XMLParser.parse(xml: FARRXMLGenerator.generateXML(for: szkicRR()))

@@ -378,7 +378,7 @@ public enum JPKFAGenerator {
         let buckets = rateBuckets(for: invoice, warnings: &warnings)
         // Kwoty podatku przeliczone na PLN (art. 31a) — tylko waluta obca
         // ze znanym kursem.
-        let foreign = invoice.currency != "PLN"
+        let foreign = !CurrencyCode.isPLN(invoice.currency)
         let hasRate = invoice.exchangeRate > 0
         if foreign && !hasRate {
             warnings.append(
@@ -388,7 +388,7 @@ public enum JPKFAGenerator {
         let emitW = foreign && hasRate
 
         var xml = "  <Faktura>\n"
-        xml += "    <KodWaluty>\(escape(invoice.currency))</KodWaluty>\n"
+        xml += "    <KodWaluty>\(escape(CurrencyCode.normalizedOrPLN(invoice.currency)))</KodWaluty>\n"
         xml += "    <P_1>\(day(invoice.issueDate))</P_1>\n"
         xml += "    <P_2A>\(escape(clip(invoice.invoiceNumber, max: 256)))</P_2A>\n"
         if !invoice.buyerName.isEmpty {

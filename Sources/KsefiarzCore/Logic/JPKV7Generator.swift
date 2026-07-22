@@ -714,7 +714,7 @@ public enum JPKV7Generator {
 
     /// Kwota w PLN — faktury walutowe po kursie z faktury.
     static func amountInPLN(_ value: Double, invoice: Invoice, warnings: inout [String]) -> Double {
-        guard invoice.currency != "PLN" else { return value }
+        guard !CurrencyCode.isPLN(invoice.currency) else { return value }
         guard invoice.exchangeRate > 0 else {
             let warning = "Faktura \(invoice.invoiceNumber): waluta \(invoice.currency) bez kursu — kwoty przyjęte nominalnie."
             if !warnings.contains(warning) { warnings.append(warning) }

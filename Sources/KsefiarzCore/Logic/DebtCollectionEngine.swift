@@ -240,7 +240,7 @@ public enum DebtCollectionEngine {
         dueDate: Date,
         asOf: Date
     ) -> String? {
-        if currency != "PLN" {
+        if !CurrencyCode.isPLN(currency) {
             return "waluta \(currency) — pozew EPU obejmuje kwoty w złotych"
         }
         let calendar = Calendar.current
